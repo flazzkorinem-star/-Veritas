@@ -23,31 +23,13 @@ Do not delete the old code base. Reuse the existing file parsing, LLM wrapper, A
 - `docs/operator-runbook.md` — reduced to run, test, deploy, and failure checks.
 - `docs/architecture.md` — archived until the v3.0 core flow is implemented.
 
+## Completed Code Work
+
+- Window A data structure and flow base is complete in `lib/types.ts`, `lib/examFlow.ts`, `lib/score.ts`, `tests/lib/examFlow.test.ts`, and `tests/lib/score.test.ts`.
+- The first slice adds v3.0 cognitive-level types, support records, richer `QuestionResponse`, pure level-flow helpers, and quick-path scoring.
+- This slice intentionally does not connect the new flow to Agent files, API routes, UI pages, or `store/examStore.tsx`.
+
 ## Recommended Parallel Work
-
-### Window A: Data Structure And Flow Base
-
-Owns:
-
-- `lib/types.ts`
-- `lib/examFlow.ts`
-- `lib/score.ts`
-- `tests/lib/examFlow.test.ts`
-- `tests/lib/score.test.ts`
-
-Goal:
-
-- Add v3.0 types such as `CognitiveLevel`, `LevelStatus`, level state, support records, and richer `QuestionResponse`.
-- Keep old fields compatible during the first pass.
-- Add pure helpers for level-based progression.
-- Change scoring to quick-path levels: memory 33, understanding 33, application 34.
-
-Avoid:
-
-- Agent files.
-- API routes.
-- UI pages.
-- `store/examStore.tsx`.
 
 ### Window B: Agent 1 Analyzer
 
@@ -66,10 +48,10 @@ Goal:
 
 Avoid:
 
-- Editing `lib/types.ts`; ask Window A to add missing types.
+- Editing `lib/types.ts` unless Agent 1 exposes a confirmed contract gap.
 - Touching Agent 2, Agent 3, API routes, or UI.
 
-## After Windows A And B Finish
+## After Window B Finishes
 
 Next sequence:
 

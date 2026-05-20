@@ -31,7 +31,7 @@ v3.0 目标：
 
 ## 改造优先级
 
-1. 先改数据结构和流程状态。
+1. 数据结构和流程状态第一阶段已完成：`lib/types.ts`、`lib/examFlow.ts`、`lib/score.ts` 已具备 v3.0 底座，但尚未接入 store、API、Agent 或页面。
 2. 再改 Agent 1 / Agent 2 / Agent 3 的输入输出。
 3. 再改 API 和前端页面流程。
 4. 最后改三栏 UI 和本地历史。
@@ -69,16 +69,9 @@ v3.0 目标：
 
 ### 核心逻辑
 
-- `lib/types.ts` — 第一优先级。当前包含 `KnowledgeNode`、`ConversationTurn`、`NodeConversation`、`QuestionResponse`、`NodeEvaluation`、`ExamReport`、`ExamState`。后续至少需要补齐或调整：
-  - `CognitiveLevel`：记忆、理解、应用、分析、评价、创造。
-  - `LevelStatus`：未开始、进行中、通过、未通过、不适用。
-  - `KnowledgeNode.suitableLevels`：Agent 1 给出的适用层级上限。
-  - `KnowledgeNode.priorityReason`：Agent 1 选择该节点的理由。
-  - `DialogueEvent` 或扩展后的 `ConversationTurn`：记录提示、答案、主动类比。
-  - `QuestionResponse`：从只返回 `question` 改为返回自然回复、当前层级、通过状态、下一步动作和盲点摘要。
-  - `ExamReport` / `NodeEvaluation`：从旧掌握等级报告改为层级通过、原话证据、盲点和下一步建议。
-- `lib/examFlow.ts` — 第一优先级。旧的 3 轮推进逻辑需要替换为层级推进逻辑。
-- `lib/score.ts` — 需要从旧掌握等级评分改为快速路径 1-3 层计分。
+- `lib/types.ts` — 已完成 v3.0 第一阶段底座。保留旧字段兼容，同时新增 `CognitiveLevel`、`LevelStatus`、`SupportRecord`、`NodeLevelState`、`QuestionNextAction`、`KnowledgeNode.suitableLevels`、`KnowledgeNode.priorityReason`，并扩展 `QuestionResponse` 支持自然回复、当前层级、通过状态、下一步动作和盲点摘要。`ExamReport` / `NodeEvaluation` 仍保留旧掌握等级报告结构，等 Agent 3 改造时再同步。
+- `lib/examFlow.ts` — 已保留旧 3 轮 helper，并新增层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作和状态更新。尚未接入页面或 store。
+- `lib/score.ts` — 已保留旧掌握等级评分，并新增快速路径评分：记忆 33、理解 33、应用 34；深入层级不参与基础分；看答案后通过不计该层分。
 - `lib/apiResponse.ts` — 保留。前端 API 响应仍应走防御性解析。
 - `lib/pdf.ts` — 保留。文件解析不是当前改造重点。
 - `lib/llm.ts` — 保留。不要未经确认修改 DeepSeek provider 或模型名。
