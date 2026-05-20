@@ -78,7 +78,7 @@ v3.0 目标：
 
 ### Agent
 
-- `lib/agents/analyzer.ts` — Agent 1。需要对齐“最多 8 个节点、少材料不凑数、适用层级、优先级理由”。
+- `lib/agents/analyzer.ts` — Agent 1。已对齐 v3.0：最多 8 个节点、少材料不凑数、输出 `suitableLevels`（共享英文 `CognitiveLevel`）和 `priorityReason`，缺字段或非法层级会被丢弃。
 - `lib/agents/questioner.ts` — Agent 2。最大改造点：从“只提问”升级为“诊断对话者”，返回自然回复和结构化状态。
 - `lib/agents/evaluator.ts` — Agent 3。需要改成基于层级通过、原话证据、盲点和下一步建议生成报告。
 

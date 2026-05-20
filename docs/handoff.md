@@ -1,6 +1,6 @@
 # Veritas Handoff
 
-Last synchronized: 2026-05-20
+Last synchronized: 2026-05-20 (Agent 1 analyzer aligned with shared CognitiveLevel)
 
 ## Current Baseline
 
@@ -28,32 +28,9 @@ Do not delete the old code base. Reuse the existing file parsing, LLM wrapper, A
 - Window A data structure and flow base is complete in `lib/types.ts`, `lib/examFlow.ts`, `lib/score.ts`, `tests/lib/examFlow.test.ts`, and `tests/lib/score.test.ts`.
 - The first slice adds v3.0 cognitive-level types, support records, richer `QuestionResponse`, pure level-flow helpers, and quick-path scoring.
 - This slice intentionally does not connect the new flow to Agent files, API routes, UI pages, or `store/examStore.tsx`.
+- Window B Agent 1 analyzer is complete in `lib/agents/analyzer.ts` and `tests/lib/analyzer.test.ts`: at most 8 nodes, fewer allowed for short material, evidence/suitableLevels/priorityReason validated defensively, and `suitableLevels` now uses the shared English `CognitiveLevel` from `lib/types.ts` (no more local Chinese duplicate).
 
-## Recommended Parallel Work
-
-### Window B: Agent 1 Analyzer
-
-Owns:
-
-- `lib/agents/analyzer.ts`
-- `tests/lib/analyzer.test.ts`
-
-Goal:
-
-- Agent 1 extracts high-diagnostic-value nodes, not a broad summary.
-- Return at most 8 nodes.
-- Allow fewer nodes for short material.
-- Preserve evidence excerpt, suitable levels, and priority reason.
-- Validate model output defensively.
-
-Avoid:
-
-- Editing `lib/types.ts` unless Agent 1 exposes a confirmed contract gap.
-- Touching Agent 2, Agent 3, API routes, or UI.
-
-## After Window B Finishes
-
-Next sequence:
+## Next Up
 
 1. Integrate new types into `store/examStore.tsx`.
 2. Update `/api/analyze` to return the new Agent 1 node shape.
