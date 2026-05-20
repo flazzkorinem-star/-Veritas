@@ -1,11 +1,18 @@
 import { chat, MODEL_FAST } from '../llm'
-import { KnowledgeNode } from '../types'
+import { CognitiveLevel, KnowledgeNode } from '../types'
 import { randomUUID } from 'crypto'
 import { extractJSON } from '../parseJSON'
 
-const COGNITIVE_LEVELS = ['记忆', '理解', '应用', '分析', '评价', '创造'] as const
-type CognitiveLevel = (typeof COGNITIVE_LEVELS)[number]
-export type AnalyzerKnowledgeNode = KnowledgeNode & {
+const COGNITIVE_LEVELS: readonly CognitiveLevel[] = [
+  'memory',
+  'understanding',
+  'application',
+  'analysis',
+  'evaluation',
+  'creation',
+] as const
+
+export type AnalyzerKnowledgeNode = Omit<KnowledgeNode, 'suitableLevels' | 'priorityReason'> & {
   suitableLevels: CognitiveLevel[]
   priorityReason: string
 }
@@ -15,7 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isCognitiveLevel(level: unknown): level is CognitiveLevel {
-  return typeof level === 'string' && COGNITIVE_LEVELS.includes(level as CognitiveLevel)
+  return typeof level === 'string' && (COGNITIVE_LEVELS as readonly string[]).includes(level)
 }
 
 function readString(value: unknown): string {
@@ -40,6 +47,14 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一�
 - 不生成对话问题，不评价用户，不扩展成课程大纲
 - 每个节点必须有材料证据片段、适用层级和优先级理由；如果材料不足以支撑高价值节点，可以少于 8 个，哪怕只有 1 个
 
+suitableLevels 必须使用以下英文标识，对应认知层级：
+- memory（记忆）
+- understanding（理解）
+- application（应用）
+- analysis（分析）
+- evaluation（评价）
+- creation（创造）
+
 用JSON格式回复：
 {
   "nodes": [
@@ -48,7 +63,7 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一�
       "name": "节点名称",
       "context": "一句话说明这个节点为什么值得诊断",
       "sourceExcerpt": "材料中能证明该节点的证据片段，直接引用1-3句话",
-      "suitableLevels": ["记忆", "理解", "应用"],
+      "suitableLevels": ["memory", "understanding", "application"],
       "priorityReason": "为什么优先诊断这个节点"
     }
   ]
