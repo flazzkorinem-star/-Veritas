@@ -1,168 +1,217 @@
 // @vitest-environment node
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { chat } from '../../lib/llm'
-import { enforceQuestionPolicy, getNextQuestion, parseQuestionerResponse } from '../../lib/agents/questioner'
-import { KnowledgeNode } from '../../lib/types'
+import { getNextQuestion, parseQuestionerResponse } from '../../lib/agents/questioner'
+import { KnowledgeNode, NodeLevelState } from '../../lib/types'
 
 vi.mock('../../lib/llm', () => ({
   chat: vi.fn(),
   MODEL_FAST: 'test-fast-model',
 }))
 
+const node: KnowledgeNode = {
+  id: 'node-1',
+  name: 'RAG',
+  context: '检索增强生成会先找相关资料，再把资料交给模型回答。',
+  sourceExcerpt: 'RAG 会先检索相关文档片段，再把片段作为上下文交给大模型生成回答。',
+  suitableLevels: ['memory', 'understanding', 'application', 'analysis', 'evaluation'],
+  priorityReason: '容易混淆检索和生成的职责。',
+}
+
+const levelStates: NodeLevelState[] = [
+  { level: 'memory', status: 'passed' },
+  { level: 'understanding', status: 'in_progress' },
+  { level: 'application', status: 'not_started' },
+  { level: 'analysis', status: 'not_started' },
+  { level: 'evaluation', status: 'not_started' },
+  { level: 'creation', status: 'not_applicable' },
+]
+
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
 describe('parseQuestionerResponse', () => {
-  it('parses valid question response', () => {
-    const raw = JSON.stringify({ question: '能解释一下RAG的工作原理吗？' })
+  it('解析 Agent 2 的结构化响应', () => {
+    const raw = JSON.stringify({
+      reply: '这个理解基本对。接下来换到应用层。',
+      currentLevel: 'understanding',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+      nextLevel: 'application',
+    })
+
     const result = parseQuestionerResponse(raw)
-    expect(result.question).toBe('能解释一下RAG的工作原理吗？')
+
+    expect(result.reply).toBe('这个理解基本对。接下来换到应用层。')
+    expect(result.currentLevel).toBe('understanding')
+    expect(result.passedCurrentLevel).toBe(true)
+    expect(result.supportUsed).toBe('none')
   })
 
-  it('ignores legacy done=true signal', () => {
-    const raw = JSON.stringify({ question: '', done: true })
-    const result = parseQuestionerResponse(raw)
-    expect(result.question).toBe('')
-  })
-
-  it('falls back to plain text when JSON fails', () => {
-    // Tier 3: model returned plain text — treat as question
-    const result = parseQuestionerResponse('你能说说RAG的核心思路吗？')
-    expect(result.question).toBe('你能说说RAG的核心思路吗？')
-  })
-
-  it('throws on empty/unusable response', () => {
-    expect(() => parseQuestionerResponse('   ')).toThrow()
-  })
-})
-
-describe('enforceQuestionPolicy', () => {
-  const node: KnowledgeNode = {
-    id: 'node-1',
-    name: 'RAG',
-    context: '检索增强生成',
-    sourceExcerpt: 'RAG 会先检索相关文档片段，再把片段作为上下文交给大模型生成回答。',
-  }
-
-  it('uses the required opening style for the first question fallback', () => {
-    const result = enforceQuestionPolicy(
-      { question: '' },
-      node,
-      []
-    )
-
-    expect(result.question).toContain('好，我们开始。先聊聊「RAG」')
-  })
-
-  it('adds the required opening style when the first LLM question omits it', () => {
-    const result = enforceQuestionPolicy(
-      { question: '你能说说 RAG 解决的核心问题吗？' },
-      node,
-      []
-    )
-
-    expect(result.question).toBe('好，我们开始。先聊聊「RAG」——你能说说 RAG 解决的核心问题吗？')
-  })
-
-  it('does not add a neutral confirmation before the first answer', () => {
-    const result = enforceQuestionPolicy(
-      { question: '好的，你能说说 RAG 是什么吗？' },
-      node,
-      []
-    )
-
-    expect(result.question).toBe('好，我们开始。先聊聊「RAG」——你能说说 RAG 是什么吗？')
-    expect(result.question).not.toContain('——好的')
-  })
-
-  it('strips common neutral confirmations from the opening question', () => {
-    const result = enforceQuestionPolicy(
-      { question: 'OK，你能说说 RAG 解决的核心问题吗？' },
-      node,
-      []
-    )
-
-    expect(result.question).toBe('好，我们开始。先聊聊「RAG」——你能说说 RAG 解决的核心问题吗？')
-    expect(result.question).not.toContain('——OK')
-  })
-
-  it('keeps empty-answer follow-up at the understanding layer', () => {
-    const result = enforceQuestionPolicy(
-      { question: '' },
-      node,
-      [
-        { role: 'assistant', content: 'RAG 是什么？' },
-        { role: 'user', content: '用户未能作答' },
-      ]
-    )
-
-    expect(result.question).toContain('RAG')
-    expect(result.question).not.toContain('刚才')
-  })
-
-  it('does not return a completion signal after three user answers', () => {
-    const result = enforceQuestionPolicy(
-      { question: '能再展开说说吗？' },
-      node,
-      [
-        { role: 'assistant', content: 'RAG 是什么？' },
-        { role: 'user', content: '回答 1' },
-        { role: 'assistant', content: '为什么需要它？' },
-        { role: 'user', content: '回答 2' },
-        { role: 'assistant', content: '边界是什么？' },
-        { role: 'user', content: '回答 3' },
-      ]
-    )
-
-    expect(result).toEqual({ question: '能再展开说说吗？' })
+  it('拒绝非对象输出，让调用方走稳定 fallback', () => {
+    expect(() => parseQuestionerResponse('不是 JSON')).toThrow()
   })
 })
 
 describe('getNextQuestion', () => {
-  const node: KnowledgeNode = {
-    id: 'node-1',
-    name: 'RAG',
-    context: '检索增强生成',
-    sourceExcerpt: 'RAG 会先检索相关文档片段，再把片段作为上下文交给大模型生成回答。',
-  }
+  it('normal 请求返回 reply、currentLevel 和 nextAction', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '这个说法能抓到重点。下一步你试着放到一个具体使用场景里。',
+      currentLevel: 'understanding',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+    }))
 
-  it('falls back to a local follow-up when the LLM returns an empty response before two answers', async () => {
-    vi.mocked(chat).mockRejectedValueOnce(new Error('LLM returned empty response'))
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      levelStates,
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+        { role: 'user', content: '它先检索资料，再让模型结合资料回答。' },
+      ],
+    })
 
-    const result = await getNextQuestion(node, [
-      { role: 'assistant', content: 'RAG 是什么？' },
-      { role: 'user', content: 'RAG 是检索增强生成。' },
-    ])
-
-    expect(result.question).toContain('RAG')
+    expect(result.reply).toContain('具体使用场景')
+    expect(result.currentLevel).toBe('understanding')
+    expect(result.passedCurrentLevel).toBe(true)
+    expect(result.nextAction).toBe('advance_next_level')
+    expect(result.nextLevel).toBe('application')
   })
 
-  it('retries once before using the local fallback', async () => {
-    vi.mocked(chat)
-      .mockRejectedValueOnce(new Error('LLM returned empty response'))
-      .mockResolvedValueOnce(JSON.stringify({ question: '你能举一个 RAG 的使用场景吗？' }))
+  it('hint 请求不会标记独立通过，并记录提示使用', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '先想两件事：检索负责什么，生成负责什么。',
+      currentLevel: 'understanding',
+      passedCurrentLevel: true,
+      blindSpotSummary: '需要提示才能区分检索和生成。',
+      supportUsed: 'none',
+    }))
 
-    const result = await getNextQuestion(node, [
-      { role: 'assistant', content: 'RAG 是什么？' },
-      { role: 'user', content: 'RAG 是检索增强生成。' },
-    ])
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      levelStates,
+      requestType: 'hint',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+      ],
+    })
+
+    expect(result.passedCurrentLevel).toBe(false)
+    expect(result.nextAction).toBe('continue_current_level')
+    expect(result.supportUsed).toBe('hint')
+    expect(result.supportRecords?.[0]).toMatchObject({
+      kind: 'hint',
+      level: 'understanding',
+    })
+  })
+
+  it('answer 请求不会标记独立通过，并记录答案使用', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '可以答：RAG 先检索材料，再基于材料生成回答。',
+      currentLevel: 'memory',
+      passedCurrentLevel: true,
+      blindSpotSummary: '需要答案辅助。',
+      supportUsed: 'none',
+    }))
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'memory',
+      requestType: 'answer',
+      conversationHistory: [
+        { role: 'assistant', content: 'RAG 的基本定义是什么？' },
+      ],
+    })
+
+    expect(result.passedCurrentLevel).toBe(false)
+    expect(result.nextAction).toBe('continue_current_level')
+    expect(result.supportUsed).toBe('answer')
+    expect(result.supportRecords?.[0]).toMatchObject({
+      kind: 'answer',
+      level: 'memory',
+    })
+  })
+
+  it('不会进入 suitableLevels 不允许的层级', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '我们先停在适合这个节点的层级。',
+      currentLevel: 'creation',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+      nextLevel: 'creation',
+    }))
+
+    const result = await getNextQuestion({
+      node: {
+        ...node,
+        suitableLevels: ['memory', 'understanding', 'application'],
+      },
+      currentLevel: 'creation',
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '你能设计一个新方案吗？' },
+        { role: 'user', content: '可以。' },
+      ],
+    })
+
+    expect(result.currentLevel).toBe('memory')
+    expect(result.nextLevel).toBe('understanding')
+    expect(result.nextLevel).not.toBe('creation')
+  })
+
+  it('malformed LLM 输出会 retry 一次，然后返回本地 fallback', async () => {
+    vi.mocked(chat)
+      .mockResolvedValueOnce('不是 JSON')
+      .mockResolvedValueOnce('还是不是 JSON')
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'application',
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '给一个 RAG 的应用场景。' },
+        { role: 'user', content: '不知道。' },
+      ],
+    })
 
     expect(chat).toHaveBeenCalledTimes(2)
-    expect(result.question).toBe('你能举一个 RAG 的使用场景吗？')
+    expect(result.reply).toContain('具体情境')
+    expect(result.currentLevel).toBe('application')
+    expect(result.nextAction).toBe('continue_current_level')
   })
 
-  it('does not call the LLM after three user answers', async () => {
-    const result = await getNextQuestion(node, [
-      { role: 'assistant', content: 'RAG 是什么？' },
-      { role: 'user', content: '回答 1' },
-      { role: 'assistant', content: '为什么需要它？' },
-      { role: 'user', content: '回答 2' },
-      { role: 'assistant', content: '边界是什么？' },
-      { role: 'user', content: '回答 3' },
-    ])
+  it('三次用户回答后仍继续按层级诊断，不再固定停止', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '这里还需要再拆一下边界条件。',
+      currentLevel: 'analysis',
+      passedCurrentLevel: false,
+      blindSpotSummary: '还没有说清楚边界条件。',
+      supportUsed: 'none',
+    }))
 
-    expect(chat).not.toHaveBeenCalled()
-    expect(result.question).toBe('')
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'analysis',
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: 'RAG 是什么？' },
+        { role: 'user', content: '回答 1' },
+        { role: 'assistant', content: '它解决什么问题？' },
+        { role: 'user', content: '回答 2' },
+        { role: 'assistant', content: '给一个场景。' },
+        { role: 'user', content: '回答 3' },
+      ],
+    })
+
+    expect(chat).toHaveBeenCalledTimes(1)
+    expect(result.nextAction).toBe('continue_current_level')
+    expect(result.reply).toContain('边界条件')
   })
 })

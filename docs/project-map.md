@@ -33,7 +33,8 @@ v3.0 目标：
 
 1. 数据结构、流程状态和状态层接入已完成：`lib/types.ts`、`lib/examFlow.ts`、`lib/score.ts` 已具备 v3.0 底座，`store/examStore.tsx` 已能承载节点、层级、路径、提示/答案/类比记录、Agent 2 结构化响应和报告状态。
 2. Agent 1 和 `/api/analyze` 节点链路已完成：Agent 1 负责节点质量校验和最多 8 个节点限制，`/api/analyze` 负责把已校验节点薄转发给页面链路。
-3. 更新 Agent 2 和 `/api/question`，返回自然回复和结构化层级状态。
+3. Agent 2 和 `/api/question` 已完成第一条 v3.0 可验证切片：返回自然回复、当前层级、是否通过、下一步动作、盲点摘要、支持方式和可选下一层级，并保留旧 `question` 字段作为页面迁移桥接。
+   TODO：`app/exam/page.tsx` 接入结构化响应后，删除 `question` 桥接字段；同时把 store 的旧 `levelPassed` 读取迁移到 `passedCurrentLevel`，再清理 `lib/types.ts` 里的旧字段。
 4. 替换 `app/exam/page.tsx` 的固定 3 轮流程，接入 store 的层级推进状态。
 5. 更新 Agent 3、`/api/evaluate`、评分集成和报告展示。
 6. 最后改三栏 UI 和本地历史。
@@ -58,7 +59,7 @@ v3.0 目标：
 - `app/exam/page.tsx` — 当前主诊断页。后续会成为三栏工作台的主要改造点。
 - `app/report/page.tsx` — 当前报告页。后续需要展示层级通过、原话证据、提示/答案记录和下一步建议。
 - `app/api/analyze/route.ts` — 调用 Agent 1，返回 `id`、`name`、`context`、`sourceExcerpt`、`suitableLevels` 和 `priorityReason`；节点质量校验留在 `lib/agents/analyzer.ts`。
-- `app/api/question/route.ts` — 调用 Agent 2。后续不应再绑定固定 3 轮逻辑，而要返回层级状态和下一步动作。
+- `app/api/question/route.ts` — 调用 Agent 2。当前接收节点、当前层级、层级状态、对话历史和 `normal` / `hint` / `answer` 请求类型；不再拒绝 3 个用户回答后的历史，返回 Agent 2 的结构化诊断响应。
 - `app/api/evaluate/route.ts` — 调用 Agent 3。后续报告输入要包含层级状态、提示/答案/类比记录和用户原话证据。
 
 ### 组件
@@ -81,7 +82,7 @@ v3.0 目标：
 ### Agent
 
 - `lib/agents/analyzer.ts` — Agent 1。已对齐 v3.0：最多 8 个节点、少材料不凑数、输出 `suitableLevels`（共享英文 `CognitiveLevel`）和 `priorityReason`，缺字段或非法层级会被丢弃。
-- `lib/agents/questioner.ts` — Agent 2。最大改造点：从“只提问”升级为“诊断对话者”，返回自然回复和结构化状态。
+- `lib/agents/questioner.ts` — Agent 2。已从“只提问”升级为“诊断对话者”：负责提示词、LLM 输出解析、层级推进归一化、hint/answer 不独立通过、suitableLevels 约束和 malformed 输出 fallback。
 - `lib/agents/evaluator.ts` — Agent 3。需要改成基于层级通过、原话证据、盲点和下一步建议生成报告。
 
 ### 状态管理
@@ -93,7 +94,7 @@ v3.0 目标：
 
 - `tests/lib/analyzer.test.ts` — 改 Agent 1 时同步改。
 - `tests/app/analyzeRoute.test.ts` — 覆盖 `/api/analyze` 文件上传和 v3.0 节点字段透传；节点质量规则由 `tests/lib/analyzer.test.ts` 覆盖。
-- `tests/lib/questioner.test.ts` — 改 Agent 2 时同步改。
+- `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、normal/hint/answer、suitableLevels 约束、malformed fallback 和三轮后不固定停止。
 - `tests/lib/evaluator.test.ts` — 改 Agent 3 时同步改。
 - `tests/lib/examFlow.test.ts` — 改推进逻辑时同步改。
 - `tests/lib/score.test.ts` — 改评分时同步改。

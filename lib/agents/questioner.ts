@@ -1,125 +1,302 @@
 import { chat, Message, MODEL_FAST } from '../llm'
-import { KnowledgeNode, ConversationTurn, QuestionResponse } from '../types'
+import {
+  CognitiveLevel,
+  KnowledgeNode,
+  ConversationTurn,
+  NodeLevelState,
+  QuestionNextAction,
+  QuestionResponse,
+  SupportKind,
+  SupportRecord,
+} from '../types'
 import { extractJSON } from '../parseJSON'
-import { countUserAnswers } from '../examFlow'
+import {
+  COGNITIVE_LEVELS,
+  DEEP_PATH_LEVELS,
+  getFirstDeepLevel,
+  getNextActionForLevelResult,
+  getNextSuitableLevel,
+  isLevelSuitable,
+} from '../examFlow'
 
-const SYSTEM_PROMPT = `你是一个苏格拉底式知识检验官。你的唯一任务是通过追问暴露用户对某个概念的真实理解程度，不是讲课。
+export type QuestionRequestType = 'normal' | 'hint' | 'answer'
+export type SupportUsed = 'none' | SupportKind
 
-严格规则：
-- 绝对禁止解释概念
-- 绝对禁止给出答案或提示
-- 绝对禁止确认用户的回答是否正确
-- 绝对禁止判断是否结束当前节点
-- 每次只问一个问题
-- 语气温和、口语化，像朋友在好奇地询问
-- 默认用简体中文提问。材料是英文时也优先用中文提问，可保留必要英文术语。
-- 问题必须基于用户上一轮回答动态生成，避免重复问“你怎么理解”或“有什么场景”。
-- 第一问必须使用“好，我们开始。先聊聊 [节点名]——...”的开场。
-- 从第二轮起可以使用“好的”“嗯”等中性确认语。
+export interface QuestionerInput {
+  node: KnowledgeNode
+  conversationHistory: ConversationTurn[]
+  currentLevel?: CognitiveLevel
+  levelStates?: NodeLevelState[]
+  requestType?: QuestionRequestType
+}
 
-追问策略：
-- 回答很短或空泛：要求用户把一个词具体化，或让用户给出判断依据
-- 只背定义：追问背后的机制、因果链或关键条件
-- 举例但不解释机制：追问为什么这个例子符合该概念
-- 看似理解：给一个边界条件、反例或相邻概念比较
-- 出现矛盾或误区：用反事实问题逼近，例如“如果条件 X 不成立，你的说法还成立吗？”
-- 如果用户上一轮回答是“用户未能作答”，下一问必须留在理解层，用更简单的方式重新追问，不要引用“刚才提到”。
+export type DiagnosticQuestionResponse = Omit<QuestionResponse, 'levelPassed'> & {
+  reply: string
+  currentLevel: CognitiveLevel
+  passedCurrentLevel: boolean
+  nextAction: QuestionNextAction
+  blindSpotSummary: string
+  supportUsed: SupportUsed
+  nextLevel?: CognitiveLevel
+}
 
-输出格式（严格JSON，不要输出任何其他内容）：
-{ "question": "你的问题" }`
+const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考官。
+
+你要围绕用户材料中的当前知识节点，按认知层级推进诊断。不要扩展无关知识点，不要讲成长课。
+
+风格：
+- 像对话者，简洁自然，不用标题和长 bullet point。
+- 用户答对要有明确反馈，答错要指出问题。
+- 每次回复只服务当前节点和当前层级。
+- 可以构造场景和类比，但考察对象必须来自材料里的概念。
+
+层级最低通过标准：
+- memory：能识别概念或说出基本定义。
+- understanding：能用自己的话解释，不只是复述材料原文。
+- application：能放进具体场景，并说明怎么用。
+- analysis：能拆出机制、因果、边界或对比关系。
+- evaluation：能做判断和取舍，并说出理由。
+- creation：能提出新方案、变式或迁移用法，且和概念逻辑一致。
+
+推进规则：
+- 只有通过当前层级，才能进入下一层。
+- 没通过就继续追问或换角度。
+- 不使用固定轮次判断是否完成。
+- 不能进入 suitableLevels 未允许的层级。
+- 快速路径是 memory -> understanding -> application。
+- 快速路径完成后，等待用户选择完成节点或继续深入。
+- 深入路径优先 analysis、evaluation；creation 只在 suitableLevels 允许时进入。
+
+请求类型：
+- normal：判断用户最近回答是否通过当前层级，并继续对话。
+- hint：给结构化线索，但不要给完整答案，passedCurrentLevel 必须是 false。
+- answer：给当前问题答案，但该层不能视为独立通过，passedCurrentLevel 必须是 false。
+
+错误处理：
+- 事实性错误：先轻量纠正，再问一个对比问题。
+- 逻辑错误：用反例或追问暴露断点。
+- 应用错误：换一个更具体的场景，让用户重新判断。
+- 用户持续卡住时，可以主动用类比。
+
+只输出严格 JSON，不要输出任何额外文本：
+{
+  "reply": "展示给用户的自然语言回复",
+  "currentLevel": "memory|understanding|application|analysis|evaluation|creation",
+  "passedCurrentLevel": false,
+  "blindSpotSummary": "当前暴露出的盲点摘要，没有则写空字符串",
+  "supportUsed": "none|hint|answer|analogy",
+  "nextLevel": "可选，下一层级"
+}`
 
 const MAX_LLM_ATTEMPTS = 2
-const INITIAL_CONFIRMATION_PREFIX = /^(?:好的|好|嗯嗯|嗯|行|可以|ok)[，,、。\s!！]*/i
+const VALID_SUPPORT_USED: SupportUsed[] = ['none', 'hint', 'answer', 'analogy']
 
-/**
- * Three-tier parsing strategy:
- * 1. Valid JSON object with a question field → use directly
- * 2. JSON string literal (model wrapped text in quotes) → use the string as question
- * 3. Plain text fallback (model ignored JSON format) → use raw text as question
- */
-export function parseQuestionerResponse(raw: string): QuestionResponse {
-  try {
-    const parsed = JSON.parse(extractJSON(raw))
-
-    // Tier 1: proper {"question": "..."}
-    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const obj = parsed as Record<string, unknown>
-      return {
-        question: typeof obj.question === 'string' ? obj.question : '',
-      }
-    }
-
-    // Tier 2: model returned a JSON string literal e.g. "你的问题是..."
-    if (typeof parsed === 'string' && parsed.trim().length > 0) {
-      return { question: parsed.trim() }
-    }
-  } catch {
-    // JSON parse failed — fall through to text fallback
-  }
-
-  // Tier 3: plain text — strip surrounding quotes and use as-is
-  const text = raw.trim().replace(/^["'`]+|["'`]+$/g, '').trim()
-  if (text.length > 0) {
-    return { question: text }
-  }
-
-  throw new Error(`Questioner returned unusable response: ${raw.slice(0, 200)}`)
+function isCognitiveLevel(value: unknown): value is CognitiveLevel {
+  return typeof value === 'string' && COGNITIVE_LEVELS.includes(value as CognitiveLevel)
 }
 
-export function enforceQuestionPolicy(
-  response: QuestionResponse,
-  node: KnowledgeNode,
-  conversationHistory: ConversationTurn[]
-): QuestionResponse {
-  const userAnswerCount = conversationHistory.filter((turn) => turn.role === 'user').length
-  const question = response.question.trim()
-
-  if (question) {
-    if (userAnswerCount === 0 && !question.includes('好，我们开始。先聊聊')) {
-      const openingQuestion = question.replace(INITIAL_CONFIRMATION_PREFIX, '')
-      return { question: `好，我们开始。先聊聊「${node.name}」——${openingQuestion}` }
-    }
-    return { question }
-  }
-
-  const lastUserAnswer = [...conversationHistory].reverse().find((turn) => turn.role === 'user')?.content
-  if (userAnswerCount === 0) {
-    return { question: `好，我们开始。先聊聊「${node.name}」——你能用自己的话说说它解决的核心问题是什么吗？` }
-  }
-
-  if (lastUserAnswer === '用户未能作答') {
-    return { question: `我们先放简单一点：你觉得「${node.name}」大概是在处理什么问题？` }
-  }
-
-  return { question: `好的，能再具体一点说说「${node.name}」在什么情况下会有用吗？` }
+function isSupportUsed(value: unknown): value is SupportUsed {
+  return typeof value === 'string' && VALID_SUPPORT_USED.includes(value as SupportUsed)
 }
 
-export async function getNextQuestion(
-  node: KnowledgeNode,
+function getEffectiveLevel(
+  requestedLevel: CognitiveLevel | undefined,
+  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
+): CognitiveLevel {
+  if (requestedLevel && isLevelSuitable(requestedLevel, suitableLevels)) return requestedLevel
+  return COGNITIVE_LEVELS.find((level) => isLevelSuitable(level, suitableLevels)) ?? 'memory'
+}
+
+function getDerivedNextLevel(
+  currentLevel: CognitiveLevel,
+  nextAction: QuestionNextAction,
+  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
+): CognitiveLevel | undefined {
+  if (nextAction === 'advance_next_level') {
+    return getNextSuitableLevel(currentLevel, suitableLevels) ?? undefined
+  }
+  if (nextAction === 'offer_deep_dive') {
+    return getFirstDeepLevel(suitableLevels) ?? undefined
+  }
+  return undefined
+}
+
+function getLastAssistantQuestion(conversationHistory: ConversationTurn[]): string {
+  return [...conversationHistory].reverse().find((turn) => turn.role === 'assistant')?.content ?? ''
+}
+
+function buildFallbackReply({
+  node,
+  conversationHistory,
+  currentLevel,
+  passedCurrentLevel,
+  nextAction,
+  requestType,
+}: {
+  node: KnowledgeNode
   conversationHistory: ConversationTurn[]
-): Promise<QuestionResponse> {
-  if (countUserAnswers(conversationHistory) >= 3) {
-    return { question: '' }
+  currentLevel: CognitiveLevel
+  passedCurrentLevel: boolean
+  nextAction: QuestionNextAction
+  requestType: QuestionRequestType
+}): string {
+  if (requestType === 'hint') {
+    return `可以先抓住两个线索：它在材料里解决的核心问题是什么，以及材料给出的证据片段里哪些词能支撑这个判断。你先不用答完整，先说你认为最关键的一点。`
   }
 
-  const historyMessages: Message[] = conversationHistory.map((turn) => ({
-    role: turn.role,
-    content: turn.content,
-  }))
+  if (requestType === 'answer') {
+    return `这一层可以这样答：${node.name} 在材料里的重点是「${node.context}」，证据是「${node.sourceExcerpt}」。不过看过答案不算独立通过，接下来我会换个角度让你重新判断。`
+  }
 
-  const lastUserAnswer = [...conversationHistory].reverse().find((turn) => turn.role === 'user')?.content || ''
-  const askedQuestions = conversationHistory
+  if (conversationHistory.length === 0) {
+    return `好，我们开始。先聊聊「${node.name}」：你能用自己的话说说它在这份材料里主要解决什么问题吗？`
+  }
+
+  if (passedCurrentLevel && nextAction === 'offer_deep_dive') {
+    return `这一层可以，通过快速路径已经够稳了。这个节点可以先完成，也可以继续深入到分析和评价层；你想继续深入吗？`
+  }
+
+  if (passedCurrentLevel && nextAction === 'complete_node') {
+    return `这一层可以，这个节点先到这里就够了。`
+  }
+
+  if (passedCurrentLevel) {
+    return `这一层基本过了。我们往下一层走：你能把「${node.name}」换成一个更具体的场景，再说明它怎么发挥作用吗？`
+  }
+
+  if (currentLevel === 'application') {
+    return `这里还没有真正落到场景里。换个具体情境：如果你正在处理材料里类似的问题，你会在哪一步用到「${node.name}」，为什么？`
+  }
+
+  if (DEEP_PATH_LEVELS.includes(currentLevel)) {
+    return `这里的推理还不够清楚。你先拆一层：这个概念成立需要哪个关键条件？如果这个条件不存在，你的判断还成立吗？`
+  }
+
+  return `这里还不够稳。你先别复述材料原句，换成自己的话说说「${node.name}」到底在处理什么问题。`
+}
+
+function toSupportRecord(
+  supportUsed: SupportUsed,
+  response: DiagnosticQuestionResponse,
+  conversationHistory: ConversationTurn[]
+): SupportRecord | undefined {
+  if (supportUsed === 'none') return undefined
+  return {
+    kind: supportUsed,
+    level: response.currentLevel,
+    question: getLastAssistantQuestion(conversationHistory),
+    content: response.reply,
+  }
+}
+
+function normalizeQuestionerResponse(
+  parsed: Partial<DiagnosticQuestionResponse>,
+  input: QuestionerInput
+): DiagnosticQuestionResponse {
+  const requestType = input.requestType ?? 'normal'
+  const suitableLevels = input.node.suitableLevels ?? COGNITIVE_LEVELS
+  const currentLevel = getEffectiveLevel(input.currentLevel ?? parsed.currentLevel, suitableLevels)
+  const supportUsed = requestType === 'hint'
+    ? 'hint'
+    : requestType === 'answer'
+      ? 'answer'
+      : isSupportUsed(parsed.supportUsed)
+        ? parsed.supportUsed
+        : 'none'
+  const passedCurrentLevel = requestType === 'normal' && parsed.passedCurrentLevel === true
+  const nextAction = requestType === 'normal'
+    ? getNextActionForLevelResult({
+        currentLevel,
+        levelPassed: passedCurrentLevel,
+        suitableLevels,
+      })
+    : 'continue_current_level'
+  const nextLevel = getDerivedNextLevel(currentLevel, nextAction, suitableLevels)
+  const reply = typeof parsed.reply === 'string' && parsed.reply.trim()
+    ? parsed.reply.trim()
+    : buildFallbackReply({
+        node: input.node,
+        conversationHistory: input.conversationHistory,
+        currentLevel,
+        passedCurrentLevel,
+        nextAction,
+        requestType,
+      })
+
+  const response: DiagnosticQuestionResponse = {
+    question: reply,
+    reply,
+    currentLevel,
+    passedCurrentLevel,
+    nextAction,
+    blindSpotSummary: typeof parsed.blindSpotSummary === 'string'
+      ? parsed.blindSpotSummary.trim()
+      : '',
+    supportUsed,
+    ...(nextLevel ? { nextLevel } : {}),
+  }
+  const supportRecord = toSupportRecord(supportUsed, response, input.conversationHistory)
+  return supportRecord ? { ...response, supportRecords: [supportRecord] } : response
+}
+
+export function parseQuestionerResponse(raw: string): Partial<DiagnosticQuestionResponse> {
+  const parsed = JSON.parse(extractJSON(raw))
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Questioner response must be a JSON object')
+  }
+
+  const obj = parsed as Record<string, unknown>
+  return {
+    question: typeof obj.question === 'string' ? obj.question : undefined,
+    reply: typeof obj.reply === 'string'
+      ? obj.reply
+      : typeof obj.question === 'string'
+        ? obj.question
+        : undefined,
+    currentLevel: isCognitiveLevel(obj.currentLevel) ? obj.currentLevel : undefined,
+    passedCurrentLevel: typeof obj.passedCurrentLevel === 'boolean'
+      ? obj.passedCurrentLevel
+      : undefined,
+    blindSpotSummary: typeof obj.blindSpotSummary === 'string' ? obj.blindSpotSummary : undefined,
+    supportUsed: isSupportUsed(obj.supportUsed) ? obj.supportUsed : undefined,
+    nextLevel: isCognitiveLevel(obj.nextLevel) ? obj.nextLevel : undefined,
+  }
+}
+
+function buildUserContext(input: QuestionerInput): string {
+  const currentLevel = input.currentLevel ?? 'memory'
+  const requestType = input.requestType ?? 'normal'
+  const lastUserAnswer = [...input.conversationHistory].reverse()
+    .find((turn) => turn.role === 'user')?.content ?? ''
+  const askedQuestions = input.conversationHistory
     .filter((turn) => turn.role === 'assistant')
     .map((turn) => turn.content)
     .join('\n')
 
-  const userContext = `当前检验的知识节点：「${node.name}」
-该概念在文档中的使用方式：${node.context}
-材料依据片段：${node.sourceExcerpt}
-已进行用户回答轮数：${conversationHistory.filter((turn) => turn.role === 'user').length}
-用户上一轮回答：${lastUserAnswer}
-已经问过的问题，避免重复：
-${askedQuestions}`
+  return `当前知识节点：${input.node.name}
+节点说明：${input.node.context}
+材料证据片段：${input.node.sourceExcerpt}
+适用层级：${(input.node.suitableLevels ?? COGNITIVE_LEVELS).join(', ')}
+优先级理由：${input.node.priorityReason ?? ''}
+当前层级：${currentLevel}
+请求类型：${requestType}
+层级状态：${JSON.stringify(input.levelStates ?? [])}
+用户最近回答：${lastUserAnswer}
+已经问过的问题：${askedQuestions}`
+}
+
+export async function getNextQuestion(input: QuestionerInput): Promise<DiagnosticQuestionResponse> {
+  const normalizedInput: QuestionerInput = {
+    ...input,
+    conversationHistory: input.conversationHistory ?? [],
+    requestType: input.requestType ?? 'normal',
+  }
+
+  const historyMessages: Message[] = normalizedInput.conversationHistory.map((turn) => ({
+    role: turn.role,
+    content: turn.content,
+  }))
+  const userContext = buildUserContext(normalizedInput)
 
   for (let attempt = 0; attempt < MAX_LLM_ATTEMPTS; attempt++) {
     try {
@@ -129,15 +306,15 @@ ${askedQuestions}`
           { role: 'user', content: userContext },
           ...historyMessages,
         ],
-        { jsonMode: true, temperature: 0.4, model: MODEL_FAST }
+        { jsonMode: true, temperature: 0.3, model: MODEL_FAST }
       )
-      return enforceQuestionPolicy(parseQuestionerResponse(raw), node, conversationHistory)
+      return normalizeQuestionerResponse(parseQuestionerResponse(raw), normalizedInput)
     } catch {
       if (attempt === MAX_LLM_ATTEMPTS - 1) {
-        return enforceQuestionPolicy({ question: '' }, node, conversationHistory)
+        return normalizeQuestionerResponse({}, normalizedInput)
       }
     }
   }
 
-  return enforceQuestionPolicy({ question: '' }, node, conversationHistory)
+  return normalizeQuestionerResponse({}, normalizedInput)
 }
