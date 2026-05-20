@@ -1,6 +1,6 @@
 # Veritas Handoff
 
-Last synchronized: 2026-05-20 (Agent 1 analyzer aligned with shared CognitiveLevel)
+Last synchronized: 2026-05-21 (`/api/analyze` aligned with Agent 1 v3.0)
 
 ## Current Baseline
 
@@ -27,19 +27,19 @@ Do not delete the old code base. Reuse the existing file parsing, LLM wrapper, A
 
 - Window A data structure and flow base is complete in `lib/types.ts`, `lib/examFlow.ts`, `lib/score.ts`, `tests/lib/examFlow.test.ts`, and `tests/lib/score.test.ts`.
 - The first slice adds v3.0 cognitive-level types, support records, richer `QuestionResponse`, pure level-flow helpers, and quick-path scoring.
-- This slice intentionally does not connect the new flow to Agent files, API routes, UI pages, or `store/examStore.tsx`.
+- That first slice intentionally did not connect the new flow to Agent files, API routes, UI pages, or `store/examStore.tsx`.
 - Window B Agent 1 analyzer is complete in `lib/agents/analyzer.ts` and `tests/lib/analyzer.test.ts`: at most 8 nodes, fewer allowed for short material, evidence/suitableLevels/priorityReason validated defensively, and `suitableLevels` now uses the shared English `CognitiveLevel` from `lib/types.ts` (no more local Chinese duplicate).
+- Store state integration is complete in `store/examStore.tsx` and `tests/store/examStore.test.ts`: it keeps old fields (`currentQuestion`, `currentNodeIndex`, `nodeConversations`) for page compatibility while adding current node, current level, per-node level state, quick/deep path state, Agent 2 structured response, report status, and support records attached to `NodeLevelState.supportRecords`. `getDialogueStatus` derives dialogue status from the current Agent 2 response instead of storing duplicate state.
+- `/api/analyze` integration is complete in `app/api/analyze/route.ts` and `tests/app/analyzeRoute.test.ts`: the route remains a thin file-parse + Agent 1 forwarding layer and returns the v3.0 node shape (`id`, `name`, `context`, `sourceExcerpt`, `suitableLevels`, `priorityReason`) to the frontend. Node quality validation stays in `lib/agents/analyzer.ts`.
 
 ## Next Up
 
-1. Integrate new types into `store/examStore.tsx`.
-2. Update `/api/analyze` to return the new Agent 1 node shape.
-3. Update Agent 2 and `/api/question` to return natural reply plus structured level state.
-4. Replace fixed 3-round client flow in `app/exam/page.tsx` with level-based progression.
-5. Update Agent 3 and `/api/evaluate` for level-status reports.
-6. Update `lib/score.ts` integration and report display.
-7. Only then start the three-column workspace UI.
-8. Add local history after the core diagnostic flow works.
+1. Update Agent 2 and `/api/question` to return natural reply plus structured level state.
+2. Replace fixed 3-round client flow in `app/exam/page.tsx` with level-based progression backed by the store.
+3. Update Agent 3 and `/api/evaluate` for level-status reports.
+4. Update `lib/score.ts` integration and report display.
+5. Only then start the three-column workspace UI.
+6. Add local history after the core diagnostic flow works.
 
 ## Guardrails
 

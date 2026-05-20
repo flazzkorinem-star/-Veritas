@@ -1,6 +1,6 @@
 # Veritas 项目地图
 
-Last synchronized: 2026-05-20
+Last synchronized: 2026-05-21
 
 ## 用途
 
@@ -31,10 +31,12 @@ v3.0 目标：
 
 ## 改造优先级
 
-1. 数据结构和流程状态第一阶段已完成：`lib/types.ts`、`lib/examFlow.ts`、`lib/score.ts` 已具备 v3.0 底座，但尚未接入 store、API、Agent 或页面。
-2. 再改 Agent 1 / Agent 2 / Agent 3 的输入输出。
-3. 再改 API 和前端页面流程。
-4. 最后改三栏 UI 和本地历史。
+1. 数据结构、流程状态和状态层接入已完成：`lib/types.ts`、`lib/examFlow.ts`、`lib/score.ts` 已具备 v3.0 底座，`store/examStore.tsx` 已能承载节点、层级、路径、提示/答案/类比记录、Agent 2 结构化响应和报告状态。
+2. Agent 1 和 `/api/analyze` 节点链路已完成：Agent 1 负责节点质量校验和最多 8 个节点限制，`/api/analyze` 负责把已校验节点薄转发给页面链路。
+3. 更新 Agent 2 和 `/api/question`，返回自然回复和结构化层级状态。
+4. 替换 `app/exam/page.tsx` 的固定 3 轮流程，接入 store 的层级推进状态。
+5. 更新 Agent 3、`/api/evaluate`、评分集成和报告展示。
+6. 最后改三栏 UI 和本地历史。
 
 报告分两步处理：Agent 3 的报告数据结构要在第 2 步同步改；报告页的视觉展示可以后置到 UI 阶段。
 
@@ -55,7 +57,7 @@ v3.0 目标：
 - `app/page.tsx` — 当前首页入口。后续应弱化旧首页感，转向“上传材料开始诊断”。
 - `app/exam/page.tsx` — 当前主诊断页。后续会成为三栏工作台的主要改造点。
 - `app/report/page.tsx` — 当前报告页。后续需要展示层级通过、原话证据、提示/答案记录和下一步建议。
-- `app/api/analyze/route.ts` — 调用 Agent 1。后续需要返回最多 8 个节点、适用层级和优先级理由。
+- `app/api/analyze/route.ts` — 调用 Agent 1，返回 `id`、`name`、`context`、`sourceExcerpt`、`suitableLevels` 和 `priorityReason`；节点质量校验留在 `lib/agents/analyzer.ts`。
 - `app/api/question/route.ts` — 调用 Agent 2。后续不应再绑定固定 3 轮逻辑，而要返回层级状态和下一步动作。
 - `app/api/evaluate/route.ts` — 调用 Agent 3。后续报告输入要包含层级状态、提示/答案/类比记录和用户原话证据。
 
@@ -70,7 +72,7 @@ v3.0 目标：
 ### 核心逻辑
 
 - `lib/types.ts` — 已完成 v3.0 第一阶段底座。保留旧字段兼容，同时新增 `CognitiveLevel`、`LevelStatus`、`SupportRecord`、`NodeLevelState`、`QuestionNextAction`、`KnowledgeNode.suitableLevels`、`KnowledgeNode.priorityReason`，并扩展 `QuestionResponse` 支持自然回复、当前层级、通过状态、下一步动作和盲点摘要。`ExamReport` / `NodeEvaluation` 仍保留旧掌握等级报告结构，等 Agent 3 改造时再同步。
-- `lib/examFlow.ts` — 已保留旧 3 轮 helper，并新增层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作和状态更新。尚未接入页面或 store。
+- `lib/examFlow.ts` — 已保留旧 3 轮 helper，并新增层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作和状态更新。当前已被 `store/examStore.tsx` 用于初始化节点层级和路径状态，尚未接入页面。
 - `lib/score.ts` — 已保留旧掌握等级评分，并新增快速路径评分：记忆 33、理解 33、应用 34；深入层级不参与基础分；看答案后通过不计该层分。
 - `lib/apiResponse.ts` — 保留。前端 API 响应仍应走防御性解析。
 - `lib/pdf.ts` — 保留。文件解析不是当前改造重点。
@@ -84,22 +86,18 @@ v3.0 目标：
 
 ### 状态管理
 
-- `store/examStore.tsx` — 第一优先级。当前状态只有 `phase`、`documentContent`、`nodes`、`currentNodeIndex`、`nodeConversations`、`currentQuestion`、`report`、`error`，并写入 `sessionStorage`。后续需要支持：
-  - 当前节点导航和用户选择的节点。
-  - 当前认知层级。
-  - 每个节点的层级状态。
-  - 快速路径完成后的“完成 / 深入”选择。
-  - 提示、答案、主动类比记录。
-  - 本地诊断历史和报告保存。
-  - 从旧 `currentQuestion` 迁移到“当前 Agent 回复 + 结构化状态”。
+- `store/examStore.tsx` — 已接入 v3.0 状态层底座，同时保留旧字段兼容页面渐进迁移。当前支持 `currentNodeId`、`currentLevel`、`nodeLevelStates`、`nodePathStates`、`currentAgentResponse` 和 `reportStatus`；提示、答案、主动类比记录只存放在对应节点层级的 `supportRecords` 中，避免重复状态；旧 `currentQuestion`、`currentNodeIndex`、`nodeConversations` 仍保留桥接。`getDialogueStatus` 从 `currentAgentResponse` 派生当前对话状态，不单独持久化。
+- 本地诊断历史尚未实现；当前仍只做 `sessionStorage` 会话恢复。
 
 ### 测试
 
 - `tests/lib/analyzer.test.ts` — 改 Agent 1 时同步改。
+- `tests/app/analyzeRoute.test.ts` — 覆盖 `/api/analyze` 文件上传和 v3.0 节点字段透传；节点质量规则由 `tests/lib/analyzer.test.ts` 覆盖。
 - `tests/lib/questioner.test.ts` — 改 Agent 2 时同步改。
 - `tests/lib/evaluator.test.ts` — 改 Agent 3 时同步改。
 - `tests/lib/examFlow.test.ts` — 改推进逻辑时同步改。
 - `tests/lib/score.test.ts` — 改评分时同步改。
+- `tests/store/examStore.test.ts` — 覆盖 v3.0 store 初始状态、`SET_NODES` 初始化、层级状态更新、提示/答案/类比记录、Agent 2 结构化响应、快速/深入路径、节点选择和 `RESET`。
 - `tests/components/ReportCard.test.tsx` — 改报告展示时同步改。
 
 ## 目标数据流
@@ -124,7 +122,7 @@ app/page.tsx
 - 适用层级
 - 优先级理由
 
-注意：Agent 1 最多 8 个节点。材料少时不凑数。
+注意：Agent 1 保持最多 8 个节点，材料少时不凑数；缺少材料证据片段、没有合法适用层级或缺少优先级理由的节点在 analyzer 层被过滤。
 
 ### 2. 节点导航与分层对话
 
