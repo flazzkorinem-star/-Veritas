@@ -5,7 +5,7 @@ import {
   ExamState, KnowledgeNode, ConversationTurn,
   NodeConversation, ExamReport, CognitiveLevel,
   LevelStatus, NodeLevelState, SupportRecord,
-  QuestionResponse
+  QuestionResponse, SupportKind
 } from '@/lib/types'
 import {
   appendTurnToNodeConversations,
@@ -18,6 +18,12 @@ const SESSION_KEY = 'veritas_exam_state'
 type PathProgress = 'not_started' | 'in_progress' | 'completed' | 'not_applicable'
 type DialogueStatus = 'idle' | 'agent_replied' | 'deep_dive_choice' | 'node_complete'
 type ReportStatus = 'idle' | 'generating' | 'ready' | 'failed'
+
+type AgentResponseV3 = QuestionResponse & {
+  passedCurrentLevel?: boolean
+  supportUsed?: SupportKind | 'none'
+  nextLevel?: CognitiveLevel
+}
 
 interface NodePathState {
   quickPath: PathProgress
@@ -315,7 +321,8 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
     }
 
     case 'SET_AGENT_RESPONSE': {
-      const response = action.response
+      const response = action.response as AgentResponseV3
+      const passedCurrentLevel = response.passedCurrentLevel ?? response.levelPassed
       let nextState: StoreExamState = {
         ...state,
         currentAgentResponse: response,
@@ -323,12 +330,12 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
         currentLevel: response.currentLevel ?? state.currentLevel,
       }
       const nodeId = getCurrentNodeId(nextState)
-      if (nodeId && response.currentLevel && response.levelPassed !== undefined) {
+      if (nodeId && response.currentLevel && passedCurrentLevel !== undefined) {
         nextState = setNodeLevelStatus(
           nextState,
           nodeId,
           response.currentLevel,
-          response.levelPassed ? 'passed' : 'in_progress',
+          passedCurrentLevel ? 'passed' : 'in_progress',
           { blindSpotSummary: response.blindSpotSummary }
         )
       }

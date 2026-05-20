@@ -6,6 +6,8 @@ import {
   NodeConversation,
   NodeLevelState,
   QuestionNextAction,
+  SupportKind,
+  SupportRecord,
 } from './types'
 
 export const COGNITIVE_LEVELS: CognitiveLevel[] = [
@@ -41,19 +43,6 @@ export function appendTurnToNodeConversations(
       turns: [...conversation.turns, turn],
     }
   })
-}
-
-export function getDisplayRound(turns: ConversationTurn[]): number {
-  const userAnswerCount = countUserAnswers(turns)
-  return Math.min(userAnswerCount + 1, 3)
-}
-
-export function countUserAnswers(turns: ConversationTurn[]): number {
-  return turns.filter((turn) => turn.role === 'user').length
-}
-
-export function hasReachedNodeAnswerLimit(turns: ConversationTurn[]): boolean {
-  return countUserAnswers(turns) >= 3
 }
 
 export function buildNodeTransition(currentNodeName: string, nextNodeName: string): string {
@@ -144,6 +133,47 @@ export function getNextActionForLevelResult({
   if (QUICK_PATH_LEVELS.includes(nextLevel)) return 'advance_next_level'
 
   return 'complete_node'
+}
+
+export function getLevelAfterNextAction({
+  currentLevel,
+  nextAction,
+  suitableLevels = COGNITIVE_LEVELS,
+}: {
+  currentLevel: CognitiveLevel
+  nextAction: QuestionNextAction
+  suitableLevels?: CognitiveLevel[]
+}): CognitiveLevel {
+  if (nextAction !== 'advance_next_level') return currentLevel
+  return getNextSuitableLevel(currentLevel, suitableLevels) ?? currentLevel
+}
+
+export function getDeepDiveStartLevel(
+  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
+): CognitiveLevel | null {
+  return getFirstDeepLevel(suitableLevels)
+}
+
+export function createSupportRecord({
+  kind,
+  level,
+  question,
+  content,
+  createdAt,
+}: {
+  kind: SupportKind
+  level: CognitiveLevel
+  question: string
+  content: string
+  createdAt?: string
+}): SupportRecord {
+  return {
+    kind,
+    level,
+    question,
+    content,
+    ...(createdAt ? { createdAt } : {}),
+  }
 }
 
 export function updateLevelStatus(

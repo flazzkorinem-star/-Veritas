@@ -31,15 +31,15 @@ Do not delete the old code base. Reuse the existing file parsing, LLM wrapper, A
 - Window B Agent 1 analyzer is complete in `lib/agents/analyzer.ts` and `tests/lib/analyzer.test.ts`: at most 8 nodes, fewer allowed for short material, evidence/suitableLevels/priorityReason validated defensively, and `suitableLevels` now uses the shared English `CognitiveLevel` from `lib/types.ts` (no more local Chinese duplicate).
 - Store state integration is complete in `store/examStore.tsx` and `tests/store/examStore.test.ts`: it keeps old fields (`currentQuestion`, `currentNodeIndex`, `nodeConversations`) for page compatibility while adding current node, current level, per-node level state, quick/deep path state, Agent 2 structured response, report status, and support records attached to `NodeLevelState.supportRecords`. `getDialogueStatus` derives dialogue status from the current Agent 2 response instead of storing duplicate state.
 - `/api/analyze` integration is complete in `app/api/analyze/route.ts` and `tests/app/analyzeRoute.test.ts`: the route remains a thin file-parse + Agent 1 forwarding layer and returns the v3.0 node shape (`id`, `name`, `context`, `sourceExcerpt`, `suitableLevels`, `priorityReason`) to the frontend. Node quality validation stays in `lib/agents/analyzer.ts`.
+- `/exam` level-based client flow is complete in `app/exam/page.tsx`, `lib/examFlow.ts`, `store/examStore.tsx`, and `tests/lib/examFlow.test.ts`: the page uses Agent 2 `nextAction` instead of fixed answer counts, waits for the quick-path complete/deep-dive choice, and wires hint/answer requests through `/api/question`.
 
 ## Next Up
 
 1. Update Agent 2 and `/api/question` to return natural reply plus structured level state.
-2. Replace fixed 3-round client flow in `app/exam/page.tsx` with level-based progression backed by the store.
-3. Update Agent 3 and `/api/evaluate` for level-status reports.
-4. Update `lib/score.ts` integration and report display.
-5. Only then start the three-column workspace UI.
-6. Add local history after the core diagnostic flow works.
+2. Update Agent 3 and `/api/evaluate` for level-status reports.
+3. Update `lib/score.ts` integration and report display.
+4. Only then start the three-column workspace UI.
+5. Add local history after the core diagnostic flow works.
 
 ## Guardrails
 

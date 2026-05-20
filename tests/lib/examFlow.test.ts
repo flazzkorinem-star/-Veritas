@@ -4,13 +4,13 @@ import {
   appendTranscript,
   appendTurnToNodeConversations,
   buildNodeTransition,
-  countUserAnswers,
+  createSupportRecord,
   createInitialLevelStates,
-  getDisplayRound,
+  getDeepDiveStartLevel,
   getFirstDeepLevel,
+  getLevelAfterNextAction,
   getNextActionForLevelResult,
   getNextSuitableLevel,
-  hasReachedNodeAnswerLimit,
   isLevelSuitable,
   shouldRequestInitialQuestion,
 } from '../../lib/examFlow'
@@ -42,48 +42,6 @@ describe('appendTurnToNodeConversations', () => {
       { role: 'user', content: 'RAG 是先检索相关资料，再交给模型生成回答。' },
     ])
     expect(conversations[0].turns).toHaveLength(1)
-  })
-})
-
-describe('getDisplayRound', () => {
-  it('shows the first assistant question as round 1', () => {
-    expect(getDisplayRound([{ role: 'assistant', content: 'RAG 是什么？' }])).toBe(1)
-  })
-
-  it('shows the follow-up after one user answer as round 2', () => {
-    expect(getDisplayRound([
-      { role: 'assistant', content: 'RAG 是什么？' },
-      { role: 'user', content: 'RAG 是检索增强生成。' },
-      { role: 'assistant', content: '为什么需要它？' },
-    ])).toBe(2)
-  })
-})
-
-describe('node answer limit', () => {
-  it('counts only user answers', () => {
-    expect(countUserAnswers([
-      { role: 'assistant', content: '问题 1' },
-      { role: 'user', content: '回答 1' },
-      { role: 'assistant', content: '问题 2' },
-    ])).toBe(1)
-  })
-
-  it('reaches the node answer limit at the third user answer', () => {
-    expect(hasReachedNodeAnswerLimit([
-      { role: 'assistant', content: '问题 1' },
-      { role: 'user', content: '回答 1' },
-      { role: 'assistant', content: '问题 2' },
-      { role: 'user', content: '回答 2' },
-    ])).toBe(false)
-
-    expect(hasReachedNodeAnswerLimit([
-      { role: 'assistant', content: '问题 1' },
-      { role: 'user', content: '回答 1' },
-      { role: 'assistant', content: '问题 2' },
-      { role: 'user', content: '回答 2' },
-      { role: 'assistant', content: '问题 3' },
-      { role: 'user', content: '回答 3' },
-    ])).toBe(true)
   })
 })
 
@@ -185,5 +143,66 @@ describe('v3 level flow helpers', () => {
   it('returns the first suitable deep level for user-selected deep-dive path', () => {
     expect(getFirstDeepLevel(['memory', 'understanding', 'application', 'evaluation'])).toBe('evaluation')
     expect(getFirstDeepLevel(['memory', 'understanding', 'application'])).toBeNull()
+  })
+
+  it('uses nextAction to advance to the next suitable level', () => {
+    expect(getLevelAfterNextAction({
+      currentLevel: 'memory',
+      nextAction: 'advance_next_level',
+      suitableLevels: ['memory', 'understanding', 'application'],
+    })).toBe('understanding')
+
+    expect(getLevelAfterNextAction({
+      currentLevel: 'memory',
+      nextAction: 'continue_current_level',
+      suitableLevels: ['memory', 'understanding', 'application'],
+    })).toBe('memory')
+  })
+
+  it('waits for a deep-dive choice after the quick path is complete', () => {
+    expect(getNextActionForLevelResult({
+      currentLevel: 'application',
+      levelPassed: true,
+      suitableLevels: ['memory', 'understanding', 'application', 'analysis'],
+    })).toBe('offer_deep_dive')
+
+    expect(getLevelAfterNextAction({
+      currentLevel: 'application',
+      nextAction: 'offer_deep_dive',
+      suitableLevels: ['memory', 'understanding', 'application', 'analysis'],
+    })).toBe('application')
+  })
+
+  it('selects the next deep level when the user chooses to go deeper', () => {
+    expect(getDeepDiveStartLevel(['memory', 'understanding', 'application', 'analysis', 'evaluation'])).toBe('analysis')
+    expect(getDeepDiveStartLevel(['memory', 'understanding', 'application', 'evaluation'])).toBe('evaluation')
+  })
+
+  it('records hint and answer support for the current level', () => {
+    expect(createSupportRecord({
+      kind: 'hint',
+      level: 'understanding',
+      question: '为什么需要 RAG？',
+      content: '先想它解决了什么上下文问题。',
+      createdAt: '2026-05-21T00:00:00.000Z',
+    })).toEqual({
+      kind: 'hint',
+      level: 'understanding',
+      question: '为什么需要 RAG？',
+      content: '先想它解决了什么上下文问题。',
+      createdAt: '2026-05-21T00:00:00.000Z',
+    })
+
+    expect(createSupportRecord({
+      kind: 'answer',
+      level: 'application',
+      question: '什么时候该用 RAG？',
+      content: '适合需要外部材料支撑的回答。',
+    })).toEqual({
+      kind: 'answer',
+      level: 'application',
+      question: '什么时候该用 RAG？',
+      content: '适合需要外部材料支撑的回答。',
+    })
   })
 })

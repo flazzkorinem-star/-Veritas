@@ -98,7 +98,7 @@ Use after the v3.0 flow is implemented.
 
 - If analysis returns no nodes, inspect `lib/agents/analyzer.ts` and source text extraction in `lib/pdf.ts`.
 - If a node lacks evidence, inspect Agent 1 parsing and validation.
-- If dialogue still ends by fixed 3-round logic, inspect `lib/examFlow.ts`, `app/exam/page.tsx`, and `/api/question`.
+- If dialogue does not advance by cognitive level, inspect Agent 2 `nextAction` handling in `app/exam/page.tsx`, `store/examStore.tsx`, and `/api/question`.
 - If prompts or answers behave like static content, inspect Agent 2 action handling and cache logic.
 - If scores do not match quick-path level status, inspect `lib/score.ts`.
 - If the frontend shows raw JSON parse errors, inspect `lib/apiResponse.ts` and the failing API route logs.
