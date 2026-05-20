@@ -1,0 +1,118 @@
+// Mastery level as returned by Agent 3
+export type MasteryLevel = 'mastered' | 'developing' | 'needs_work'
+
+export type CognitiveLevel =
+  | 'memory'
+  | 'understanding'
+  | 'application'
+  | 'analysis'
+  | 'evaluation'
+  | 'creation'
+
+export type LevelStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'passed'
+  | 'failed'
+  | 'not_applicable'
+
+export type SupportKind = 'hint' | 'answer' | 'analogy'
+
+export interface SupportRecord {
+  kind: SupportKind
+  level: CognitiveLevel
+  question: string
+  content: string
+  createdAt?: string
+}
+
+export type HintRecord = SupportRecord & { kind: 'hint' }
+
+export interface NodeLevelState {
+  level: CognitiveLevel
+  status: LevelStatus
+  supportRecords?: SupportRecord[]
+  blindSpotSummary?: string
+  userQuote?: string
+}
+
+export type QuestionNextAction =
+  | 'continue_current_level'
+  | 'advance_next_level'
+  | 'offer_deep_dive'
+  | 'complete_node'
+
+// A knowledge concept extracted from the user's document
+export interface KnowledgeNode {
+  id: string
+  name: string
+  context: string // one sentence: how this concept appears in the document
+  sourceExcerpt: string // exact excerpt from the source material supporting this node
+  suitableLevels?: CognitiveLevel[]
+  priorityReason?: string
+}
+
+// One exchange in a Socratic dialogue
+export interface ConversationTurn {
+  role: 'assistant' | 'user'
+  content: string
+}
+
+// All dialogue for one knowledge node
+export interface NodeConversation {
+  node: KnowledgeNode
+  turns: ConversationTurn[]
+}
+
+// Agent 2 response
+export interface QuestionResponse {
+  question: string
+  reply?: string
+  currentLevel?: CognitiveLevel
+  levelPassed?: boolean
+  nextAction?: QuestionNextAction
+  blindSpotSummary?: string
+  supportRecords?: SupportRecord[]
+}
+
+// Agent 3 output per node
+export interface NodeEvaluation {
+  nodeId: string
+  nodeName: string
+  sourceExcerpt?: string       // source material excerpt for evidence display
+  masteryLevel: MasteryLevel
+  hasMisconception: boolean
+  misconceptionQuote?: string     // exact words user said that are wrong
+  misconceptionCorrection?: string // correct explanation
+  explanation?: string            // for developing/needs_work: correct understanding
+  isSupplementalExplanation: boolean // true when the correction/explanation goes beyond source material
+  evidenceSummary?: string        // why this mastery judgment was made, in report language
+  score: number                   // 100 | 60 | 40, minus 15 if misconception (min 0)
+}
+
+// Full evaluation report from Agent 3
+export interface ExamReport {
+  overallScore: number
+  nodes: NodeEvaluation[]
+  summary: string
+}
+
+// Client-side exam phases
+export type ExamPhase =
+  | 'idle'
+  | 'analyzing'
+  | 'examining'
+  | 'reporting'
+  | 'done'
+
+// Full client-side exam session state
+export interface ExamState {
+  phase: ExamPhase
+  documentContent: string
+  nodes: KnowledgeNode[]
+  currentNodeIndex: number
+  nodeConversations: NodeConversation[]
+  currentQuestion: string
+  report: ExamReport | null
+  error: string | null
+}

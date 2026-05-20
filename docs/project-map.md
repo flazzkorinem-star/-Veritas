@@ -1,0 +1,216 @@
+# Veritas 项目地图
+
+Last synchronized: 2026-05-20
+
+## 用途
+
+本文件只做代码导航，不做产品规格。产品真相源是 `docs/design-guide.md`，Agent 和工程规则看 `AGENTS.md`。
+
+当前代码仍保留旧 V1 闭环，新的目标流程已经在 `docs/design-guide.md` v3.0 中定义。后续改造应优先让代码对齐 v3.0，而不是继续补强旧的“三轮追问”版本。
+
+## 当前差距
+
+旧代码基线：
+
+- 文件上传后抽知识点。
+- Agent 1 最多抽 5 个节点。
+- Agent 2 每个节点固定 3 个用户回答轮次，只负责提问。
+- 前端代码控制节点切换。
+- Agent 3 生成旧报告，分数使用旧掌握等级公式。
+- 状态主要保存在 `sessionStorage`，没有本地历史工作台。
+
+v3.0 目标：
+
+- 上传材料 -> 抽高价值知识节点 -> 节点导航 -> 分层追问 -> 诊断报告。
+- Agent 1 单次最多 8 个节点，少材料不凑数，并输出适用层级。
+- Agent 2 按认知层级推进，不再按固定轮次推进。
+- 每个节点先走快速路径 1-3，再由用户选择“完成”或“深入”。
+- 提示和答案由 Agent 2 基于当前上下文动态生成。
+- 报告以层级通过情况、用户原话证据和盲点诊断为主，分数只是辅助。
+- 主界面目标是三栏工作台：左侧本地工作区，中间对话，右侧诊断面板。
+
+## 改造优先级
+
+1. 先改数据结构和流程状态。
+2. 再改 Agent 1 / Agent 2 / Agent 3 的输入输出。
+3. 再改 API 和前端页面流程。
+4. 最后改三栏 UI 和本地历史。
+
+报告分两步处理：Agent 3 的报告数据结构要在第 2 步同步改；报告页的视觉展示可以后置到 UI 阶段。
+
+不要先重写全部 UI，也不要先删除旧代码。旧代码里的文件解析、LLM 调用、错误处理、测试和部署配置仍然有价值。
+
+## 主要入口
+
+### 根目录
+
+- `docs/design-guide.md` — 产品规格真相源。
+- `AGENTS.md` — Agent 协作、工程原则、验证规则。
+- `README.md` — 面向用户和面试官的项目说明，需要后续对齐 v3.0。
+- `package.json` — 脚本和依赖。
+- `.env.local` — 本地密钥文件，禁止读取、打印或修改真实值。
+
+### 页面与 API
+
+- `app/page.tsx` — 当前首页入口。后续应弱化旧首页感，转向“上传材料开始诊断”。
+- `app/exam/page.tsx` — 当前主诊断页。后续会成为三栏工作台的主要改造点。
+- `app/report/page.tsx` — 当前报告页。后续需要展示层级通过、原话证据、提示/答案记录和下一步建议。
+- `app/api/analyze/route.ts` — 调用 Agent 1。后续需要返回最多 8 个节点、适用层级和优先级理由。
+- `app/api/question/route.ts` — 调用 Agent 2。后续不应再绑定固定 3 轮逻辑，而要返回层级状态和下一步动作。
+- `app/api/evaluate/route.ts` — 调用 Agent 3。后续报告输入要包含层级状态、提示/答案/类比记录和用户原话证据。
+
+### 组件
+
+- `components/InputForm.tsx` — 文件上传入口。当前仍可保留。
+- `components/VoiceInput.tsx` — 语音输入。不是 v3.0 核心，改造早期不要优先动。
+- `components/ProgressBar.tsx` — 旧进度条。后续可能被右侧诊断面板替代。
+- `components/ReportCard.tsx` — 旧报告卡片。后续需要按层级诊断报告重写。
+- `components/Mascot.tsx` — 非核心组件。除非阻碍新 UI，否则暂不处理。
+
+### 核心逻辑
+
+- `lib/types.ts` — 第一优先级。当前包含 `KnowledgeNode`、`ConversationTurn`、`NodeConversation`、`QuestionResponse`、`NodeEvaluation`、`ExamReport`、`ExamState`。后续至少需要补齐或调整：
+  - `CognitiveLevel`：记忆、理解、应用、分析、评价、创造。
+  - `LevelStatus`：未开始、进行中、通过、未通过、不适用。
+  - `KnowledgeNode.suitableLevels`：Agent 1 给出的适用层级上限。
+  - `KnowledgeNode.priorityReason`：Agent 1 选择该节点的理由。
+  - `DialogueEvent` 或扩展后的 `ConversationTurn`：记录提示、答案、主动类比。
+  - `QuestionResponse`：从只返回 `question` 改为返回自然回复、当前层级、通过状态、下一步动作和盲点摘要。
+  - `ExamReport` / `NodeEvaluation`：从旧掌握等级报告改为层级通过、原话证据、盲点和下一步建议。
+- `lib/examFlow.ts` — 第一优先级。旧的 3 轮推进逻辑需要替换为层级推进逻辑。
+- `lib/score.ts` — 需要从旧掌握等级评分改为快速路径 1-3 层计分。
+- `lib/apiResponse.ts` — 保留。前端 API 响应仍应走防御性解析。
+- `lib/pdf.ts` — 保留。文件解析不是当前改造重点。
+- `lib/llm.ts` — 保留。不要未经确认修改 DeepSeek provider 或模型名。
+
+### Agent
+
+- `lib/agents/analyzer.ts` — Agent 1。需要对齐“最多 8 个节点、少材料不凑数、适用层级、优先级理由”。
+- `lib/agents/questioner.ts` — Agent 2。最大改造点：从“只提问”升级为“诊断对话者”，返回自然回复和结构化状态。
+- `lib/agents/evaluator.ts` — Agent 3。需要改成基于层级通过、原话证据、盲点和下一步建议生成报告。
+
+### 状态管理
+
+- `store/examStore.tsx` — 第一优先级。当前状态只有 `phase`、`documentContent`、`nodes`、`currentNodeIndex`、`nodeConversations`、`currentQuestion`、`report`、`error`，并写入 `sessionStorage`。后续需要支持：
+  - 当前节点导航和用户选择的节点。
+  - 当前认知层级。
+  - 每个节点的层级状态。
+  - 快速路径完成后的“完成 / 深入”选择。
+  - 提示、答案、主动类比记录。
+  - 本地诊断历史和报告保存。
+  - 从旧 `currentQuestion` 迁移到“当前 Agent 回复 + 结构化状态”。
+
+### 测试
+
+- `tests/lib/analyzer.test.ts` — 改 Agent 1 时同步改。
+- `tests/lib/questioner.test.ts` — 改 Agent 2 时同步改。
+- `tests/lib/evaluator.test.ts` — 改 Agent 3 时同步改。
+- `tests/lib/examFlow.test.ts` — 改推进逻辑时同步改。
+- `tests/lib/score.test.ts` — 改评分时同步改。
+- `tests/components/ReportCard.test.tsx` — 改报告展示时同步改。
+
+## 目标数据流
+
+### 1. 材料上传与节点分析
+
+```text
+app/page.tsx
+  -> components/InputForm.tsx
+  -> POST /api/analyze
+  -> app/api/analyze/route.ts
+  -> lib/pdf.ts
+  -> lib/agents/analyzer.ts
+  -> store/examStore.tsx
+```
+
+目标返回：
+
+- 节点名称
+- 一句话说明
+- 材料证据片段
+- 适用层级
+- 优先级理由
+
+注意：Agent 1 最多 8 个节点。材料少时不凑数。
+
+### 2. 节点导航与分层对话
+
+```text
+app/exam/page.tsx
+  -> store/examStore.tsx
+  -> POST /api/question
+  -> app/api/question/route.ts
+  -> lib/agents/questioner.ts
+  -> lib/examFlow.ts
+```
+
+目标变化：
+
+- 推进依据从“回答轮次”改为“当前层级是否通过”。
+- 快速路径固定为记忆、理解、应用。
+- 快速路径后显示“完成”或“深入”。
+- 深入路径覆盖分析、评价；创造层只在适用时进入。
+- “给我提示”和“给我答案”是常驻操作，不是预生成内容。
+
+### 3. 报告生成
+
+```text
+app/exam/page.tsx
+  -> POST /api/evaluate
+  -> app/api/evaluate/route.ts
+  -> lib/agents/evaluator.ts
+  -> lib/score.ts
+  -> app/report/page.tsx
+  -> components/ReportCard.tsx
+```
+
+这一段属于 Agent 3 数据结构改造，不代表报告页 UI 要优先重写。页面展示可以等主对话流程跑通后再细化。
+
+目标报告输入：
+
+- 每个节点的层级通过情况。
+- 用户原话证据。
+- 提示、答案、主动类比使用记录。
+- 当前盲点摘要。
+- 材料证据片段。
+
+目标报告输出：
+
+- 0-100 分辅助摘要。
+- 层级通过情况。
+- 具体盲点和证据。
+- 正确理解。
+- 下一步怎么补。
+
+### 4. 本地保存
+
+当前只有 `sessionStorage` 会话恢复。v3.0 目标是本地保存诊断历史、节点、对话、层级状态和报告。
+
+优先实现可以从 `localStorage` 或 IndexedDB 起步。账号、云同步、分享链接暂不做。
+
+## 文档状态
+
+- `docs/design-guide.md` — 已更新到 v3.0，应作为后续改造依据。
+- `AGENTS.md` — 已对齐 v3.0 的 Agent 规则和工程原则。
+- `README.md` — 已对齐 v3.0 的公开项目描述。
+- `docs/operator-runbook.md` — 运行、测试、部署和故障排查手册。
+- `docs/handoff.md` — 当前阶段交接和并行开发说明。
+- `docs/architecture.md` — 已归档，等 v3.0 核心流程实现后再重写。
+
+## 验证
+
+只改文档时不用跑测试。
+
+改代码后至少运行：
+
+```bash
+npm run test:run
+```
+
+声称生产可用前再运行：
+
+```bash
+npm run build
+```
+
+Windows 环境可使用等价命令：`npm.cmd run test:run`、`npm.cmd run build`。
