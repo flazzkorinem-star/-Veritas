@@ -26,8 +26,6 @@ export interface SupportRecord {
   createdAt?: string
 }
 
-export type HintRecord = SupportRecord & { kind: 'hint' }
-
 export interface NodeLevelState {
   level: CognitiveLevel
   status: LevelStatus
