@@ -143,6 +143,7 @@ describe('v3 level flow helpers', () => {
   it('returns the first suitable deep level for user-selected deep-dive path', () => {
     expect(getFirstDeepLevel(['memory', 'understanding', 'application', 'evaluation'])).toBe('evaluation')
     expect(getFirstDeepLevel(['memory', 'understanding', 'application'])).toBeNull()
+    expect(getFirstDeepLevel(['memory', 'understanding', 'application', 'creation'])).toBeNull()
   })
 
   it('uses nextAction to advance to the next suitable level', () => {
@@ -176,6 +177,22 @@ describe('v3 level flow helpers', () => {
   it('selects the next deep level when the user chooses to go deeper', () => {
     expect(getDeepDiveStartLevel(['memory', 'understanding', 'application', 'analysis', 'evaluation'])).toBe('analysis')
     expect(getDeepDiveStartLevel(['memory', 'understanding', 'application', 'evaluation'])).toBe('evaluation')
+  })
+
+  it('does not force the optional creation level after evaluation passes', () => {
+    expect(getNextActionForLevelResult({
+      currentLevel: 'evaluation',
+      levelPassed: true,
+      suitableLevels: ['memory', 'understanding', 'application', 'analysis', 'evaluation', 'creation'],
+    })).toBe('complete_node')
+  })
+
+  it('does not jump from analysis to creation when evaluation is not suitable', () => {
+    expect(getNextActionForLevelResult({
+      currentLevel: 'analysis',
+      levelPassed: true,
+      suitableLevels: ['memory', 'understanding', 'application', 'analysis', 'creation'],
+    })).toBe('complete_node')
   })
 
   it('records hint and answer support for the current level', () => {

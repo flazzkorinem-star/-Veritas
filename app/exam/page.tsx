@@ -289,8 +289,12 @@ export default function ExamPage() {
   }
 
   const handleSubmit = async () => {
-    const answer = textAnswer.trim() || '用户未能作答'
+    const answer = textAnswer.trim()
     if (submitting || waitingForDeepDiveChoice) return
+    if (!answer) {
+      dispatch({ type: 'SET_ERROR', error: '请先输入你的回答' })
+      return
+    }
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
     await runFetch({ userAnswer: answer, requestType: 'normal' })
@@ -559,7 +563,7 @@ export default function ExamPage() {
           </div>
           <button
             onClick={handleSubmit}
-            disabled={submitting || waitingForReportRetry || waitingForDeepDiveChoice}
+            disabled={submitting || waitingForReportRetry || waitingForDeepDiveChoice || !textAnswer.trim()}
             className="w-full bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-medium py-3 rounded-xl transition-colors disabled:opacity-50"
           >
             {submitting ? '思考中...' : '提交回答 →'}

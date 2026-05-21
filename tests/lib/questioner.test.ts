@@ -138,6 +138,48 @@ describe('getNextQuestion', () => {
     })
   })
 
+  it('没有真实用户作答时不会接受模型给出的通过判断', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '这一层可以。',
+      currentLevel: 'memory',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+    }))
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'memory',
+      requestType: 'normal',
+      conversationHistory: [],
+    })
+
+    expect(result.passedCurrentLevel).toBe(false)
+    expect(result.nextAction).toBe('continue_current_level')
+  })
+
+  it('流程控制文本不会被当成真实作答', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '分析层也通过了。',
+      currentLevel: 'analysis',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+    }))
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'analysis',
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'user', content: '继续深入这个节点' },
+      ],
+    })
+
+    expect(result.passedCurrentLevel).toBe(false)
+    expect(result.nextAction).toBe('continue_current_level')
+  })
+
   it('不会进入 suitableLevels 不允许的层级', async () => {
     vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
       reply: '我们先停在适合这个节点的层级。',

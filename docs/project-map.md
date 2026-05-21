@@ -33,7 +33,7 @@ v3.0 目标：
 
 1. 数据结构、流程状态和状态层接入已完成：`lib/types.ts`、`lib/examFlow.ts`、`lib/score.ts` 已具备 v3.0 底座，`store/examStore.tsx` 已能承载节点、层级、路径、提示/答案/类比记录、Agent 2 结构化响应和报告状态。
 2. Agent 1 和 `/api/analyze` 节点链路已完成：Agent 1 负责节点质量校验和最多 8 个节点限制，`/api/analyze` 负责把已校验节点薄转发给页面链路。
-3. Agent 2 和 `/api/question` 已完成第一条 v3.0 可验证切片：返回自然回复、当前层级、是否通过、下一步动作、盲点摘要、支持方式和可选下一层级，并保留旧 `question` 字段作为页面迁移桥接。
+3. Agent 2 和 `/api/question` 已完成第一条 v3.0 可验证切片：返回自然回复、当前层级、是否通过、下一步动作、盲点摘要、支持方式和可选下一层级，并保留旧 `question` 字段作为页面迁移桥接。当前代码只接受真实用户作答后的通过判断，空提交和“完成/继续深入”等流程控制文本不会被当作诊断作答。
    TODO：`lib/types.ts` 里的旧 `levelPassed` 和 `question` 兼容字段仍待后续清理；当前 store 已优先读取 `passedCurrentLevel`。
 4. `app/exam/page.tsx` 已移除固定 3 轮结束节点的核心依赖，改为根据 `/api/question` 的 `nextAction`、当前层级和路径状态推进；快速路径完成后会等待“完成 / 深入”选择。
 5. Agent 3、`/api/evaluate`、评分集成已完成第一条 v3.0 报告数据链路；报告展示 UI 后续再细化。
@@ -56,7 +56,7 @@ v3.0 目标：
 ### 页面与 API
 
 - `app/page.tsx` — 当前首页入口。后续应弱化旧首页感，转向“上传材料开始诊断”。
-- `app/exam/page.tsx` — 当前主诊断页。已接入 Agent 2 v3.0 结构化响应和层级推进；仍保留旧视觉结构，后续会成为三栏工作台的主要改造点。
+- `app/exam/page.tsx` — 当前主诊断页。已接入 Agent 2 v3.0 结构化响应和层级推进；空回答不能提交，避免报告把系统合成文本当成用户原话；仍保留旧视觉结构，后续会成为三栏工作台的主要改造点。
 - `app/report/page.tsx` — 当前报告页容器。它只读取 `overallScore`、`summary` 和 `nodes`，报告字段展示由 `components/ReportCard.tsx` 承担。
 - `app/api/analyze/route.ts` — 调用 Agent 1，返回 `id`、`name`、`context`、`sourceExcerpt`、`suitableLevels` 和 `priorityReason`；节点质量校验留在 `lib/agents/analyzer.ts`。
 - `app/api/question/route.ts` — 调用 Agent 2。当前接收节点、当前层级、层级状态、对话历史和 `normal` / `hint` / `answer` 请求类型；不再拒绝 3 个用户回答后的历史，返回 Agent 2 的结构化诊断响应。
@@ -73,7 +73,7 @@ v3.0 目标：
 ### 核心逻辑
 
 - `lib/types.ts` — 已完成 v3.0 第一阶段底座。新增 `CognitiveLevel`、`LevelStatus`、`SupportRecord`、`NodeLevelState`、`QuestionNextAction`、`KnowledgeNode.suitableLevels`、`KnowledgeNode.priorityReason`，并扩展 `QuestionResponse` 支持自然回复、当前层级、通过状态、下一步动作和盲点摘要。`ExamReport` / `NodeEvaluation` 已切到 v3.0 报告字段：层级状态、用户原话证据、盲点、支持记录、正确理解和下一步建议；旧掌握等级字段已从 `NodeEvaluation` 移除。
-- `lib/examFlow.ts` — 提供层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作、支持记录和状态更新。当前已被 `store/examStore.tsx` 和 `app/exam/page.tsx` 用于层级推进。
+- `lib/examFlow.ts` — 提供层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作、支持记录和状态更新。当前深入路径只自动覆盖分析和评价，创造层不自动进入。当前已被 `store/examStore.tsx` 和 `app/exam/page.tsx` 用于层级推进。
 - `lib/score.ts` — 已保留旧掌握等级评分，并新增快速路径评分：记忆 33、理解 33、应用 34；深入层级不参与基础分；看答案后通过不计该层分。
 - `lib/apiResponse.ts` — 保留。前端 API 响应仍应走防御性解析。
 - `lib/pdf.ts` — 保留。文件解析不是当前改造重点。
@@ -81,9 +81,9 @@ v3.0 目标：
 
 ### Agent
 
-- `lib/agents/analyzer.ts` — Agent 1。已对齐 v3.0：最多 8 个节点、少材料不凑数、输出 `suitableLevels`（共享英文 `CognitiveLevel`）和 `priorityReason`，缺字段或非法层级会被丢弃。
-- `lib/agents/questioner.ts` — Agent 2。已从“只提问”升级为“诊断对话者”：负责提示词、LLM 输出解析、层级推进归一化、hint/answer 不独立通过、suitableLevels 约束和 malformed 输出 fallback。
-- `lib/agents/evaluator.ts` — Agent 3。已改成基于层级通过、原话证据、盲点和下一步建议生成报告；会过滤伪造原话、汇总提示/答案/类比记录，并使用本地快速路径分数覆盖模型分数。
+- `lib/agents/analyzer.ts` — Agent 1。已对齐 v3.0：最多 8 个节点、少材料不凑数、输出 `suitableLevels`（共享英文 `CognitiveLevel`）和 `priorityReason`；缺字段或非法层级会被丢弃，不连续层级会归一化为从 `memory` 到最高适用层级的连续路径。
+- `lib/agents/questioner.ts` — Agent 2。已从“只提问”升级为“诊断对话者”：负责提示词、LLM 输出解析、层级推进归一化、hint/answer 不独立通过、suitableLevels 约束和 malformed 输出 fallback；没有真实用户作答时不会接受模型给出的通过判断。
+- `lib/agents/evaluator.ts` — Agent 3。已改成基于层级通过、原话证据、盲点和下一步建议生成报告；会过滤伪造原话和流程控制文本，汇总提示/答案/类比记录，并使用本地快速路径分数覆盖模型分数。
 
 ### 状态管理
 
@@ -92,11 +92,11 @@ v3.0 目标：
 
 ### 测试
 
-- `tests/lib/analyzer.test.ts` — 改 Agent 1 时同步改。
+- `tests/lib/analyzer.test.ts` — 改 Agent 1 时同步改；当前覆盖最多 8 个节点、少材料不凑数、必填字段过滤和 `suitableLevels` 连续路径归一化。
 - `tests/app/analyzeRoute.test.ts` — 覆盖 `/api/analyze` 文件上传和 v3.0 节点字段透传；节点质量规则由 `tests/lib/analyzer.test.ts` 覆盖。
-- `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、normal/hint/answer、suitableLevels 约束、malformed fallback 和三轮后不固定停止。
-- `tests/lib/evaluator.test.ts` — 覆盖 Agent 3 v3.0 报告结构、用户原话过滤、本地分数覆盖、深入层级不计分、支持记录透传和 malformed fallback。
-- `tests/lib/examFlow.test.ts` — 覆盖层级推进、快速路径后的深入选择、深入入口和提示/答案支持记录；旧 3 轮结束节点预期已不再作为测试目标。
+- `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、normal/hint/answer、suitableLevels 约束、malformed fallback、三轮后不固定停止，以及无真实用户作答时不通过。
+- `tests/lib/evaluator.test.ts` — 覆盖 Agent 3 v3.0 报告结构、用户原话过滤、流程控制文本过滤、本地分数覆盖、深入层级不计分、支持记录透传和 malformed fallback。
+- `tests/lib/examFlow.test.ts` — 覆盖层级推进、快速路径后的深入选择、深入入口、提示/答案支持记录，以及创造层当前不自动进入；旧 3 轮结束节点预期已不再作为测试目标。
 - `tests/lib/score.test.ts` — 改评分时同步改。
 - `tests/store/examStore.test.ts` — 覆盖 v3.0 store 初始状态、`SET_NODES` 初始化、层级状态更新、提示/答案/类比记录、Agent 2 结构化响应、快速/深入路径、节点选择和 `RESET`。
 - `tests/components/ReportCard.test.tsx` — 覆盖报告卡片读取 v3.0 字段和材料证据展示。
@@ -123,7 +123,7 @@ app/page.tsx
 - 适用层级
 - 优先级理由
 
-注意：Agent 1 保持最多 8 个节点，材料少时不凑数；缺少材料证据片段、没有合法适用层级或缺少优先级理由的节点在 analyzer 层被过滤。
+注意：Agent 1 保持最多 8 个节点，材料少时不凑数；缺少材料证据片段、没有合法适用层级或缺少优先级理由的节点在 analyzer 层被过滤。不连续适用层级会按最高层级补成从记忆层开始的连续路径，避免诊断绕过快速路径。
 
 ### 2. 节点导航与分层对话
 
@@ -141,7 +141,7 @@ app/exam/page.tsx
 - 推进依据从“回答轮次”改为“当前层级是否通过”。
 - 快速路径固定为记忆、理解、应用。
 - 快速路径后显示“完成”或“深入”。
-- 深入路径覆盖分析、评价；创造层只在适用时进入。
+- 深入路径当前自动覆盖分析、评价；创造层不自动进入，后续如要开放需要单独设计入口。
 - “给我提示”和“给我答案”是常驻操作，不是预生成内容。
 
 ### 3. 报告生成

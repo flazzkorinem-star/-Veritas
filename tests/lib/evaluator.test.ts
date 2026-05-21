@@ -131,6 +131,35 @@ describe('parseEvaluatorResponse', () => {
     expect(report.nodes[0].evidenceQuotes).toEqual([])
   })
 
+  it('不会把系统合成的未作答文本当成用户原话证据', () => {
+    const report = parseEvaluatorResponse(JSON.stringify({
+      summary: '空回答不能作为证据。',
+      overallScore: 0,
+      nodes: [
+        {
+          nodeId: 'rag',
+          nodeName: 'RAG',
+          evidenceQuotes: ['用户未能作答'],
+          blindSpot: '用户没有真实作答。',
+          supportUsed: { hint: false, answer: false, analogy: false },
+          correctUnderstanding: '',
+          nextStep: '',
+          score: 0,
+        },
+      ],
+    }), {
+      nodeConversations: [
+        {
+          ...conversations[0],
+          turns: [{ role: 'user', content: '用户未能作答' }],
+        },
+      ],
+      nodeLevelStates: levelStates,
+    })
+
+    expect(report.nodes[0].evidenceQuotes).toEqual([])
+  })
+
   it('用本地快速路径分数覆盖模型分数，并且深入层级不参与基础分', () => {
     const report = parseEvaluatorResponse(validRawReport(999), input)
 

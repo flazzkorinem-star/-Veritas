@@ -31,6 +31,12 @@ export const DEEP_PATH_LEVELS: CognitiveLevel[] = [
   'creation',
 ]
 
+const ACTIVE_DEEP_PATH_LEVELS: CognitiveLevel[] = [
+  // V1 keeps the automatic deep path to analysis/evaluation; creation needs a future explicit entry.
+  'analysis',
+  'evaluation',
+]
+
 export function appendTurnToNodeConversations(
   conversations: NodeConversation[],
   nodeIndex: number,
@@ -108,7 +114,7 @@ export function getNextSuitableLevel(
 export function getFirstDeepLevel(
   suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
 ): CognitiveLevel | null {
-  return DEEP_PATH_LEVELS.find((level) => isLevelSuitable(level, suitableLevels)) ?? null
+  return ACTIVE_DEEP_PATH_LEVELS.find((level) => isLevelSuitable(level, suitableLevels)) ?? null
 }
 
 export function getNextActionForLevelResult({
@@ -126,10 +132,15 @@ export function getNextActionForLevelResult({
     return getFirstDeepLevel(suitableLevels) ? 'offer_deep_dive' : 'complete_node'
   }
 
+  if (currentLevel === 'analysis') {
+    return isLevelSuitable('evaluation', suitableLevels) ? 'advance_next_level' : 'complete_node'
+  }
+
+  if (currentLevel === 'evaluation' || currentLevel === 'creation') return 'complete_node'
+
   const nextLevel = getNextSuitableLevel(currentLevel, suitableLevels)
   if (!nextLevel) return 'complete_node'
 
-  if (DEEP_PATH_LEVELS.includes(currentLevel)) return 'advance_next_level'
   if (QUICK_PATH_LEVELS.includes(nextLevel)) return 'advance_next_level'
 
   return 'complete_node'

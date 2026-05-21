@@ -90,6 +90,11 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考�
 
 const MAX_LLM_ATTEMPTS = 2
 const VALID_SUPPORT_USED: SupportUsed[] = ['none', 'hint', 'answer', 'analogy']
+const NON_DIAGNOSTIC_USER_MESSAGES = new Set([
+  '用户未能作答',
+  '完成这个节点',
+  '继续深入这个节点',
+])
 
 function isCognitiveLevel(value: unknown): value is CognitiveLevel {
   return typeof value === 'string' && COGNITIVE_LEVELS.includes(value as CognitiveLevel)
@@ -123,6 +128,15 @@ function getDerivedNextLevel(
 
 function getLastAssistantQuestion(conversationHistory: ConversationTurn[]): string {
   return [...conversationHistory].reverse().find((turn) => turn.role === 'assistant')?.content ?? ''
+}
+
+function hasRecentDiagnosticUserAnswer(conversationHistory: ConversationTurn[]): boolean {
+  const lastUserAnswer = [...conversationHistory].reverse()
+    .find((turn) => turn.role === 'user')
+    ?.content
+    .trim()
+
+  return Boolean(lastUserAnswer && !NON_DIAGNOSTIC_USER_MESSAGES.has(lastUserAnswer))
 }
 
 function buildFallbackReply({
@@ -203,7 +217,9 @@ function normalizeQuestionerResponse(
       : isSupportUsed(parsed.supportUsed)
         ? parsed.supportUsed
         : 'none'
-  const passedCurrentLevel = requestType === 'normal' && parsed.passedCurrentLevel === true
+  const passedCurrentLevel = requestType === 'normal'
+    && hasRecentDiagnosticUserAnswer(input.conversationHistory)
+    && parsed.passedCurrentLevel === true
   const nextAction = requestType === 'normal'
     ? getNextActionForLevelResult({
         currentLevel,

@@ -34,7 +34,13 @@ function readSuitableLevels(value: unknown): CognitiveLevel[] {
     return []
   }
 
-  return Array.from(new Set(value.filter(isCognitiveLevel)))
+  const levels = Array.from(new Set(value.filter(isCognitiveLevel)))
+  const highestIndex = levels.reduce((max, level) => (
+    Math.max(max, COGNITIVE_LEVELS.indexOf(level))
+  ), -1)
+
+  if (highestIndex < 0) return []
+  return COGNITIVE_LEVELS.slice(0, highestIndex + 1)
 }
 
 const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一段学习内容，只提取高诊断价值知识节点，不做泛泛总结。

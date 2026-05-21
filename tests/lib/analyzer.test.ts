@@ -94,7 +94,20 @@ describe('parseAnalyzerResponse', () => {
 
     expect(nodes).toHaveLength(1)
     expect(nodes[0].id).toBe('5')
-    expect(nodes[0].suitableLevels).toEqual(['memory', 'analysis'])
+    expect(nodes[0].suitableLevels).toEqual(['memory', 'understanding', 'application', 'analysis'])
+  })
+
+  it('normalizes non-contiguous suitableLevels into a continuous path from memory', () => {
+    const nodes = parseAnalyzerResponse(JSON.stringify({
+      nodes: [
+        validNode('1', {
+          suitableLevels: ['analysis'],
+          priorityReason: '这个节点适合诊断到机制分析层。',
+        }),
+      ],
+    }))
+
+    expect(nodes[0].suitableLevels).toEqual(['memory', 'understanding', 'application', 'analysis'])
   })
 
   it('keeps priorityReason from the analyzer response', () => {
