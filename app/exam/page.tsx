@@ -271,7 +271,10 @@ export default function ExamPage() {
       const res = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeConversations }),
+        body: JSON.stringify({
+          nodeConversations,
+          nodeLevelStates: state.nodeLevelStates,
+        }),
       })
       const report = await readApiJson<EvaluateApiResponse>(res)
       if (!res.ok) throw new Error(report.error)

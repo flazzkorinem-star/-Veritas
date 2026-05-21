@@ -1,8 +1,8 @@
 // @vitest-environment node
-import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { chat } from '../../lib/llm'
 import { evaluateConversations, parseEvaluatorResponse } from '../../lib/agents/evaluator'
-import { NodeConversation } from '../../lib/types'
+import { NodeConversation, NodeLevelState } from '../../lib/types'
 
 vi.mock('../../lib/llm', () => ({
   chat: vi.fn(),
@@ -13,168 +13,211 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('parseEvaluatorResponse', () => {
-  it('parses valid evaluation JSON', () => {
-    const raw = JSON.stringify({
-      nodes: [
-        {
-          nodeId: '1',
-          nodeName: 'RAG',
-          masteryLevel: 'developing',
-          hasMisconception: true,
-          misconceptionQuote: '我说RAG就是搜索引擎',
-          misconceptionCorrection: 'RAG是检索增强生成，不是搜索引擎',
-          explanation: 'RAG通过检索相关文档片段作为上下文来增强LLM的回答',
-          isSupplementalExplanation: false,
-          evidenceSummary: '用户能说出用途，但把 RAG 等同于搜索引擎。',
-          score: 50,
-        }
-      ],
-      overallScore: 50,
-      summary: '基本理解了RAG的用途，但概念定义存在偏差'
-    })
-    const report = parseEvaluatorResponse(raw)
-    expect(report.nodes).toHaveLength(1)
-    expect(report.nodes[0].masteryLevel).toBe('developing')
-    expect(report.nodes[0].evidenceSummary).toContain('搜索引擎')
-    expect(report.nodes[0].isSupplementalExplanation).toBe(false)
-    expect(report.overallScore).toBe(45)
-  })
+const conversations: NodeConversation[] = [
+  {
+    node: {
+      id: 'rag',
+      name: 'RAG',
+      context: 'RAG 用检索到的材料片段增强生成回答。',
+      sourceExcerpt: 'RAG 会先检索相关材料，再把材料交给模型生成回答。',
+      suitableLevels: ['memory', 'understanding', 'application', 'analysis'],
+      priorityReason: '容易把 RAG 混同为普通搜索。',
+    },
+    turns: [
+      { role: 'assistant', content: 'RAG 是什么？' },
+      { role: 'user', content: 'RAG 是先找资料，再结合资料回答。' },
+      { role: 'assistant', content: '放到客服场景里怎么用？' },
+      { role: 'user', content: '客服先检索产品文档，再根据文档答用户。' },
+    ],
+  },
+]
 
-  it('throws on invalid JSON', () => {
-    expect(() => parseEvaluatorResponse('bad json')).toThrow()
-  })
-
-  it('recalculates scores instead of trusting model-provided numbers', () => {
-    const raw = JSON.stringify({
-      nodes: [
+const levelStates: Record<string, NodeLevelState[]> = {
+  rag: [
+    { level: 'memory', status: 'passed' },
+    {
+      level: 'understanding',
+      status: 'passed',
+      supportRecords: [
         {
-          nodeId: '1',
-          nodeName: 'RAG',
-          masteryLevel: 'mastered',
-          hasMisconception: true,
-          misconceptionQuote: 'RAG就是搜索引擎',
-          misconceptionCorrection: 'RAG是检索增强生成，不等于搜索引擎',
-          score: 100,
-        },
-        {
-          nodeId: '2',
-          nodeName: 'Embedding',
-          masteryLevel: 'needs_work',
-          hasMisconception: false,
-          explanation: 'Embedding 是把文本映射到向量空间的表示。',
-          score: 100,
+          kind: 'hint',
+          level: 'understanding',
+          question: 'RAG 为什么不是普通搜索？',
+          content: '先区分检索和生成。',
         },
       ],
-      overallScore: 100,
-      summary: '模型给出的分数不可信',
-    })
-
-    const report = parseEvaluatorResponse(raw)
-
-    expect(report.nodes[0].score).toBe(85)
-    expect(report.nodes[1].score).toBe(40)
-    expect(report.overallScore).toBe(63)
-  })
-
-  it('does not keep misconception flags without a precise user quote', () => {
-    const raw = JSON.stringify({
-      nodes: [
+    },
+    {
+      level: 'application',
+      status: 'passed',
+      supportRecords: [
         {
-          nodeId: '1',
-          nodeName: '位置编码',
-          masteryLevel: 'needs_work',
-          hasMisconception: true,
-          explanation: '位置编码用于让模型区分序列中不同位置的信息。',
-          isSupplementalExplanation: true,
-          evidenceSummary: '用户未能说出位置编码的作用。',
-          score: 100,
+          kind: 'answer',
+          level: 'application',
+          question: '客服场景怎么用？',
+          content: '先检索产品文档，再组织回答。',
         },
       ],
-      overallScore: 100,
-      summary: '位置编码需要重点复习',
-    })
+    },
+    { level: 'analysis', status: 'passed' },
+    { level: 'evaluation', status: 'not_applicable' },
+    { level: 'creation', status: 'not_applicable' },
+  ],
+}
 
-    const report = parseEvaluatorResponse(raw)
+const input = {
+  nodeConversations: conversations,
+  nodeLevelStates: levelStates,
+}
 
-    expect(report.nodes[0].hasMisconception).toBe(false)
-    expect(report.nodes[0].misconceptionQuote).toBeUndefined()
-    expect(report.nodes[0].score).toBe(40)
-    expect(report.nodes[0].isSupplementalExplanation).toBe(true)
-  })
-
-  it('attaches source excerpts from node conversations to report nodes', () => {
-    const conversations: NodeConversation[] = [
+function validRawReport(score = 999) {
+  return JSON.stringify({
+    summary: '主要盲点是能说出流程，但应用层需要答案辅助。',
+    overallScore: score,
+    nodes: [
       {
-        node: {
-          id: '1',
-          name: 'RAG',
-          context: '检索增强生成',
-          sourceExcerpt: 'RAG 会先检索相关文档片段，再把片段作为上下文交给大模型生成回答。',
+        nodeId: 'rag',
+        nodeName: 'RAG',
+        sourceExcerpt: '模型给的片段会被本地材料片段覆盖也可以。',
+        levelStatus: {
+          memory: 'failed',
+          understanding: 'failed',
+          application: 'failed',
+          analysis: 'failed',
+          evaluation: 'failed',
+          creation: 'failed',
         },
-        turns: [],
+        evidenceQuotes: [
+          'RAG 是先找资料，再结合资料回答。',
+          '这句话不是用户说的',
+        ],
+        blindSpot: '应用层需要答案辅助，不能独立说明怎么落地。',
+        supportUsed: { hint: false, answer: false, analogy: false },
+        correctUnderstanding: 'RAG 是检索材料后，把材料作为上下文交给模型生成。',
+        nextStep: '重新用客服场景说清检索、引用材料和生成回答三步。',
+        score,
       },
-    ]
-    const raw = JSON.stringify({
-      nodes: [
+    ],
+  })
+}
+
+describe('parseEvaluatorResponse', () => {
+  it('解析 v3.0 报告结构并保留用户真实原话', () => {
+    const report = parseEvaluatorResponse(validRawReport(), input)
+
+    expect(report.summary).toContain('主要盲点')
+    expect(report.nodes).toHaveLength(1)
+    expect(report.nodes[0].nodeId).toBe('rag')
+    expect(report.nodes[0].sourceExcerpt).toBe('模型给的片段会被本地材料片段覆盖也可以。')
+    expect(report.nodes[0].levelStatus.memory).toBe('passed')
+    expect(report.nodes[0].levelStatus.application).toBe('passed')
+    expect(report.nodes[0].evidenceQuotes).toEqual(['RAG 是先找资料，再结合资料回答。'])
+    expect(report.nodes[0].blindSpot).toContain('应用层')
+    expect(report.nodes[0].correctUnderstanding).toContain('检索材料')
+    expect(report.nodes[0].nextStep).toContain('客服场景')
+  })
+
+  it('没有真实用户原话时不保留伪造 evidenceQuotes', () => {
+    const report = parseEvaluatorResponse(validRawReport(), {
+      nodeConversations: [
         {
-          nodeId: '1',
-          nodeName: 'RAG',
-          masteryLevel: 'mastered',
-          hasMisconception: false,
-          score: 100,
+          ...conversations[0],
+          turns: [{ role: 'user', content: '我不知道。' }],
         },
       ],
-      overallScore: 100,
-      summary: '已掌握',
+      nodeLevelStates: levelStates,
     })
 
-    const report = parseEvaluatorResponse(raw, conversations)
+    expect(report.nodes[0].evidenceQuotes).toEqual([])
+  })
 
-    expect(report.nodes[0].sourceExcerpt).toBe(
-      'RAG 会先检索相关文档片段，再把片段作为上下文交给大模型生成回答。'
-    )
+  it('用本地快速路径分数覆盖模型分数，并且深入层级不参与基础分', () => {
+    const report = parseEvaluatorResponse(validRawReport(999), input)
+
+    expect(report.nodes[0].score).toBe(66)
+    expect(report.overallScore).toBe(66)
+  })
+
+  it('提示、答案、主动类比记录会进入报告', () => {
+    const report = parseEvaluatorResponse(validRawReport(), {
+      nodeConversations: conversations,
+      nodeLevelStates: {
+        rag: [
+          {
+            level: 'memory',
+            status: 'passed',
+            supportRecords: [
+              { kind: 'hint', level: 'memory', question: 'q1', content: 'h' },
+              { kind: 'answer', level: 'memory', question: 'q2', content: 'a' },
+              { kind: 'analogy', level: 'memory', question: 'q3', content: 'x' },
+            ],
+          },
+        ],
+      },
+    })
+
+    expect(report.nodes[0].supportUsed).toEqual({
+      hint: true,
+      answer: true,
+      analogy: true,
+    })
+  })
+
+  it('缺少层级状态时使用模型结构和材料适用层级做稳定兜底', () => {
+    const report = parseEvaluatorResponse(validRawReport(), {
+      nodeConversations: conversations,
+    })
+
+    expect(report.nodes[0].levelStatus.memory).toBe('failed')
+    expect(report.nodes[0].levelStatus.evaluation).toBe('not_applicable')
+    expect(report.nodes[0].score).toBe(0)
+  })
+
+  it('模型缺字段时不编造盲点、正确理解或下一步', () => {
+    const report = parseEvaluatorResponse(JSON.stringify({
+      nodes: [{ nodeId: 'rag', nodeName: 'RAG', score: 999 }],
+      overallScore: 999,
+      summary: '',
+    }), {
+      nodeConversations: conversations,
+    })
+
+    expect(report.nodes[0].blindSpot).toBe('')
+    expect(report.nodes[0].correctUnderstanding).toBe('')
+    expect(report.nodes[0].nextStep).toBe('')
+  })
+
+  it('解析非法 JSON 时保留调试上下文，但不是原始 parse 错误', () => {
+    expect(() => parseEvaluatorResponse('bad json from model', input))
+      .toThrow('Evaluator returned invalid JSON: bad json from model')
   })
 })
 
 describe('evaluateConversations', () => {
-  it('retries once when the evaluator output is malformed', async () => {
+  it('malformed 输出会重试，重试成功后返回本地计分报告，并且 prompt 不带 support content', async () => {
     vi.mocked(chat)
       .mockResolvedValueOnce('bad json')
-      .mockResolvedValueOnce(JSON.stringify({
-        nodes: [
-          {
-            nodeId: '1',
-            nodeName: 'RAG',
-            masteryLevel: 'mastered',
-            hasMisconception: false,
-            isSupplementalExplanation: false,
-            evidenceSummary: '用户能说清楚 RAG 的核心流程。',
-            score: 100,
-          },
-        ],
-        overallScore: 100,
-        summary: 'RAG 已掌握',
-      }))
+      .mockResolvedValueOnce(validRawReport(999))
 
-    const conversations: NodeConversation[] = [
-      {
-        node: {
-          id: '1',
-          name: 'RAG',
-          context: '检索增强生成',
-          sourceExcerpt: 'RAG 会先检索相关文档片段。',
-        },
-        turns: [
-          { role: 'assistant', content: 'RAG 是什么？' },
-          { role: 'user', content: 'RAG 是先检索资料，再生成回答。' },
-        ],
-      },
-    ]
-
-    const report = await evaluateConversations(conversations)
+    const report = await evaluateConversations(input)
+    const firstPrompt = vi.mocked(chat).mock.calls[0][0][1].content
 
     expect(chat).toHaveBeenCalledTimes(2)
-    expect(report.nodes[0].score).toBe(100)
+    expect(report.nodes[0].score).toBe(66)
+    expect(firstPrompt).not.toContain('先区分检索和生成。')
+    expect(firstPrompt).not.toContain('先检索产品文档，再组织回答。')
+  })
+
+  it('连续 malformed 输出会返回稳定 fallback 报告', async () => {
+    vi.mocked(chat)
+      .mockResolvedValueOnce('bad json')
+      .mockResolvedValueOnce('still bad')
+
+    const report = await evaluateConversations(input)
+
+    expect(chat).toHaveBeenCalledTimes(2)
+    expect(report.nodes[0].nodeId).toBe('rag')
+    expect(report.nodes[0].evidenceQuotes).toEqual([])
+    expect(report.overallScore).toBe(66)
   })
 })

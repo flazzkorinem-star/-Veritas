@@ -1,4 +1,4 @@
-// Mastery level as returned by Agent 3
+// Legacy mastery level retained for old score helper tests.
 export type MasteryLevel = 'mastered' | 'developing' | 'needs_work'
 
 export type CognitiveLevel =
@@ -78,14 +78,13 @@ export interface NodeEvaluation {
   nodeId: string
   nodeName: string
   sourceExcerpt?: string       // source material excerpt for evidence display
-  masteryLevel: MasteryLevel
-  hasMisconception: boolean
-  misconceptionQuote?: string     // exact words user said that are wrong
-  misconceptionCorrection?: string // correct explanation
-  explanation?: string            // for developing/needs_work: correct understanding
-  isSupplementalExplanation: boolean // true when the correction/explanation goes beyond source material
-  evidenceSummary?: string        // why this mastery judgment was made, in report language
-  score: number                   // 100 | 60 | 40, minus 15 if misconception (min 0)
+  levelStatus: Record<CognitiveLevel, LevelStatus>
+  evidenceQuotes: string[]
+  blindSpot: string
+  supportUsed: Record<SupportKind, boolean>
+  correctUnderstanding: string
+  nextStep: string
+  score: number
 }
 
 // Full evaluation report from Agent 3

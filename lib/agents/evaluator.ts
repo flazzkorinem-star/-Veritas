@@ -1,64 +1,231 @@
 import { chat, MODEL_FAST } from '../llm'
-import { NodeConversation, ExamReport, NodeEvaluation } from '../types'
-import { calculateNodeScore, calculateOverallScore } from '../score'
+import {
+  CognitiveLevel,
+  ExamReport,
+  KnowledgeNode,
+  LevelStatus,
+  NodeConversation,
+  NodeEvaluation,
+  NodeLevelState,
+  SupportKind,
+} from '../types'
+import { calculateOverallScore, calculateQuickPathScore } from '../score'
 import { extractJSON } from '../parseJSON'
 
-const SYSTEM_PROMPT = `你是一个诚实的知识评估专家。分析苏格拉底式对话记录，对每个知识节点给出准确评估。
+const LEVELS: CognitiveLevel[] = [
+  'memory',
+  'understanding',
+  'application',
+  'analysis',
+  'evaluation',
+  'creation',
+]
 
-掌握等级定义：
-- "mastered"：用户能清晰解释、举例，追问时也能应对
-- "developing"：核心方向对，但追问时说不深，有明显缺失
-- "needs_work"：第一轮就答不到点上，或只能重复定义
+const SUPPORT_KINDS: SupportKind[] = ['hint', 'answer', 'analogy']
 
-误解标记规则：
-- 只有用户说出明确错误的表述时，才允许设 hasMisconception: true
-- 回答模糊、不完整、太浅、空回答、说“不知道”，都不得标记为误解，只能影响 masteryLevel
-- hasMisconception 为 true 时，必须提供 misconceptionQuote，且必须精确引用用户原话
-- misconceptionCorrection：正确的理解是什么
+const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成器。
+你只根据材料证据、用户真实对话、层级状态和支持记录生成报告。
 
-正确解释规则：
-- developing 和 needs_work 的节点必须提供 explanation（正确理解）
-- mastered 且无误解的节点不需要 explanation
-- 如果 explanation 或 misconceptionCorrection 超出材料依据片段中的信息，必须设 isSupplementalExplanation: true；否则设 false
+任务：
+- 说明每个知识节点的层级通过情况。
+- 引用用户真实原话作为 evidenceQuotes；不能编造用户没说过的话。
+- 指出具体盲点，不写泛泛学习鸡汤。
+- 说明是否使用提示、答案、主动类比。
+- 给出正确理解和下一步怎么补。
+- 不把分数当作核心结论；即使你输出 score，也会被本地代码覆盖。
+- 不主动扩展材料外的新知识点作为诊断对象。
 
-绝对禁止：
-- 模糊的表扬（"理解得不错"、"基本正确"）
-- 没有原话引用的误解标记
-- 输出学习建议、练习动作、下一步行动
-
-用JSON格式回复：
+只输出 JSON：
 {
+  "summary": "一句话主要盲点摘要",
   "nodes": [
     {
       "nodeId": "string",
       "nodeName": "string",
-      "masteryLevel": "mastered" | "developing" | "needs_work",
-      "hasMisconception": boolean,
-      "misconceptionQuote": "string（可选）",
-      "misconceptionCorrection": "string（可选）",
-      "explanation": "string（可选，developing/needs_work必填）",
-      "isSupplementalExplanation": boolean,
-      "score": number
+      "sourceExcerpt": "string",
+      "levelStatus": {
+        "memory": "not_started | in_progress | passed | failed | not_applicable",
+        "understanding": "not_started | in_progress | passed | failed | not_applicable",
+        "application": "not_started | in_progress | passed | failed | not_applicable",
+        "analysis": "not_started | in_progress | passed | failed | not_applicable",
+        "evaluation": "not_started | in_progress | passed | failed | not_applicable",
+        "creation": "not_started | in_progress | passed | failed | not_applicable"
+      },
+      "evidenceQuotes": ["用户说过的原话"],
+      "blindSpot": "具体盲点",
+      "supportUsed": { "hint": false, "answer": false, "analogy": false },
+      "correctUnderstanding": "正确理解",
+      "nextStep": "下一步怎么补",
+      "score": 0
     }
   ],
-  "overallScore": number,
-  "summary": "一段话总结整体表现和需要重点复习的节点，不要给具体练习动作"
+  "overallScore": 0
 }`
 
-const REPORT_LANGUAGE_AND_CONTENT_RULES = `
-补充规则，优先级高于前面的所有规则：
-1. 所有面向用户展示的字段必须使用简体中文：summary、evidenceSummary、explanation、misconceptionCorrection。
-2. 如果材料原文是英文，只能在 sourceExcerpt 证据中保留英文；你的分析和解释必须是中文。
-3. 每个节点都必须输出 evidenceSummary：说明为什么这样判定，依据用户回答，不要只复制材料原文。
-4. developing 和 needs_work 必须输出 explanation：用中文说明正确理解。
-5. 每个节点都必须输出 isSupplementalExplanation；只有正确解释超出材料依据片段时才设为 true。
-6. 不要输出学习建议、练习动作或行动计划字段；summary 只能概括哪些节点需要重点复习。
-7. mastered 节点也要输出 evidenceSummary，不能只显示材料依据。
-8. 不要输出空泛评价，例如“理解不错”“基本正确”。`
+export interface EvaluationInput {
+  nodeConversations: NodeConversation[]
+  nodeLevelStates?: Record<string, NodeLevelState[]>
+}
+
+function isLevelStatus(value: unknown): value is LevelStatus {
+  return (
+    value === 'not_started'
+    || value === 'in_progress'
+    || value === 'passed'
+    || value === 'failed'
+    || value === 'not_applicable'
+  )
+}
+
+function emptySupportUsed(): Record<SupportKind, boolean> {
+  return { hint: false, answer: false, analogy: false }
+}
+
+function getLevelStates(
+  nodeId: string,
+  nodeLevelStates?: Record<string, NodeLevelState[]>
+): NodeLevelState[] {
+  return nodeLevelStates?.[nodeId] ?? []
+}
+
+function buildLevelStatus(
+  node: KnowledgeNode,
+  states: NodeLevelState[],
+  modelStatus?: unknown
+): Record<CognitiveLevel, LevelStatus> {
+  const status = Object.fromEntries(
+    LEVELS.map((level) => [
+      level,
+      node.suitableLevels && !node.suitableLevels.includes(level)
+        ? 'not_applicable'
+        : 'not_started',
+    ])
+  ) as Record<CognitiveLevel, LevelStatus>
+
+  if (states.length > 0) {
+    states.forEach((state) => {
+      status[state.level] = state.status
+    })
+    return status
+  }
+
+  if (modelStatus && typeof modelStatus === 'object') {
+    const raw = modelStatus as Record<string, unknown>
+    LEVELS.forEach((level) => {
+      if (status[level] !== 'not_applicable' && isLevelStatus(raw[level])) {
+        status[level] = raw[level]
+      }
+    })
+  }
+
+  return status
+}
+
+function buildSupportUsed(
+  states: NodeLevelState[],
+  modelSupport?: unknown
+): Record<SupportKind, boolean> {
+  const supportUsed = emptySupportUsed()
+
+  states.forEach((state) => {
+    state.supportRecords?.forEach((record) => {
+      supportUsed[record.kind] = true
+    })
+  })
+
+  if (states.length > 0) return supportUsed
+
+  if (modelSupport && typeof modelSupport === 'object') {
+    const raw = modelSupport as Record<string, unknown>
+    SUPPORT_KINDS.forEach((kind) => {
+      supportUsed[kind] = raw[kind] === true
+    })
+  }
+
+  return supportUsed
+}
+
+function getUserTurns(conversation?: NodeConversation): string[] {
+  return conversation?.turns
+    .filter((turn) => turn.role === 'user')
+    .map((turn) => turn.content.trim())
+    .filter(Boolean) ?? []
+}
+
+function getStateQuotes(states: NodeLevelState[]): string[] {
+  return states
+    .map((state) => state.userQuote?.trim())
+    .filter((quote): quote is string => Boolean(quote))
+}
+
+function quoteExistsInUserTurns(quote: string, userTurns: string[]): boolean {
+  return userTurns.some((turn) => turn.includes(quote))
+}
+
+function normalizeEvidenceQuotes(
+  modelQuotes: unknown,
+  userTurns: string[],
+  states: NodeLevelState[]
+): string[] {
+  const candidates = [
+    ...(Array.isArray(modelQuotes) ? modelQuotes : []),
+    ...getStateQuotes(states),
+  ]
+
+  return Array.from(new Set(
+    candidates
+      .filter((quote): quote is string => typeof quote === 'string')
+      .map((quote) => quote.trim())
+      .filter((quote) => quote.length > 0 && quoteExistsInUserTurns(quote, userTurns))
+  ))
+}
+
+function firstBlindSpot(states: NodeLevelState[]): string {
+  return states
+    .map((state) => state.blindSpotSummary?.trim())
+    .find((summary) => Boolean(summary)) ?? ''
+}
+
+function makeNodeEvaluation({
+  rawNode,
+  conversation,
+  states,
+}: {
+  rawNode: Record<string, unknown>
+  conversation: NodeConversation
+  states: NodeLevelState[]
+}): NodeEvaluation {
+  const userTurns = getUserTurns(conversation)
+  const score = calculateQuickPathScore(states)
+  const blindSpot = typeof rawNode.blindSpot === 'string' && rawNode.blindSpot.trim()
+    ? rawNode.blindSpot.trim()
+    : firstBlindSpot(states)
+  const correctUnderstanding = typeof rawNode.correctUnderstanding === 'string' && rawNode.correctUnderstanding.trim()
+    ? rawNode.correctUnderstanding.trim()
+    : ''
+  const nextStep = typeof rawNode.nextStep === 'string' && rawNode.nextStep.trim()
+    ? rawNode.nextStep.trim()
+    : ''
+
+  return {
+    nodeId: typeof rawNode.nodeId === 'string' && rawNode.nodeId ? rawNode.nodeId : conversation.node.id,
+    nodeName: typeof rawNode.nodeName === 'string' && rawNode.nodeName ? rawNode.nodeName : conversation.node.name,
+    sourceExcerpt: typeof rawNode.sourceExcerpt === 'string' && rawNode.sourceExcerpt
+      ? rawNode.sourceExcerpt
+      : conversation.node.sourceExcerpt,
+    levelStatus: buildLevelStatus(conversation.node, states, rawNode.levelStatus),
+    evidenceQuotes: normalizeEvidenceQuotes(rawNode.evidenceQuotes, userTurns, states),
+    blindSpot,
+    supportUsed: buildSupportUsed(states, rawNode.supportUsed),
+    correctUnderstanding,
+    nextStep,
+    score,
+  }
+}
 
 export function parseEvaluatorResponse(
   raw: string,
-  nodeConversations: NodeConversation[] = []
+  input: EvaluationInput
 ): ExamReport {
   let parsed: unknown
   try {
@@ -66,73 +233,108 @@ export function parseEvaluatorResponse(
   } catch {
     throw new Error(`Evaluator returned invalid JSON: ${raw.slice(0, 200)}`)
   }
+
   const obj = parsed as Record<string, unknown>
   if (!Array.isArray(obj.nodes)) throw new Error('Evaluator response missing nodes array')
 
-  const sourceById = new Map(nodeConversations.map((nc) => [nc.node.id, nc.node.sourceExcerpt]))
-  const sourceByName = new Map(nodeConversations.map((nc) => [nc.node.name, nc.node.sourceExcerpt]))
-
-  const nodes = (obj.nodes as Array<Record<string, unknown>>).map((node) => {
-    const nodeId = typeof node.nodeId === 'string' ? node.nodeId : ''
-    const nodeName = typeof node.nodeName === 'string' ? node.nodeName : ''
-    const misconceptionQuote = typeof node.misconceptionQuote === 'string'
-      ? node.misconceptionQuote.trim()
-      : ''
-    const hasMisconception = node.hasMisconception === true && misconceptionQuote.length > 0
-    const normalizedNode: NodeEvaluation = {
-      nodeId,
-      nodeName,
-      sourceExcerpt: (typeof node.sourceExcerpt === 'string' && node.sourceExcerpt)
-        || sourceById.get(nodeId)
-        || sourceByName.get(nodeName),
-      masteryLevel: node.masteryLevel as NodeEvaluation['masteryLevel'],
-      hasMisconception,
-      misconceptionQuote: hasMisconception ? misconceptionQuote : undefined,
-      misconceptionCorrection: hasMisconception && typeof node.misconceptionCorrection === 'string'
-        ? node.misconceptionCorrection
-        : undefined,
-      explanation: typeof node.explanation === 'string' ? node.explanation : undefined,
-      isSupplementalExplanation: node.isSupplementalExplanation === true,
-      evidenceSummary: typeof node.evidenceSummary === 'string' ? node.evidenceSummary : '',
-      score: calculateNodeScore(node.masteryLevel as NodeEvaluation['masteryLevel'], hasMisconception),
-    }
-    return normalizedNode
+  const rawNodes = obj.nodes as Array<Record<string, unknown>>
+  const nodes = input.nodeConversations.map((conversation) => {
+    const rawNode = rawNodes.find((item) => item.nodeId === conversation.node.id)
+      ?? rawNodes.find((item) => item.nodeName === conversation.node.name)
+      ?? {}
+    return makeNodeEvaluation({
+      rawNode,
+      conversation,
+      states: getLevelStates(conversation.node.id, input.nodeLevelStates),
+    })
   })
+
   return {
     nodes,
     overallScore: calculateOverallScore(nodes),
-    summary: (obj.summary as string) || '',
+    summary: typeof obj.summary === 'string' && obj.summary.trim()
+      ? obj.summary.trim()
+      : buildFallbackSummary(nodes),
   }
 }
 
-export async function evaluateConversations(
-  nodeConversations: NodeConversation[]
-): Promise<ExamReport> {
-  const dialogueSummary = nodeConversations
-    .map((nc) => {
-      const turns = nc.turns
-        .map((t) => `${t.role === 'assistant' ? 'AI提问' : '用户回答'}: ${t.content}`)
-        .join('\n')
-      return `【知识节点：${nc.node.name}（${nc.node.context}）】
-材料依据片段：${nc.node.sourceExcerpt}
-${turns}`
-    })
-    .join('\n\n---\n\n')
+function buildFallbackSummary(nodes: NodeEvaluation[]): string {
+  return nodes.find((node) => node.blindSpot)?.blindSpot ?? '模型报告暂时不可用。'
+}
 
+function buildFallbackReport(input: EvaluationInput): ExamReport {
+  const nodes = input.nodeConversations.map((conversation) => {
+    const states = getLevelStates(conversation.node.id, input.nodeLevelStates)
+    const score = calculateQuickPathScore(states)
+    const blindSpot = firstBlindSpot(states)
+    return {
+      nodeId: conversation.node.id,
+      nodeName: conversation.node.name,
+      sourceExcerpt: conversation.node.sourceExcerpt,
+      levelStatus: buildLevelStatus(conversation.node, states),
+      evidenceQuotes: [],
+      blindSpot,
+      supportUsed: buildSupportUsed(states),
+      correctUnderstanding: '',
+      nextStep: '',
+      score,
+    } satisfies NodeEvaluation
+  })
+
+  return {
+    nodes,
+    overallScore: calculateOverallScore(nodes),
+    summary: buildFallbackSummary(nodes),
+  }
+}
+
+function formatInputForPrompt(input: EvaluationInput): string {
+  const nodeLevelStates = Object.fromEntries(
+    Object.entries(input.nodeLevelStates ?? {}).map(([nodeId, states]) => [
+      nodeId,
+      states.map((state) => ({
+        level: state.level,
+        status: state.status,
+        blindSpotSummary: state.blindSpotSummary,
+        userQuote: state.userQuote,
+        supportRecords: state.supportRecords?.map((record) => ({
+          kind: record.kind,
+          level: record.level,
+        })),
+      })),
+    ])
+  )
+
+  return JSON.stringify({
+    nodeConversations: input.nodeConversations,
+    nodeLevelStates,
+  }, null, 2)
+}
+
+export async function evaluateConversations(
+  input: EvaluationInput
+): Promise<ExamReport> {
   const messages = [
-    { role: 'system' as const, content: `${SYSTEM_PROMPT}\n\n${REPORT_LANGUAGE_AND_CONTENT_RULES}` },
-    { role: 'user' as const, content: `请评估以下苏格拉底式对话记录。报告面向中文用户，即使材料片段是英文，也请用中文解释判断理由和正确理解。不要输出学习建议或具体练习动作。\n\n${dialogueSummary}` },
+    { role: 'system' as const, content: SYSTEM_PROMPT },
+    {
+      role: 'user' as const,
+      content: `请基于以下 v3.0 诊断数据生成报告。必须只引用用户真实原话。\n\n${formatInputForPrompt(input)}`,
+    },
   ]
-  const opts = { jsonMode: true, temperature: 0.2, model: MODEL_FAST, maxTokens: 2200, timeoutMs: 22_000 }
+  const opts = { jsonMode: true, temperature: 0.2, model: MODEL_FAST, maxTokens: 2600, timeoutMs: 22_000 }
 
   const attempt = async () => {
     const raw = await chat(messages, opts)
-    return parseEvaluatorResponse(raw, nodeConversations)
+    return parseEvaluatorResponse(raw, input)
   }
 
   try {
     return await attempt()
   } catch {
-    return attempt()
+    try {
+      return await attempt()
+    } catch {
+      return buildFallbackReport(input)
+    }
   }
 }
