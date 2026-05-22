@@ -1,12 +1,12 @@
 # Veritas Handoff
 
-Last synchronized: 2026-05-21 (v3.0 Agent flow safeguards synced)
+Last synchronized: 2026-05-22 (workspace sizing and local-history gap synced)
 
 ## Current Baseline
 
 Product truth source: `docs/design-guide.md` v3.0.
 
-Current implementation still resembles the old fixed-round V1 flow. The next development phase should migrate the code toward:
+Current implementation has the first usable v3.0 flow and the first desktop workspace UI slice:
 
 ```text
 upload material -> extract high-value nodes -> level-based dialogue -> diagnostic report
@@ -34,13 +34,15 @@ Do not delete the old code base. Reuse the existing file parsing, LLM wrapper, A
 - `/api/question` and Agent 2 are connected in `app/api/question/route.ts`, `lib/agents/questioner.ts`, and `tests/lib/questioner.test.ts`: Agent 2 returns natural replies plus structured level state, normal/hint/answer are distinguished, malformed output falls back safely, and model-provided pass status is ignored unless there is a real user answer.
 - `/exam` level-based client flow is complete in `app/exam/page.tsx`, `lib/examFlow.ts`, `store/examStore.tsx`, and `tests/lib/examFlow.test.ts`: the page uses Agent 2 `nextAction` instead of fixed answer counts, waits for the quick-path complete/deep-dive choice, wires hint/answer requests through `/api/question`, and blocks empty answer submission. Deep path currently auto-covers analysis/evaluation only; creation is not entered automatically.
 - Agent 3 and report scoring are connected in `app/api/evaluate/route.ts`, `lib/agents/evaluator.ts`, `lib/score.ts`, `components/ReportCard.tsx`, and related tests: reports use local quick-path scoring, filter unsupported or synthetic user quotes, carry support records, and display v3.0 report fields.
+- `/exam` desktop three-column workspace first slice is complete in `app/exam/page.tsx` and `app/globals.css`: it supports the empty workspace state, file upload or pasted material analysis through the existing `/api/analyze` file path, an inner knowledge-node list, WeChat-like dialogue bubbles, right-side diagnostic notes, current-session temporary diagnosis record, voice mock entry, typing indicator, and report preview modal. Current layout is roughly 260px left workspace, 220px inner node list, and 360px right diagnostic notes. Uploaded file names are cleaned into record titles, and New Diagnosis warns before clearing active unsaved work.
 
 ## Next Up
 
-1. Start the three-column workspace UI.
-2. Add local history after the core diagnostic flow works.
+1. Implement local persistent diagnosis history with IndexedDB: one uploaded material should become one diagnosis record containing multiple knowledge nodes, independent node conversations, level states, path states, and report data.
+2. Polish the `/exam` workspace against real diagnostic sessions after history persistence is in place.
 3. If creation-layer diagnosis is needed, design an explicit entry instead of auto-entering it after evaluation.
 4. Clean up old compatibility fields such as `QuestionResponse.question` / `levelPassed` after page migration is complete.
+5. Material library, achievements, mobile adaptation, and richer motion remain out of the first UI slice.
 
 ## Guardrails
 
