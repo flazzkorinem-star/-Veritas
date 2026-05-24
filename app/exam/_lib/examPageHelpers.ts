@@ -96,6 +96,7 @@ export function isDiagnosisPlanTurn(turn: { role: 'assistant' | 'user'; content:
 }
 
 export function getNodeStageText(state: StoreExamState, nodeId: string, index: number): string {
+  if (state.nodePathStates[nodeId]?.completed) return '已完成'
   if (index === state.currentNodeIndex) return levelLabels[state.currentLevel]
   const levelStates = state.nodeLevelStates[nodeId] ?? []
   const inProgress = levelStates.find((levelState) => levelState.status === 'in_progress')

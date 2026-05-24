@@ -56,10 +56,12 @@ describe('exam store v3 state', () => {
     expect(state.nodePathStates['node-1']).toEqual({
       quickPath: 'in_progress',
       deepPath: 'not_started',
+      completed: false,
     })
     expect(state.nodePathStates['node-2']).toEqual({
       quickPath: 'not_started',
       deepPath: 'not_applicable',
+      completed: false,
     })
   })
 
@@ -161,18 +163,58 @@ describe('exam store v3 state', () => {
     })
   })
 
+  it('writes delayed node replies to the original node instead of the currently selected node', () => {
+    const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
+    const selectedSecondNode = reducer(withNodes, { type: 'SELECT_NEXT_NODE' })
+    const withReply = reducer(selectedSecondNode, {
+      type: 'ADD_TURN',
+      nodeId: 'node-1',
+      turn: { role: 'assistant', content: 'RAG 是什么？' },
+    })
+    const withResponse = reducer(withReply, {
+      type: 'SET_AGENT_RESPONSE',
+      nodeId: 'node-1',
+      response: {
+        question: 'RAG 是什么？',
+        reply: '先确认 RAG 的基本定义。',
+        currentLevel: 'memory',
+        levelPassed: false,
+        nextAction: 'continue_current_level',
+        blindSpotSummary: '还没有说出定义。',
+      },
+    })
+
+    expect(withResponse.currentNodeId).toBe('node-2')
+    expect(withResponse.nodeConversations[0].turns).toEqual([
+      { role: 'assistant', content: 'RAG 是什么？' },
+    ])
+    expect(withResponse.nodeConversations[1].turns).toEqual([])
+    expect(withResponse.nodeLevelStates['node-1']).toContainEqual({
+      level: 'memory',
+      status: 'in_progress',
+      blindSpotSummary: '还没有说出定义。',
+    })
+    expect(withResponse.nodeLevelStates['node-2']).toContainEqual({
+      level: 'memory',
+      status: 'not_started',
+    })
+  })
+
   it('marks quick path complete, enters deep path, and selects the next node', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
     const quickComplete = reducer(withNodes, { type: 'COMPLETE_QUICK_PATH' })
     const deepPath = reducer(quickComplete, { type: 'ENTER_DEEP_PATH' })
-    const nextNode = reducer(deepPath, { type: 'SELECT_NEXT_NODE' })
+    const completed = reducer(deepPath, { type: 'COMPLETE_NODE' })
+    const nextNode = reducer(completed, { type: 'SELECT_NEXT_NODE' })
 
     expect(quickComplete.nodePathStates['node-1'].quickPath).toBe('completed')
     expect(deepPath.currentLevel).toBe('analysis')
     expect(deepPath.nodePathStates['node-1']).toEqual({
       quickPath: 'completed',
       deepPath: 'in_progress',
+      completed: false,
     })
+    expect(completed.nodePathStates['node-1'].completed).toBe(true)
     expect(nextNode.currentNodeId).toBe('node-2')
     expect(nextNode.currentNodeIndex).toBe(1)
     expect(nextNode.nodePathStates['node-2'].quickPath).toBe('in_progress')

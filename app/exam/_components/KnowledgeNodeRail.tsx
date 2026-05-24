@@ -4,7 +4,7 @@ import type { Dispatch } from 'react'
 import type { Action, StoreExamState } from '@/store/examStore'
 import type { MenuTarget } from '../_lib/examPageTypes'
 import { getNodeStageText, nodeBookColors } from '../_lib/examPageHelpers'
-import { ActionMenu } from './ActionMenu'
+import { ActionMenu, getActionMenuAnchor } from './ActionMenu'
 
 export function KnowledgeNodeRail({
   state,
@@ -74,7 +74,9 @@ export function KnowledgeNodeRail({
                 <button
                   onClick={(event) => {
                     event.stopPropagation()
-                    setOpenMenu(openMenu?.type === 'node' && openMenu.id === node.id ? null : { type: 'node', id: node.id })
+                    setOpenMenu(openMenu?.type === 'node' && openMenu.id === node.id
+                      ? null
+                      : { type: 'node', id: node.id, anchor: getActionMenuAnchor(event.currentTarget) })
                   }}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-slate-700 group-hover:opacity-100"
                   aria-label="更多操作"
@@ -83,11 +85,13 @@ export function KnowledgeNodeRail({
                 </button>
                 {openMenu?.type === 'node' && openMenu.id === node.id && (
                   <ActionMenu
+                    anchor={openMenu.anchor}
+                    onClose={() => setOpenMenu(null)}
                     items={[
-                      { icon: '📌', label: node.pinned ? '取消置顶' : '置顶', onClick: () => onNodePin(node.id) },
-                      { icon: '✎', label: '重命名', onClick: () => onNodeRename(node.id, node.name) },
-                      { icon: '↗', label: '分享', disabled: true },
-                      { icon: '🗑', label: '删除', danger: true, onClick: () => onNodeDelete(node.id, node.name) },
+                      { icon: 'pin', label: node.pinned ? '取消置顶' : '置顶', onClick: () => onNodePin(node.id) },
+                      { icon: 'rename', label: '重命名', onClick: () => onNodeRename(node.id, node.name) },
+                      { icon: 'share', label: '分享', disabled: true },
+                      { icon: 'delete', label: '删除', danger: true, onClick: () => onNodeDelete(node.id, node.name) },
                     ]}
                   />
                 )}

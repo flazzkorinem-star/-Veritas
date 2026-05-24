@@ -28,7 +28,7 @@ export function useExamController() {
   const dialogueStatus = getDialogueStatus(state.currentAgentResponse)
   const hasActiveDiagnosis = state.nodes.length > 0
   const completedNodeCount = state.nodes.filter((node) => (
-    state.nodePathStates[node.id]?.quickPath === 'completed'
+    state.nodePathStates[node.id]?.completed
   )).length
   const isDiagnosisComplete = hasActiveDiagnosis && completedNodeCount === state.nodes.length
   const currentScore = currentNodeId ? calculateQuickPathScore(currentLevelStates) : 0

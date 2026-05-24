@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { Action, StoreExamState } from '@/store/examStore'
 import {
+  appendTurnToNodeConversationById,
   appendTurnToNodeConversations,
-  buildNodeTransition,
+  buildNodeCompletion,
   getDeepDiveStartLevel,
   getLevelAfterNextAction,
   getNextSuitableLevel,
@@ -54,23 +55,33 @@ export function useQuestionFlow({
   const currentNodeId = currentNode?.id
   const currentLevelStates = currentNodeId ? state.nodeLevelStates[currentNodeId] ?? [] : []
 
-  async function completeCurrentNode(nodeConversations: NodeConversation[]): Promise<void> {
-    if (!currentNode) return
-    const isLastNode = state.currentNodeIndex >= state.nodes.length - 1
+  async function completeCurrentNode(nodeId: string, nodeConversations: NodeConversation[]): Promise<void> {
+    const nodeIndex = state.nodes.findIndex((node) => node.id === nodeId)
+    const completedNode = state.nodes[nodeIndex]
+    if (!completedNode) return
+    const isLastNode = nodeIndex >= state.nodes.length - 1
+    const nextNode = isLastNode ? undefined : state.nodes[nodeIndex + 1]
+    const completionMessage = buildNodeCompletion(completedNode.name, nextNode?.name)
+    const completedConversations = appendTurnToNodeConversationById(nodeConversations, nodeId, {
+      role: 'assistant',
+      content: completionMessage,
+    })
+    dispatch({ type: 'COMPLETE_NODE', nodeId })
+    dispatch({
+      type: 'ADD_TURN',
+      nodeId,
+      turn: {
+        role: 'assistant',
+        content: completionMessage,
+      },
+    })
+
     if (isLastNode) {
-      await runEvaluate(nodeConversations)
+      await runEvaluate(completedConversations)
       return
     }
 
-    const nextNode = state.nodes[state.currentNodeIndex + 1]
-    dispatch({
-      type: 'ADD_TURN',
-      turn: {
-        role: 'assistant',
-        content: buildNodeTransition(currentNode.name, nextNode.name),
-      },
-    })
-    dispatch({ type: 'NEXT_NODE' })
+    dispatch({ type: 'NEXT_NODE', fromNodeId: nodeId })
   }
 
   async function runFetch({
@@ -80,59 +91,65 @@ export function useQuestionFlow({
     baseConversations,
   }: FetchQuestionOptions): Promise<void> {
     if (!currentNode) return
+    const requestNode = currentNode
+    const requestNodeId = requestNode.id
+    const requestLevelStates = currentLevelStates
     setRetryQuestionRequest(null)
     try {
       const shouldCommitUserTurn = Boolean(userAnswer)
       const startingConversations = baseConversations ?? state.nodeConversations
       const nextNodeConversations = shouldCommitUserTurn
-        ? appendTurnToNodeConversations(startingConversations, state.currentNodeIndex, {
+        ? appendTurnToNodeConversationById(startingConversations, requestNodeId, {
             role: 'user',
             content: userAnswer,
           })
         : startingConversations
 
-      const conversationTurns = nextNodeConversations[state.currentNodeIndex]?.turns ?? turns
+      const conversationTurns = nextNodeConversations.find((conversation) => (
+        conversation.node.id === requestNodeId
+      ))?.turns ?? turns
       const effectiveLevel = levelOverride ?? state.currentLevel
       const response = await requestQuestion({
-        node: currentNode,
+        node: requestNode,
         currentLevel: effectiveLevel,
-        levelStates: currentLevelStates,
+        levelStates: requestLevelStates,
         conversationHistory: conversationTurns,
         requestType,
       })
-      const nextNodeConversationsWithAssistant = appendTurnToNodeConversations(
+      const nextNodeConversationsWithAssistant = appendTurnToNodeConversationById(
         nextNodeConversations,
-        state.currentNodeIndex,
+        requestNodeId,
         { role: 'assistant', content: response.reply }
       )
 
       if (shouldCommitUserTurn) {
-        dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: userAnswer } })
+        dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'user', content: userAnswer } })
       }
 
-      dispatch({ type: 'ADD_TURN', turn: { role: 'assistant', content: response.reply } })
-      dispatch({ type: 'SET_AGENT_RESPONSE', response })
+      dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'assistant', content: response.reply } })
+      dispatch({ type: 'SET_AGENT_RESPONSE', nodeId: requestNodeId, response })
 
       if (response.nextAction === 'advance_next_level') {
         dispatch({
           type: 'SET_CURRENT_LEVEL',
+          nodeId: requestNodeId,
           level: response.nextLevel ?? getLevelAfterNextAction({
             currentLevel: response.currentLevel,
             nextAction: response.nextAction,
-            suitableLevels: currentNode.suitableLevels,
+            suitableLevels: requestNode.suitableLevels,
           }),
         })
       }
 
       if (response.nextAction === 'offer_deep_dive') {
-        dispatch({ type: 'COMPLETE_QUICK_PATH' })
+        dispatch({ type: 'COMPLETE_QUICK_PATH', nodeId: requestNodeId })
       }
 
       if (response.nextAction === 'complete_node') {
         if (response.currentLevel === 'application' && response.passedCurrentLevel) {
-          dispatch({ type: 'COMPLETE_QUICK_PATH' })
+          dispatch({ type: 'COMPLETE_QUICK_PATH', nodeId: requestNodeId })
         }
-        await completeCurrentNode(nextNodeConversationsWithAssistant)
+        await completeCurrentNode(requestNodeId, nextNodeConversationsWithAssistant)
       }
 
       setSubmitting(false)
@@ -202,7 +219,7 @@ export function useQuestionFlow({
       state.currentNodeIndex,
       { role: 'user', content: '继续问我一个类似问题' }
     )
-    dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: '继续问我一个类似问题' } })
+    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '继续问我一个类似问题' } })
     setSubmitting(true)
     await runFetch({
       userAnswer: '',
@@ -221,21 +238,22 @@ export function useQuestionFlow({
       state.currentNodeIndex,
       { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' }
     )
-    dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
+    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
     dispatch({
       type: 'UPDATE_NODE_LEVEL_STATUS',
+      nodeId: currentNode.id,
       level: skippedLevel,
       status: 'failed',
     })
 
     setSubmitting(true)
     if (!nextLevel) {
-      await completeCurrentNode(nextNodeConversations)
+      await completeCurrentNode(currentNode.id, nextNodeConversations)
       setSubmitting(false)
       return
     }
 
-    dispatch({ type: 'SET_CURRENT_LEVEL', level: nextLevel })
+    dispatch({ type: 'SET_CURRENT_LEVEL', nodeId: currentNode.id, level: nextLevel })
     await runFetch({
       userAnswer: '',
       requestType: 'normal',
@@ -246,15 +264,16 @@ export function useQuestionFlow({
 
   async function handleCompleteNode() {
     if (submitting) return
+    if (!currentNode) return
     dispatch({ type: 'SET_ERROR', error: '' })
     const nextNodeConversations = appendTurnToNodeConversations(
       state.nodeConversations,
       state.currentNodeIndex,
       { role: 'user', content: '完成这个节点' }
     )
-    dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: '完成这个节点' } })
+    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '完成这个节点' } })
     setSubmitting(true)
-    await completeCurrentNode(nextNodeConversations)
+    await completeCurrentNode(currentNode.id, nextNodeConversations)
     setSubmitting(false)
   }
 
@@ -272,8 +291,8 @@ export function useQuestionFlow({
       state.currentNodeIndex,
       { role: 'user', content: '继续深入这个节点' }
     )
-    dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: '继续深入这个节点' } })
-    dispatch({ type: 'ENTER_DEEP_PATH' })
+    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '继续深入这个节点' } })
+    dispatch({ type: 'ENTER_DEEP_PATH', nodeId: currentNode.id })
     setSubmitting(true)
     await runFetch({
       userAnswer: '',

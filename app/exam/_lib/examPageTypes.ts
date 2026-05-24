@@ -48,5 +48,5 @@ export interface AnalyzeResponse {
 }
 
 export type MenuTarget =
-  | { type: 'record'; id: string }
-  | { type: 'node'; id: string }
+  | { type: 'record'; id: string; anchor: { right: number; bottom: number } }
+  | { type: 'node'; id: string; anchor: { right: number; bottom: number } }

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   appendTranscript,
   appendTurnToNodeConversations,
+  appendTurnToNodeConversationById,
   buildNodeTransition,
+  buildNodeCompletion,
   createSupportRecord,
   createInitialLevelStates,
   getDeepDiveStartLevel,
@@ -59,6 +61,46 @@ describe('buildNodeTransition', () => {
   it('builds the fixed neutral transition text between nodes', () => {
     expect(buildNodeTransition('注意力机制', '残差连接')).toBe(
       '好，关于 注意力机制 我们先聊到这里。我们来看下一个：残差连接……'
+    )
+  })
+
+  it('can append a turn by node id even when the selected index changes', () => {
+    const conversations: NodeConversation[] = [
+      {
+        node: {
+          id: 'node-1',
+          name: 'RAG',
+          context: '检索增强生成',
+          sourceExcerpt: 'RAG 会先检索相关文档片段。',
+        },
+        turns: [],
+      },
+      {
+        node: {
+          id: 'node-2',
+          name: '提示词约束',
+          context: '提示词用于约束模型输出。',
+          sourceExcerpt: '提示词需要明确任务和边界。',
+        },
+        turns: [],
+      },
+    ]
+
+    const updated = appendTurnToNodeConversationById(conversations, 'node-1', {
+      role: 'assistant',
+      content: 'RAG 是什么？',
+    })
+
+    expect(updated[0].turns).toEqual([{ role: 'assistant', content: 'RAG 是什么？' }])
+    expect(updated[1].turns).toEqual([])
+  })
+
+  it('builds explicit completion text for node transitions and the final node', () => {
+    expect(buildNodeCompletion('注意力机制', '残差连接')).toBe(
+      '「注意力机制」这个知识点已完成。我们来看下一个：残差连接。'
+    )
+    expect(buildNodeCompletion('残差连接')).toBe(
+      '「残差连接」这个知识点已完成。所有目标知识点都完成了，我来生成诊断报告。'
     )
   })
 })

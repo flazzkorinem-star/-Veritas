@@ -9,6 +9,7 @@ import {
 } from '@/lib/types'
 import {
   appendTurnToNodeConversations,
+  appendTurnToNodeConversationById,
   createInitialLevelStates,
   getFirstDeepLevel,
 } from '@/lib/examFlow'
@@ -28,6 +29,7 @@ type AgentResponseV3 = QuestionResponse & {
 interface NodePathState {
   quickPath: PathProgress
   deepPath: PathProgress
+  completed: boolean
 }
 
 export type StoreExamState = ExamState & {
@@ -97,6 +99,7 @@ function createPathStatesByNode(nodes: KnowledgeNode[]): Record<string, NodePath
       {
         quickPath: index === 0 ? 'in_progress' : 'not_started',
         deepPath: getFirstDeepLevel(node.suitableLevels) ? 'not_started' : 'not_applicable',
+        completed: false,
       },
     ])
   )
@@ -214,9 +217,9 @@ export type Action =
   | { type: 'TOGGLE_NODE_PIN'; nodeId: string }
   | { type: 'DELETE_NODE'; nodeId: string }
   | { type: 'SET_QUESTION'; question: string }
-  | { type: 'ADD_TURN'; turn: ConversationTurn }
-  | { type: 'NEXT_NODE' }
-  | { type: 'SET_CURRENT_LEVEL'; level: CognitiveLevel }
+  | { type: 'ADD_TURN'; turn: ConversationTurn; nodeId?: string }
+  | { type: 'NEXT_NODE'; fromNodeId?: string }
+  | { type: 'SET_CURRENT_LEVEL'; level: CognitiveLevel; nodeId?: string }
   | {
       type: 'UPDATE_NODE_LEVEL_STATUS'
       nodeId?: string
@@ -227,9 +230,10 @@ export type Action =
     }
   | { type: 'RECORD_SUPPORT'; nodeId?: string; record: SupportRecord }
   | { type: 'COMPLETE_QUICK_PATH'; nodeId?: string }
+  | { type: 'COMPLETE_NODE'; nodeId?: string }
   | { type: 'ENTER_DEEP_PATH'; nodeId?: string }
   | { type: 'SELECT_NEXT_NODE'; nodeIndex?: number }
-  | { type: 'SET_AGENT_RESPONSE'; response: QuestionResponse }
+  | { type: 'SET_AGENT_RESPONSE'; response: QuestionResponse; nodeId?: string }
   | { type: 'START_REPORTING' }
   | { type: 'SET_REPORT'; report: ExamReport }
   | { type: 'REPORT_FAILED'; error: string }
@@ -346,11 +350,13 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       return { ...state, currentQuestion: action.question }
 
     case 'ADD_TURN': {
-      const updated = appendTurnToNodeConversations(
-        state.nodeConversations,
-        state.currentNodeIndex,
-        action.turn
-      )
+      const updated = action.nodeId
+        ? appendTurnToNodeConversationById(state.nodeConversations, action.nodeId, action.turn)
+        : appendTurnToNodeConversations(
+            state.nodeConversations,
+            state.currentNodeIndex,
+            action.turn
+          )
       return {
         ...state,
         nodeConversations: updated,
@@ -360,6 +366,9 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
 
     case 'NEXT_NODE':
     case 'SELECT_NEXT_NODE': {
+      if (action.type === 'NEXT_NODE' && action.fromNodeId && action.fromNodeId !== getCurrentNodeId(state)) {
+        return state
+      }
       const nextIndex = action.type === 'SELECT_NEXT_NODE'
         ? action.nodeIndex ?? state.currentNodeIndex + 1
         : state.currentNodeIndex + 1
@@ -387,6 +396,7 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
     }
 
     case 'SET_CURRENT_LEVEL':
+      if (action.nodeId && action.nodeId !== getCurrentNodeId(state)) return state
       return { ...state, currentLevel: action.level }
 
     case 'UPDATE_NODE_LEVEL_STATUS': {
@@ -419,6 +429,21 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       }
     }
 
+    case 'COMPLETE_NODE': {
+      const nodeId = action.nodeId ?? getCurrentNodeId(state)
+      if (!nodeId) return state
+      return {
+        ...state,
+        nodePathStates: {
+          ...state.nodePathStates,
+          [nodeId]: {
+            ...state.nodePathStates[nodeId],
+            completed: true,
+          },
+        },
+      }
+    }
+
     case 'ENTER_DEEP_PATH': {
       const nodeId = action.nodeId ?? getCurrentNodeId(state)
       const node = state.nodes.find((item) => item.id === nodeId)
@@ -432,6 +457,7 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
           [nodeId]: {
             quickPath: 'completed',
             deepPath: 'in_progress',
+            completed: false,
           },
         },
       }
@@ -440,13 +466,15 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
     case 'SET_AGENT_RESPONSE': {
       const response = action.response as AgentResponseV3
       const passedCurrentLevel = response.passedCurrentLevel ?? response.levelPassed
+      const targetNodeId = action.nodeId ?? getCurrentNodeId(state)
+      const isCurrentNode = targetNodeId === getCurrentNodeId(state)
       let nextState: StoreExamState = {
         ...state,
-        currentAgentResponse: response,
-        currentQuestion: response.reply ?? response.question,
-        currentLevel: response.currentLevel ?? state.currentLevel,
+        currentAgentResponse: isCurrentNode ? response : state.currentAgentResponse,
+        currentQuestion: isCurrentNode ? response.reply ?? response.question : state.currentQuestion,
+        currentLevel: isCurrentNode ? response.currentLevel ?? state.currentLevel : state.currentLevel,
       }
-      const nodeId = getCurrentNodeId(nextState)
+      const nodeId = targetNodeId
       if (nodeId && response.currentLevel && passedCurrentLevel !== undefined) {
         nextState = setNodeLevelStatus(
           nextState,

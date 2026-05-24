@@ -3,7 +3,7 @@
 import type { ExamReport } from '@/lib/types'
 import type { LocalDiagnosisRecord } from '@/lib/localHistory'
 import type { MenuTarget } from '../_lib/examPageTypes'
-import { ActionMenu } from './ActionMenu'
+import { ActionMenu, getActionMenuAnchor } from './ActionMenu'
 
 export function WorkspaceSidebar({
   historyRecords,
@@ -97,7 +97,9 @@ export function WorkspaceSidebar({
                   <button
                     onClick={(event) => {
                       event.stopPropagation()
-                      setOpenMenu(openMenu?.type === 'record' && openMenu.id === record.id ? null : { type: 'record', id: record.id })
+                      setOpenMenu(openMenu?.type === 'record' && openMenu.id === record.id
+                        ? null
+                        : { type: 'record', id: record.id, anchor: getActionMenuAnchor(event.currentTarget) })
                     }}
                     className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-slate-700 group-hover:opacity-100"
                     aria-label="更多操作"
@@ -106,11 +108,13 @@ export function WorkspaceSidebar({
                   </button>
                   {openMenu?.type === 'record' && openMenu.id === record.id && (
                     <ActionMenu
+                      anchor={openMenu.anchor}
+                      onClose={() => setOpenMenu(null)}
                       items={[
-                        { icon: '📌', label: record.pinned ? '取消置顶' : '置顶', onClick: () => onRecordPin(record) },
-                        { icon: '✎', label: '重命名', onClick: () => onRecordRename(record) },
-                        { icon: '↗', label: '分享', disabled: true },
-                        { icon: '🗑', label: '删除', danger: true, onClick: () => onRecordDelete(record) },
+                        { icon: 'pin', label: record.pinned ? '取消置顶' : '置顶', onClick: () => onRecordPin(record) },
+                        { icon: 'rename', label: '重命名', onClick: () => onRecordRename(record) },
+                        { icon: 'share', label: '分享', disabled: true },
+                        { icon: 'delete', label: '删除', danger: true, onClick: () => onRecordDelete(record) },
                       ]}
                     />
                   )}

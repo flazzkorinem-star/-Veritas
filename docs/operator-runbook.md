@@ -1,6 +1,6 @@
 # Veritas Operator Runbook
 
-Last synchronized: 2026-05-20
+Last synchronized: 2026-05-25
 
 ## Purpose
 
@@ -98,7 +98,8 @@ Use for v3.0 regression checks.
 
 - If analysis returns no nodes, inspect `lib/agents/analyzer.ts` and source text extraction in `lib/pdf.ts`.
 - If a node lacks evidence, inspect Agent 1 parsing and validation.
-- If dialogue does not advance by cognitive level, inspect Agent 2 `nextAction` handling in `app/exam/page.tsx`, `store/examStore.tsx`, and `/api/question`.
+- If dialogue does not advance by cognitive level, inspect Agent 2 `nextAction` handling in `app/exam/_hooks/useQuestionFlow.ts`, `store/examStore.tsx`, and `/api/question`.
+- If switching knowledge points causes responses to appear in the wrong dialogue, inspect `nodeId`-targeted writes in `app/exam/_hooks/useQuestionFlow.ts`, `store/examStore.tsx`, and `lib/examFlow.ts`.
 - If prompts or answers behave like static content, inspect Agent 2 action handling and cache logic.
 - If scores do not match quick-path level status, inspect `lib/score.ts`.
 - If the frontend shows raw JSON parse errors, inspect `lib/apiResponse.ts` and the failing API route logs.
