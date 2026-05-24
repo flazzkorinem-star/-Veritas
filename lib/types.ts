@@ -48,6 +48,7 @@ export interface KnowledgeNode {
   sourceExcerpt: string // exact excerpt from the source material supporting this node
   suitableLevels?: CognitiveLevel[]
   priorityReason?: string
+  pinned?: boolean
 }
 
 // One exchange in a Socratic dialogue

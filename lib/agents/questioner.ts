@@ -49,6 +49,7 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考�
 - 用户答对要有明确反馈，答错要指出问题。
 - 每次回复只服务当前节点和当前层级。
 - 可以构造场景和类比，但考察对象必须来自材料里的概念。
+- 不使用破折号，用逗号或句号表达停顿。
 
 层级最低通过标准：
 - memory：能识别概念或说出基本定义。
@@ -94,6 +95,11 @@ const NON_DIAGNOSTIC_USER_MESSAGES = new Set([
   '用户未能作答',
   '完成这个节点',
   '继续深入这个节点',
+  '给我提示',
+  '给我答案',
+  '继续问我一个类似问题',
+  '下一层级',
+  '结束这个节点',
 ])
 
 function isCognitiveLevel(value: unknown): value is CognitiveLevel {
@@ -189,6 +195,10 @@ function buildFallbackReply({
   return `这里还不够稳。你先别复述材料原句，换成自己的话说说「${node.name}」到底在处理什么问题。`
 }
 
+function cleanReply(text: string): string {
+  return text.replace(/[—–]+/g, '，')
+}
+
 function toSupportRecord(
   supportUsed: SupportUsed,
   response: DiagnosticQuestionResponse,
@@ -228,7 +238,7 @@ function normalizeQuestionerResponse(
       })
     : 'continue_current_level'
   const nextLevel = getDerivedNextLevel(currentLevel, nextAction, suitableLevels)
-  const reply = typeof parsed.reply === 'string' && parsed.reply.trim()
+  const reply = cleanReply(typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
     : buildFallbackReply({
         node: input.node,
@@ -237,7 +247,7 @@ function normalizeQuestionerResponse(
         passedCurrentLevel,
         nextAction,
         requestType,
-      })
+      }))
 
   const response: DiagnosticQuestionResponse = {
     question: reply,

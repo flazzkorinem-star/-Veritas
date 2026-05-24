@@ -17,10 +17,12 @@ Active references:
 
 ## Rewrite Trigger
 
-Rewrite this document only after the v3.0 core flow is implemented end to end:
+This archived document should be rewritten only when the v3.0 workspace stabilizes enough to justify a durable architecture reference. The current active architecture facts live in `docs/project-map.md`.
+
+The current implemented flow is:
 
 ```text
 upload material -> extract nodes -> level-based dialogue -> diagnostic report
 ```
 
-Until then, keep architecture decisions in the smaller active documents above to avoid maintaining two competing sources of truth.
+Until the workspace UI and local-history model stop changing quickly, keep architecture decisions in the smaller active documents above to avoid maintaining two competing sources of truth.

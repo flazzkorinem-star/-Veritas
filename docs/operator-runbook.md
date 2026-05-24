@@ -83,10 +83,10 @@ https://veritas-red.vercel.app
 
 ## Smoke Test
 
-Use after the v3.0 flow is implemented.
+Use for v3.0 regression checks.
 
 1. Start the dev server.
-2. Open `http://localhost:3000`.
+2. Open `/exam` on the active dev-server origin, for example `http://localhost:3000/exam` or `http://127.0.0.1:3127/exam`.
 3. Upload a small readable TXT or Markdown file first.
 4. Confirm Agent 1 returns a concise knowledge-node list.
 5. Confirm Agent 2 advances by cognitive level, not fixed answer count.

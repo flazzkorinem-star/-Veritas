@@ -17,7 +17,7 @@ const SESSION_KEY = 'veritas_exam_state'
 
 type PathProgress = 'not_started' | 'in_progress' | 'completed' | 'not_applicable'
 type DialogueStatus = 'idle' | 'agent_replied' | 'deep_dive_choice' | 'node_complete'
-type ReportStatus = 'idle' | 'generating' | 'ready' | 'failed'
+type ReportStatus = 'idle' | 'generating' | 'ready' | 'stale' | 'failed'
 
 type AgentResponseV3 = QuestionResponse & {
   passedCurrentLevel?: boolean
@@ -31,6 +31,11 @@ interface NodePathState {
 }
 
 export type StoreExamState = ExamState & {
+  recordId: string | null
+  materialTitle: string
+  recordPinned: boolean
+  createdAt: string | null
+  updatedAt: string | null
   currentNodeId: string | null
   currentLevel: CognitiveLevel
   nodeLevelStates: Record<string, NodeLevelState[]>
@@ -42,6 +47,11 @@ export type StoreExamState = ExamState & {
 export const initialState: StoreExamState = {
   phase: 'idle',
   documentContent: '',
+  recordId: null,
+  materialTitle: '当前诊断',
+  recordPinned: false,
+  createdAt: null,
+  updatedAt: null,
   nodes: [],
   currentNodeIndex: 0,
   nodeConversations: [],
@@ -107,6 +117,11 @@ function normalizeState(state: ExamState | StoreExamState): StoreExamState {
   return {
     ...initialState,
     ...state,
+    recordId: 'recordId' in state ? state.recordId : null,
+    materialTitle: 'materialTitle' in state ? state.materialTitle : '当前诊断',
+    recordPinned: 'recordPinned' in state ? state.recordPinned : false,
+    createdAt: 'createdAt' in state ? state.createdAt : null,
+    updatedAt: 'updatedAt' in state ? state.updatedAt : null,
     currentNodeId,
     currentLevel: 'currentLevel' in state
       ? state.currentLevel
@@ -155,6 +170,15 @@ function recordSupport(state: StoreExamState, nodeId: string, record: SupportRec
   })
 }
 
+function sortNodePairs(nodes: KnowledgeNode[], conversations: NodeConversation[]) {
+  return nodes
+    .map((node, index) => ({ node, conversation: conversations[index], index }))
+    .sort((a, b) => {
+      if (a.node.pinned !== b.node.pinned) return a.node.pinned ? -1 : 1
+      return a.index - b.index
+    })
+}
+
 function loadFromSession(): StoreExamState {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY)
@@ -177,7 +201,18 @@ function saveToSession(state: StoreExamState) {
 
 export type Action =
   | { type: 'START_ANALYZING'; content: string }
+  | {
+      type: 'SET_RECORD_META'
+      recordId?: string
+      materialTitle?: string
+      recordPinned?: boolean
+      createdAt?: string
+      updatedAt?: string
+    }
   | { type: 'SET_NODES'; nodes: KnowledgeNode[] }
+  | { type: 'UPDATE_NODE_NAME'; nodeId: string; name: string }
+  | { type: 'TOGGLE_NODE_PIN'; nodeId: string }
+  | { type: 'DELETE_NODE'; nodeId: string }
   | { type: 'SET_QUESTION'; question: string }
   | { type: 'ADD_TURN'; turn: ConversationTurn }
   | { type: 'NEXT_NODE' }
@@ -207,6 +242,16 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
     case 'START_ANALYZING':
       return { ...initialState, phase: 'analyzing', documentContent: action.content }
 
+    case 'SET_RECORD_META':
+      return {
+        ...state,
+        recordId: action.recordId ?? state.recordId,
+        materialTitle: action.materialTitle ?? state.materialTitle,
+        recordPinned: action.recordPinned ?? state.recordPinned,
+        createdAt: action.createdAt ?? state.createdAt,
+        updatedAt: action.updatedAt ?? state.updatedAt,
+      }
+
     case 'SET_NODES': {
       const nodeConversations: NodeConversation[] = action.nodes.map((node) => ({
         node,
@@ -229,6 +274,74 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       }
     }
 
+    case 'UPDATE_NODE_NAME': {
+      const nodes = state.nodes.map((node) => (
+        node.id === action.nodeId ? { ...node, name: action.name } : node
+      ))
+      const nodeConversations = state.nodeConversations.map((conversation) => (
+        conversation.node.id === action.nodeId
+          ? { ...conversation, node: { ...conversation.node, name: action.name } }
+          : conversation
+      ))
+      return {
+        ...state,
+        nodes,
+        nodeConversations,
+        reportStatus: state.reportStatus === 'ready' ? 'stale' : state.reportStatus,
+      }
+    }
+
+    case 'TOGGLE_NODE_PIN': {
+      const nodes = state.nodes.map((node) => (
+        node.id === action.nodeId ? { ...node, pinned: !node.pinned } : node
+      ))
+      const nodeConversations = state.nodeConversations.map((conversation) => (
+        conversation.node.id === action.nodeId
+          ? { ...conversation, node: { ...conversation.node, pinned: !conversation.node.pinned } }
+          : conversation
+      ))
+      const currentNodeId = getCurrentNodeId(state)
+      const sorted = sortNodePairs(nodes, nodeConversations)
+      const nextIndex = sorted.findIndex((item) => item.node.id === currentNodeId)
+      return {
+        ...state,
+        nodes: sorted.map((item) => item.node),
+        nodeConversations: sorted.map((item) => item.conversation),
+        currentNodeIndex: nextIndex >= 0 ? nextIndex : 0,
+      }
+    }
+
+    case 'DELETE_NODE': {
+      const currentNodeId = getCurrentNodeId(state)
+      const nodes = state.nodes.filter((node) => node.id !== action.nodeId)
+      const nodeConversations = state.nodeConversations.filter((conversation) => (
+        conversation.node.id !== action.nodeId
+      ))
+      const { [action.nodeId]: _removedLevelState, ...nodeLevelStates } = state.nodeLevelStates
+      const { [action.nodeId]: _removedPathState, ...nodePathStates } = state.nodePathStates
+      const nextIndex = Math.min(state.currentNodeIndex, Math.max(nodes.length - 1, 0))
+      const nextNodeId = currentNodeId === action.nodeId
+        ? nodes[nextIndex]?.id ?? null
+        : currentNodeId
+      const resolvedIndex = nextNodeId
+        ? Math.max(nodes.findIndex((node) => node.id === nextNodeId), 0)
+        : 0
+      const nextLevelStates = nextNodeId ? nodeLevelStates[nextNodeId] : undefined
+      return {
+        ...state,
+        nodes,
+        nodeConversations,
+        nodeLevelStates,
+        nodePathStates,
+        currentNodeIndex: resolvedIndex,
+        currentNodeId: nextNodeId,
+        currentLevel: getFirstSuitableLevel(nextLevelStates ?? []),
+        currentAgentResponse: null,
+        report: null,
+        reportStatus: 'idle',
+      }
+    }
+
     case 'SET_QUESTION':
       return { ...state, currentQuestion: action.question }
 
@@ -238,7 +351,11 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
         state.currentNodeIndex,
         action.turn
       )
-      return { ...state, nodeConversations: updated }
+      return {
+        ...state,
+        nodeConversations: updated,
+        reportStatus: state.reportStatus === 'ready' ? 'stale' : state.reportStatus,
+      }
     }
 
     case 'NEXT_NODE':
@@ -351,7 +468,7 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       return { ...state, phase: 'reporting', reportStatus: 'generating', error: null }
 
     case 'SET_REPORT':
-      return { ...state, phase: 'done', report: action.report, reportStatus: 'ready' }
+      return { ...state, phase: 'examining', report: action.report, reportStatus: 'ready' }
 
     case 'REPORT_FAILED':
       return { ...state, phase: 'examining', reportStatus: 'failed', error: action.error }

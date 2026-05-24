@@ -25,6 +25,11 @@ const nodes: KnowledgeNode[] = [
 describe('exam store v3 state', () => {
   it('initial state includes v3 bridge fields', () => {
     expect(initialState.currentNodeId).toBeNull()
+    expect(initialState.recordId).toBeNull()
+    expect(initialState.materialTitle).toBe('当前诊断')
+    expect(initialState.recordPinned).toBe(false)
+    expect(initialState.createdAt).toBeNull()
+    expect(initialState.updatedAt).toBeNull()
     expect(initialState.currentLevel).toBe('memory')
     expect(initialState.nodeLevelStates).toEqual({})
     expect(initialState.nodePathStates).toEqual({})
@@ -56,6 +61,23 @@ describe('exam store v3 state', () => {
       quickPath: 'not_started',
       deepPath: 'not_applicable',
     })
+  })
+
+  it('stores local diagnosis record metadata', () => {
+    const updated = reducer(initialState, {
+      type: 'SET_RECORD_META',
+      recordId: 'record-1',
+      materialTitle: 'WEEK11: Markov Chain Monte Carlo',
+      recordPinned: true,
+      createdAt: '2026-05-24T01:00:00.000Z',
+      updatedAt: '2026-05-24T01:00:00.000Z',
+    })
+
+    expect(updated.recordId).toBe('record-1')
+    expect(updated.materialTitle).toBe('WEEK11: Markov Chain Monte Carlo')
+    expect(updated.recordPinned).toBe(true)
+    expect(updated.createdAt).toBe('2026-05-24T01:00:00.000Z')
+    expect(updated.updatedAt).toBe('2026-05-24T01:00:00.000Z')
   })
 
   it('updates current level and level pass state', () => {
@@ -154,6 +176,44 @@ describe('exam store v3 state', () => {
     expect(nextNode.currentNodeId).toBe('node-2')
     expect(nextNode.currentNodeIndex).toBe(1)
     expect(nextNode.nodePathStates['node-2'].quickPath).toBe('in_progress')
+  })
+
+  it('renames, pins, and deletes knowledge nodes', () => {
+    const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
+    const renamed = reducer(withNodes, {
+      type: 'UPDATE_NODE_NAME',
+      nodeId: 'node-2',
+      name: 'Prompt 约束',
+    })
+    const pinned = reducer(renamed, { type: 'TOGGLE_NODE_PIN', nodeId: 'node-2' })
+    const deleted = reducer(pinned, { type: 'DELETE_NODE', nodeId: 'node-2' })
+
+    expect(renamed.nodes[1].name).toBe('Prompt 约束')
+    expect(renamed.nodeConversations[1].node.name).toBe('Prompt 约束')
+    expect(pinned.nodes[0].id).toBe('node-2')
+    expect(pinned.nodes[0].pinned).toBe(true)
+    expect(deleted.nodes.map((node) => node.id)).toEqual(['node-1'])
+    expect(deleted.nodeLevelStates['node-2']).toBeUndefined()
+  })
+
+  it('keeps dialogue open after report generation and marks report stale after new turns', () => {
+    const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
+    const withReport = reducer(withNodes, {
+      type: 'SET_REPORT',
+      report: {
+        overallScore: 80,
+        summary: '诊断报告',
+        nodes: [],
+      },
+    })
+    const withNewTurn = reducer(withReport, {
+      type: 'ADD_TURN',
+      turn: { role: 'user', content: '我想继续问一下。' },
+    })
+
+    expect(withReport.phase).toBe('examining')
+    expect(withReport.reportStatus).toBe('ready')
+    expect(withNewTurn.reportStatus).toBe('stale')
   })
 
   it('RESET restores the initial state', () => {

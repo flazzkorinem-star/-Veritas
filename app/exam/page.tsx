@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { getDialogueStatus, useExam } from '@/store/examStore'
 import { readApiJson } from '@/lib/apiResponse'
+import {
+  deleteDiagnosisRecord,
+  getDiagnosisRecord,
+  listDiagnosisRecords,
+  LocalDiagnosisRecord,
+  saveDiagnosisRecord,
+} from '@/lib/localHistory'
 import { calculateQuickPathScore } from '@/lib/score'
 import {
   appendTurnToNodeConversations,
@@ -10,6 +17,7 @@ import {
   createSupportRecord,
   getDeepDiveStartLevel,
   getLevelAfterNextAction,
+  getNextSuitableLevel,
   shouldRequestInitialQuestion,
 } from '@/lib/examFlow'
 import {
@@ -62,6 +70,10 @@ interface AnalyzeResponse {
   error?: string
 }
 
+type MenuTarget =
+  | { type: 'record'; id: string }
+  | { type: 'node'; id: string }
+
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.pptx', '.txt', '.md', '.markdown']
 const EXPECTED_MIME: Record<string, string[]> = {
@@ -99,12 +111,39 @@ function formatPathProgress(progress: string | undefined): string {
   return '未开始'
 }
 
-function getLevelStatusLabel(status: string | undefined): string {
-  if (status === 'passed') return '✓'
-  if (status === 'in_progress') return '当前'
-  if (status === 'not_applicable') return '不适用'
-  if (status === 'failed') return '未通过'
+function cleanAssistantText(text: string): string {
+  return text.replace(/[—–]+/g, '，')
+}
+
+function hasSupportKind(levelState: { supportRecords?: SupportRecord[] } | undefined, kind: SupportKind): boolean {
+  return Boolean(levelState?.supportRecords?.some((record) => record.kind === kind))
+}
+
+function getLevelStatusLabel(levelState: { status?: string; supportRecords?: SupportRecord[] } | undefined): string {
+  if (hasSupportKind(levelState, 'answer')) return '答案辅助'
+  if (levelState?.status === 'passed') return '✓'
+  if (levelState?.status === 'in_progress') return '当前'
+  if (levelState?.status === 'not_applicable') return '不适用'
+  if (levelState?.status === 'failed') return '未通过'
   return '未开始'
+}
+
+function getLevelStatusClass(
+  levelState: { status?: string; supportRecords?: SupportRecord[] } | undefined,
+  isCurrent: boolean
+): string {
+  if (hasSupportKind(levelState, 'answer')) return 'border border-[#FFA726]/30 bg-[#FFA726]/10 text-amber-700'
+  if (isCurrent) return 'bg-[#5C6BC0]/10 font-semibold text-[#5C6BC0]'
+  if (levelState?.status === 'passed') return 'bg-[#58CC02]/10 text-green-700'
+  if (levelState?.status === 'failed') return 'bg-red-50 text-red-600'
+  if (levelState?.status === 'not_applicable') return 'bg-transparent text-slate-300'
+  return 'bg-slate-50 text-slate-400'
+}
+
+function needsReportAttention(evaluation: ExamReport['nodes'][number]): boolean {
+  return ['memory', 'understanding', 'application'].some((level) => (
+    evaluation.levelStatus[level as CognitiveLevel] !== 'passed'
+  ))
 }
 
 function createRecordTitle(fileName: string): string {
@@ -117,6 +156,33 @@ function createRecordTitle(fileName: string): string {
     .trim() || '当前诊断'
 }
 
+function createRecordId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `diagnosis-${Date.now()}`
+}
+
+function buildDiagnosisPlan(materialTitle: string, nodes: KnowledgeNode[]): string {
+  const firstNodeName = nodes[0]?.name ?? '第一个知识点'
+  const previewNames = nodes.slice(0, 3).map((node, index) => `${index + 1}. ${node.name}`).join('\n')
+  return `我已经从「${materialTitle}」里识别出 ${nodes.length} 个适合诊断的知识点。
+
+建议先按左侧顺序走，每个知识点先完成记忆、理解、应用三层。
+
+${previewNames}
+
+我们先从「${firstNodeName}」开始。`
+}
+
+function isDiagnosisPlanTurn(turn: { role: 'assistant' | 'user'; content: string } | undefined): boolean {
+  return Boolean(
+    turn?.role === 'assistant'
+    && turn.content.startsWith('我已经从')
+    && turn.content.includes('适合诊断的知识点')
+  )
+}
+
 const nodeBookColors = ['#5C6BC0', '#58CC02', '#FFA726', '#EC407A', '#26C6DA', '#7E57C2', '#66BB6A', '#FF7043']
 
 export default function ExamPage() {
@@ -126,29 +192,43 @@ export default function ExamPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeMessage, setAnalyzeMessage] = useState('')
   const [analyzeWarning, setAnalyzeWarning] = useState('')
-  const [materialTitle, setMaterialTitle] = useState('当前诊断')
+  const [historyRecords, setHistoryRecords] = useState<LocalDiagnosisRecord[]>([])
   const [reportOpen, setReportOpen] = useState(false)
+  const [openMenu, setOpenMenu] = useState<MenuTarget | null>(null)
   const [retryQuestionRequest, setRetryQuestionRequest] = useState<RetryQuestionRequest | null>(null)
   const [retryReportConversations, setRetryReportConversations] = useState<NodeConversation[] | null>(null)
   const historyEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const initialQuestionRequestedRef = useRef<string | null>(null)
+  const saveTimerRef = useRef<number | undefined>(undefined)
 
   const currentNode = state.nodes[state.currentNodeIndex]
   const currentConversation = state.nodeConversations[state.currentNodeIndex]
   const turns = currentConversation?.turns ?? []
   const currentNodeId = currentNode?.id
   const currentLevelStates = currentNodeId ? state.nodeLevelStates[currentNodeId] ?? [] : []
+  const currentLevelState = currentLevelStates.find((item) => item.level === state.currentLevel)
   const currentPathState = currentNodeId ? state.nodePathStates[currentNodeId] : undefined
   const dialogueStatus = getDialogueStatus(state.currentAgentResponse)
+  const answerChoicePending = Boolean(
+    currentLevelState
+    && hasSupportKind(currentLevelState, 'answer')
+    && state.currentAgentResponse?.supportRecords?.some((record) => (
+      record.kind === 'answer' && record.level === state.currentLevel
+    ))
+  )
   const waitingForDeepDiveChoice = dialogueStatus === 'deep_dive_choice'
   const waitingForReportRetry = retryReportConversations !== null
   const hasActiveDiagnosis = state.nodes.length > 0
   const currentScore = currentNodeId ? calculateQuickPathScore(currentLevelStates) : 0
+  const completedNodeCount = state.nodes.filter((node) => (
+    state.nodePathStates[node.id]?.quickPath === 'completed'
+  )).length
+  const isDiagnosisComplete = hasActiveDiagnosis && completedNodeCount === state.nodes.length
   const isBusy = submitting || analyzing || state.phase === 'reporting'
-  const actionDisabled = isBusy || waitingForReportRetry || waitingForDeepDiveChoice || !currentNode || state.phase !== 'examining'
-  const displayedTitle = materialTitle !== '当前诊断'
-    ? materialTitle
+  const actionDisabled = isBusy || waitingForReportRetry || waitingForDeepDiveChoice || answerChoicePending || !currentNode || state.phase !== 'examining'
+  const displayedTitle = state.materialTitle !== '当前诊断'
+    ? state.materialTitle
     : currentNode?.name ?? '当前诊断'
 
   const getNodeStageText = (nodeId: string, index: number): string => {
@@ -162,11 +242,12 @@ export default function ExamPage() {
 
   // Fetch first question when a new node starts
   useEffect(() => {
+    const initialTurnCount = turns.length === 1 && isDiagnosisPlanTurn(turns[0]) ? 0 : turns.length
     if (shouldRequestInitialQuestion({
       isHydrated,
       phase: state.phase,
       currentNodeId: currentNode?.id,
-      turnCount: turns.length,
+      turnCount: initialTurnCount,
       submitting,
       requestedNodeId: initialQuestionRequestedRef.current,
     })) {
@@ -193,12 +274,44 @@ export default function ExamPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [state.phase])
 
+  useEffect(() => {
+    if (!isHydrated) return
+    listDiagnosisRecords()
+      .then(setHistoryRecords)
+      .catch(() => setHistoryRecords([]))
+  }, [isHydrated])
+
+  useEffect(() => {
+    if (!isHydrated || !state.recordId || state.phase === 'idle' || state.phase === 'analyzing') return
+
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = window.setTimeout(() => {
+      const updatedAt = new Date().toISOString()
+      const stateToPersist = { ...state, updatedAt }
+      saveDiagnosisRecord({
+        id: state.recordId ?? updatedAt,
+        title: state.materialTitle,
+        createdAt: state.createdAt ?? updatedAt,
+        updatedAt,
+        pinned: state.recordPinned,
+        state: stateToPersist,
+      })
+        .then(() => listDiagnosisRecords())
+        .then(setHistoryRecords)
+        .catch(() => undefined)
+    }, 400)
+
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
+    }
+  }, [state, isHydrated])
+
   function normalizeQuestionResponse(
     data: QuestionApiResponse,
     fallbackLevel: CognitiveLevel,
     conversationTurns: typeof turns
   ): StructuredQuestionResponse {
-    const reply = (data.reply ?? data.question)?.trim()
+    const reply = cleanAssistantText((data.reply ?? data.question)?.trim() ?? '')
     const passedCurrentLevel = data.passedCurrentLevel ?? data.levelPassed
     if (!reply || !data.nextAction || typeof passedCurrentLevel !== 'boolean') {
       throw new Error('服务器返回的数据不完整，请稍后重试')
@@ -206,7 +319,7 @@ export default function ExamPage() {
 
     const response: StructuredQuestionResponse = {
       ...data,
-      question: data.question ?? reply,
+      question: reply,
       reply,
       currentLevel: data.currentLevel ?? fallbackLevel,
       passedCurrentLevel,
@@ -253,9 +366,25 @@ export default function ExamPage() {
         throw new Error('服务器返回的数据不完整，请稍后重试')
       }
 
+      const now = new Date().toISOString()
+      const materialTitle = createRecordTitle(file.name)
       dispatch({ type: 'START_ANALYZING', content: data.documentContent })
+      dispatch({
+        type: 'SET_RECORD_META',
+        recordId: createRecordId(),
+        materialTitle,
+        recordPinned: false,
+        createdAt: now,
+        updatedAt: now,
+      })
       dispatch({ type: 'SET_NODES', nodes: data.nodes })
-      setMaterialTitle(createRecordTitle(file.name))
+      dispatch({
+        type: 'ADD_TURN',
+        turn: {
+          role: 'assistant',
+          content: buildDiagnosisPlan(materialTitle, data.nodes),
+        },
+      })
       setAnalyzeWarning(data.contentWarning ?? '')
       setAnalyzeMessage(`识别到 ${data.nodes.length} 个核心节点`)
       window.setTimeout(() => setAnalyzeMessage(''), 1400)
@@ -337,7 +466,7 @@ export default function ExamPage() {
     if (!currentNode) return
     setRetryQuestionRequest(null)
     try {
-      const shouldCommitUserTurn = requestType === 'normal' && Boolean(userAnswer)
+      const shouldCommitUserTurn = Boolean(userAnswer)
       const startingConversations = baseConversations ?? state.nodeConversations
       const nextNodeConversations = shouldCommitUserTurn
         ? appendTurnToNodeConversations(startingConversations, state.currentNodeIndex, {
@@ -453,17 +582,67 @@ export default function ExamPage() {
   }
 
   const handleHint = async () => {
-    if (submitting || waitingForDeepDiveChoice || waitingForReportRetry) return
+    if (submitting || waitingForDeepDiveChoice || waitingForReportRetry || answerChoicePending) return
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
-    await runFetch({ userAnswer: '', requestType: 'hint' })
+    await runFetch({ userAnswer: '给我提示', requestType: 'hint' })
   }
 
   const handleAnswer = async () => {
-    if (submitting || waitingForDeepDiveChoice || waitingForReportRetry) return
+    if (submitting || waitingForDeepDiveChoice || waitingForReportRetry || answerChoicePending) return
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
-    await runFetch({ userAnswer: '', requestType: 'answer' })
+    await runFetch({ userAnswer: '给我答案', requestType: 'answer' })
+  }
+
+  const handleSimilarQuestion = async () => {
+    if (submitting || !currentNode) return
+    dispatch({ type: 'SET_ERROR', error: '' })
+    const nextNodeConversations = appendTurnToNodeConversations(
+      state.nodeConversations,
+      state.currentNodeIndex,
+      { role: 'user', content: '继续问我一个类似问题' }
+    )
+    dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: '继续问我一个类似问题' } })
+    setSubmitting(true)
+    await runFetch({
+      userAnswer: '',
+      requestType: 'normal',
+      baseConversations: nextNodeConversations,
+    })
+  }
+
+  const handleSkipLevel = async () => {
+    if (submitting || !currentNode) return
+    dispatch({ type: 'SET_ERROR', error: '' })
+    const skippedLevel = state.currentLevel
+    const nextLevel = getNextSuitableLevel(skippedLevel, currentNode.suitableLevels)
+    const nextNodeConversations = appendTurnToNodeConversations(
+      state.nodeConversations,
+      state.currentNodeIndex,
+      { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' }
+    )
+    dispatch({ type: 'ADD_TURN', turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
+    dispatch({
+      type: 'UPDATE_NODE_LEVEL_STATUS',
+      level: skippedLevel,
+      status: 'failed',
+    })
+
+    setSubmitting(true)
+    if (!nextLevel) {
+      await completeCurrentNode(nextNodeConversations)
+      setSubmitting(false)
+      return
+    }
+
+    dispatch({ type: 'SET_CURRENT_LEVEL', level: nextLevel })
+    await runFetch({
+      userAnswer: '',
+      requestType: 'normal',
+      levelOverride: nextLevel,
+      baseConversations: nextNodeConversations,
+    })
   }
 
   const handleCompleteNode = async () => {
@@ -520,14 +699,128 @@ export default function ExamPage() {
   }
 
   const handleBackHome = () => {
-    if (hasActiveDiagnosis && !window.confirm('当前诊断还没有保存到本地历史。新建诊断会清空当前内容，确定继续吗？')) {
+    if (hasActiveDiagnosis && !window.confirm('当前诊断会自动保存在本地历史。确定新建诊断吗？')) {
       return
     }
     dispatch({ type: 'RESET' })
     setTextAnswer('')
     setReportOpen(false)
-    setMaterialTitle('当前诊断')
+    setOpenMenu(null)
   }
+
+  const handleLoadRecord = async (recordId: string) => {
+    if (isBusy) return
+    const record = await getDiagnosisRecord(recordId)
+    if (!record) {
+      dispatch({ type: 'SET_ERROR', error: '没有找到这条本地记录' })
+      return
+    }
+    dispatch({ type: 'RESTORE', state: record.state })
+    setTextAnswer('')
+    setReportOpen(false)
+    setOpenMenu(null)
+  }
+
+  const refreshHistoryRecords = async () => {
+    setHistoryRecords(await listDiagnosisRecords())
+  }
+
+  const handleRecordPin = async (record: LocalDiagnosisRecord) => {
+    const pinned = !record.pinned
+    const nextState = { ...record.state, recordPinned: pinned }
+    await saveDiagnosisRecord({ ...record, pinned, state: nextState })
+    if (record.id === state.recordId) {
+      dispatch({ type: 'SET_RECORD_META', recordPinned: pinned })
+    }
+    await refreshHistoryRecords()
+    setOpenMenu(null)
+  }
+
+  const handleRecordRename = async (record: LocalDiagnosisRecord) => {
+    const title = window.prompt('重命名', record.title)?.trim()
+    if (!title) {
+      setOpenMenu(null)
+      return
+    }
+    const nextState = { ...record.state, materialTitle: title }
+    await saveDiagnosisRecord({ ...record, title, state: nextState })
+    if (record.id === state.recordId) {
+      dispatch({ type: 'SET_RECORD_META', materialTitle: title })
+    }
+    await refreshHistoryRecords()
+    setOpenMenu(null)
+  }
+
+  const handleRecordDelete = async (record: LocalDiagnosisRecord) => {
+    if (!window.confirm(`删除「${record.title}」吗？这会移除这条本地诊断记录。`)) return
+    await deleteDiagnosisRecord(record.id)
+    if (record.id === state.recordId) {
+      dispatch({ type: 'RESET' })
+      setTextAnswer('')
+      setReportOpen(false)
+    }
+    await refreshHistoryRecords()
+    setOpenMenu(null)
+  }
+
+  const handleNodePin = (node: KnowledgeNode) => {
+    dispatch({ type: 'TOGGLE_NODE_PIN', nodeId: node.id })
+    setOpenMenu(null)
+  }
+
+  const handleNodeRename = (node: KnowledgeNode) => {
+    const name = window.prompt('重命名', node.name)?.trim()
+    if (!name) {
+      setOpenMenu(null)
+      return
+    }
+    dispatch({ type: 'UPDATE_NODE_NAME', nodeId: node.id, name })
+    setOpenMenu(null)
+  }
+
+  const handleNodeDelete = (node: KnowledgeNode) => {
+    if (!window.confirm(`删除「${node.name}」吗？这个知识点的对话也会移除。`)) return
+    dispatch({ type: 'DELETE_NODE', nodeId: node.id })
+    setOpenMenu(null)
+  }
+
+  const renderRecordMenu = (record: LocalDiagnosisRecord) => (
+    openMenu?.type === 'record' && openMenu.id === record.id ? (
+      <div onClick={(event) => event.stopPropagation()} className="absolute right-2 top-10 z-30 w-32 rounded-2xl border border-slate-100 bg-white p-1.5 text-sm shadow-xl">
+        <button onClick={() => handleRecordPin(record)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100">
+          <span>📌</span>{record.pinned ? '取消置顶' : '置顶'}
+        </button>
+        <button onClick={() => handleRecordRename(record)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100">
+          <span>✎</span>重命名
+        </button>
+        <button disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-300">
+          <span>↗</span>分享
+        </button>
+        <button onClick={() => handleRecordDelete(record)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-red-500 hover:bg-red-50">
+          <span>🗑</span>删除
+        </button>
+      </div>
+    ) : null
+  )
+
+  const renderNodeMenu = (node: KnowledgeNode) => (
+    openMenu?.type === 'node' && openMenu.id === node.id ? (
+      <div onClick={(event) => event.stopPropagation()} className="absolute right-2 top-10 z-30 w-32 rounded-2xl border border-slate-100 bg-white p-1.5 text-sm shadow-xl">
+        <button onClick={() => handleNodePin(node)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100">
+          <span>📌</span>{node.pinned ? '取消置顶' : '置顶'}
+        </button>
+        <button onClick={() => handleNodeRename(node)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-700 hover:bg-slate-100">
+          <span>✎</span>重命名
+        </button>
+        <button disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-xl px-3 py-2 text-left text-slate-300">
+          <span>↗</span>分享
+        </button>
+        <button onClick={() => handleNodeDelete(node)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-red-500 hover:bg-red-50">
+          <span>🗑</span>删除
+        </button>
+      </div>
+    ) : null
+  )
 
   if (!isHydrated) return null
 
@@ -573,16 +866,46 @@ export default function ExamPage() {
           <div className="mt-5 border-t border-slate-200 px-3 pt-4">
             <div className="px-2 text-xs font-semibold text-slate-400">最近</div>
             <div className="mt-2 max-h-[34vh] space-y-1 overflow-y-auto">
-              {hasActiveDiagnosis ? (
-                <button className="relative w-full rounded-xl bg-black/[0.06] px-4 py-3 text-left text-sm font-medium text-slate-900 transition-colors hover:bg-black/[0.08]">
-                  <span className="absolute left-0 top-3 h-8 w-[3px] rounded-r bg-[#5C6BC0]" />
-                  <span className="block truncate pl-1">{displayedTitle}</span>
-                  <span className="mt-1 block pl-1 text-xs font-normal text-slate-500">
-                    {state.nodes.length} 个知识点
-                  </span>
-                </button>
+              {historyRecords.length > 0 ? (
+                historyRecords.map((record) => {
+                  const isSelected = record.id === state.recordId
+                  const nodeCount = record.state.nodes.length
+                  return (
+                    <div
+                      key={record.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleLoadRecord(record.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') handleLoadRecord(record.id)
+                      }}
+                      className={`group relative w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-900 transition-colors hover:bg-black/[0.08] ${
+                        isSelected ? 'bg-black/[0.06]' : ''
+                      }`}
+                    >
+                      {isSelected && (
+                        <span className="absolute left-0 top-3 h-8 w-[3px] rounded-r bg-[#5C6BC0]" />
+                      )}
+                      <span className="block truncate pl-1">{record.title}</span>
+                      <span className="mt-1 block pl-1 text-xs font-normal text-slate-500">
+                        {nodeCount} 个知识点
+                      </span>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setOpenMenu(openMenu?.type === 'record' && openMenu.id === record.id ? null : { type: 'record', id: record.id })
+                        }}
+                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-slate-700 group-hover:opacity-100"
+                        aria-label="更多操作"
+                      >
+                        ⋯
+                      </button>
+                      {renderRecordMenu(record)}
+                    </div>
+                  )
+                })
               ) : (
-                <p className="px-2 py-2 text-sm text-slate-400">当前 session 暂无记录</p>
+                <p className="px-2 py-2 text-sm text-slate-400">暂无本地记录</p>
               )}
             </div>
           </div>
@@ -609,10 +932,15 @@ export default function ExamPage() {
                     const isStarted = isSelected || (state.nodeConversations[index]?.turns.length ?? 0) > 0
                     const color = nodeBookColors[index % nodeBookColors.length]
                     return (
-                      <button
+                      <div
                         key={node.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => dispatch({ type: 'SELECT_NEXT_NODE', nodeIndex: index })}
-                        className={`relative flex w-full items-center gap-2 px-3 py-3 text-left transition-[background] duration-150 hover:bg-black/5 ${
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') dispatch({ type: 'SELECT_NEXT_NODE', nodeIndex: index })
+                        }}
+                        className={`group relative flex w-full items-center gap-2 px-3 py-3 text-left transition-[background] duration-150 hover:bg-black/5 ${
                           isSelected ? 'bg-black/[0.06]' : ''
                         }`}
                       >
@@ -635,7 +963,18 @@ export default function ExamPage() {
                           <span className="mt-0.5 block truncate text-xs text-slate-500">{getNodeStageText(node.id, index)}</span>
                         </span>
                         <span className={`h-2 w-2 shrink-0 rounded-full ${isStarted ? 'bg-[#5C6BC0]' : 'bg-slate-300'}`} />
-                      </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setOpenMenu(openMenu?.type === 'node' && openMenu.id === node.id ? null : { type: 'node', id: node.id })
+                          }}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 opacity-0 transition-opacity hover:bg-black/5 hover:text-slate-700 group-hover:opacity-100"
+                          aria-label="更多操作"
+                        >
+                          ⋯
+                        </button>
+                        {renderNodeMenu(node)}
+                      </div>
                     )
                   })
                 ) : (
@@ -682,7 +1021,7 @@ export default function ExamPage() {
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">🤖</div>
                     )}
                     <div
-                      className={`chat-bubble max-w-[72%] px-4 py-3 text-sm leading-7 shadow-sm ${
+                      className={`chat-bubble max-w-[72%] whitespace-pre-line px-4 py-3 text-sm leading-7 shadow-sm ${
                         turn.role === 'assistant'
                           ? 'chat-bubble-ai bg-[#F0F0F0] text-slate-800'
                           : 'chat-bubble-user bg-[#5C6BC0] text-white'
@@ -767,6 +1106,30 @@ export default function ExamPage() {
                 </div>
               )}
 
+              {answerChoicePending && (
+                <div className="mb-3 rounded-2xl border border-[#FFA726]/25 bg-[#FFA726]/10 px-4 py-3 text-sm text-amber-800">
+                  <p>这一层已经看过答案，不算独立通过。你可以继续练一个类似问题，或者跳到下一层级。</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={handleSimilarQuestion}
+                      disabled={isBusy || waitingForReportRetry}
+                      className="rounded-full bg-[#5C6BC0] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      继续问我一个类似问题
+                    </button>
+                    <button
+                      onClick={handleSkipLevel}
+                      disabled={isBusy || waitingForReportRetry}
+                      className="rounded-full border border-[#5C6BC0]/30 bg-white px-4 py-2 text-xs font-semibold text-[#5C6BC0] disabled:opacity-50"
+                    >
+                      {currentNode && getNextSuitableLevel(state.currentLevel, currentNode.suitableLevels)
+                        ? '下一层级'
+                        : '结束这个节点'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="mb-2 flex gap-2">
                 <button
                   onClick={handleHint}
@@ -807,7 +1170,7 @@ export default function ExamPage() {
                   placeholder={hasActiveDiagnosis ? '像聊天一样回答这个问题...' : '粘贴一段材料，或点击下方上传 PDF / DOCX / PPTX / TXT / Markdown'}
                   rows={hasActiveDiagnosis ? 3 : 5}
                   className="w-full resize-none rounded-2xl bg-transparent px-2 py-2 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
-                  disabled={isBusy || waitingForReportRetry || waitingForDeepDiveChoice || state.phase === 'done'}
+                  disabled={isBusy || waitingForReportRetry || waitingForDeepDiveChoice}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault()
@@ -871,16 +1234,10 @@ export default function ExamPage() {
                   return (
                     <div
                       key={level}
-                      className={`flex items-center justify-between rounded-2xl px-3 py-2 text-sm ${
-                        isCurrent
-                          ? 'bg-[#5C6BC0]/10 font-semibold text-[#5C6BC0]'
-                          : levelState?.status === 'passed'
-                            ? 'bg-[#58CC02]/10 text-green-700'
-                            : 'bg-slate-50 text-slate-400'
-                      }`}
+                      className={`flex items-center justify-between rounded-2xl px-3 py-2 text-sm ${getLevelStatusClass(levelState, Boolean(isCurrent))}`}
                     >
                       <span>{levelLabels[level]}</span>
-                      <span className="text-xs">{getLevelStatusLabel(levelState?.status)}</span>
+                      <span className="text-xs">{getLevelStatusLabel(levelState)}</span>
                     </div>
                   )
                 })}
@@ -950,11 +1307,23 @@ export default function ExamPage() {
 
           <div className="border-t border-slate-200 p-5">
             <button
-              onClick={() => state.report ? setReportOpen(true) : runEvaluate()}
-              disabled={!hasActiveDiagnosis || isBusy}
+              onClick={() => {
+                if (state.reportStatus === 'stale') runEvaluate()
+                else if (state.report) setReportOpen(true)
+                else if (isDiagnosisComplete) runEvaluate()
+              }}
+              disabled={!hasActiveDiagnosis || isBusy || (!state.report && !isDiagnosisComplete)}
               className="w-full rounded-2xl bg-[#5C6BC0] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#505eb0] disabled:opacity-40"
             >
-              {state.phase === 'reporting' ? '报告生成中...' : state.report ? '查看报告' : '生成报告'}
+              {state.phase === 'reporting'
+                ? '报告生成中...'
+                : state.reportStatus === 'stale'
+                  ? '更新报告'
+                  : state.report
+                    ? '查看报告'
+                    : isDiagnosisComplete
+                      ? '生成报告'
+                      : `当前进度 ${completedNodeCount}/${state.nodes.length}`}
             </button>
           </div>
         </aside>
@@ -968,6 +1337,9 @@ export default function ExamPage() {
                 <p className="text-xs font-semibold text-slate-400">诊断报告</p>
                 <h2 className="mt-1 text-2xl font-bold text-slate-900">{state.report.overallScore} / 100</h2>
                 <p className="mt-2 text-sm text-slate-500">{state.report.summary}</p>
+                {state.reportStatus === 'stale' && (
+                  <p className="mt-2 text-xs font-semibold text-amber-600">有新对话，报告可以更新。</p>
+                )}
               </div>
               <button
                 onClick={() => setReportOpen(false)}
@@ -978,9 +1350,48 @@ export default function ExamPage() {
               </button>
             </div>
             <div className="max-h-[72vh] space-y-4 overflow-y-auto p-6">
-              {state.report.nodes.map((evaluation) => (
-                <ReportCard key={evaluation.nodeId} evaluation={evaluation} />
-              ))}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold text-slate-400">知识点</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{state.report.nodes.length}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold text-slate-400">需关注</p>
+                  <p className="mt-1 text-2xl font-bold text-[#FFA726]">
+                    {state.report.nodes.filter(needsReportAttention).length}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4">
+                  <p className="text-xs font-semibold text-slate-400">完成度</p>
+                  <p className="mt-1 text-2xl font-bold text-[#5C6BC0]">{completedNodeCount}/{state.nodes.length}</p>
+                </div>
+              </div>
+
+              {state.report.nodes.map((evaluation, index) => {
+                const shouldOpen = index < 2 && needsReportAttention(evaluation)
+                return (
+                  <details key={evaluation.nodeId} open={shouldOpen} className="rounded-2xl border border-slate-200 bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-slate-900">{evaluation.nodeName}</span>
+                        <span className="mt-1 block truncate text-xs text-slate-500">
+                          {evaluation.blindSpot || evaluation.nextStep || '这一项暂无明显盲点'}
+                        </span>
+                      </span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        needsReportAttention(evaluation)
+                          ? 'bg-[#FFA726]/10 text-amber-700'
+                          : 'bg-[#58CC02]/10 text-green-700'
+                      }`}>
+                        {needsReportAttention(evaluation) ? '需关注' : '已通过'}
+                      </span>
+                    </summary>
+                    <div className="border-t border-slate-100 p-4">
+                      <ReportCard evaluation={evaluation} />
+                    </div>
+                  </details>
+                )
+              })}
             </div>
           </div>
         </div>
