@@ -35,9 +35,9 @@ v3.0 目标：
 2. Agent 1 和 `/api/analyze` 节点链路已完成：Agent 1 负责节点质量校验和最多 8 个节点限制，`/api/analyze` 负责把已校验节点薄转发给页面链路。
 3. Agent 2 和 `/api/question` 已完成第一条 v3.0 可验证切片：返回自然回复、当前层级、是否通过、下一步动作、盲点摘要、支持方式和可选下一层级，并保留旧 `question` 字段作为页面迁移桥接。当前代码只接受真实用户作答后的通过判断，空提交和“完成/继续深入”等流程控制文本不会被当作诊断作答。
    TODO：`lib/types.ts` 里的旧 `levelPassed` 和 `question` 兼容字段仍待后续清理；当前 store 已优先读取 `passedCurrentLevel`。
-4. `app/exam/page.tsx` 已移除固定 3 轮结束节点的核心依赖，改为根据 `/api/question` 的 `nextAction`、当前层级和路径状态推进；快速路径完成后会等待“完成 / 深入”选择。
+4. `/exam` 的页面入口已解耦：`app/exam/page.tsx` 只负责装配工作台；上传分析、本地历史、Agent 请求、层级推进、报告生成和 UI 区块分别拆到 `app/exam/_hooks`、`app/exam/_lib` 和 `app/exam/_components`。
 5. Agent 3、`/api/evaluate`、评分集成已完成第一条 v3.0 报告数据链路；报告弹层已改成摘要优先和知识点折叠展示。
-6. 三栏 UI 第一版已完成：`app/exam/page.tsx` 现在是桌面端三栏工作台，外层约为 260px 左栏 / 自适应中间 / 360px 右栏，中间区内嵌约 220px 知识点列表；支持空态上传/粘贴材料、上传后诊断计划消息、微信式对话区、右侧诊断旁注、报告弹层、上传材料标题清洗、IndexedDB 本地历史、新建诊断自动保留历史、提示/答案用户气泡、答案后的层级选择，以及诊断记录和知识点的三点菜单。
+6. 三栏 UI 第一版已完成：`/exam` 现在是桌面端三栏工作台，外层约为 260px 左栏 / 自适应中间 / 360px 右栏，中间区内嵌约 220px 知识点列表；支持空态上传/粘贴材料、上传后诊断计划消息、微信式对话区、右侧诊断旁注、报告弹层、上传材料标题清洗、IndexedDB 本地历史、新建诊断自动保留历史、提示/答案用户气泡、答案后的层级选择，以及诊断记录和知识点的三点菜单。
 
 报告分两步处理：Agent 3 的报告数据结构已完成第一条 v3.0 数据链路；`/exam` 报告弹层已完成摘要优先和知识点折叠展示，独立 `/report` 页面仍是备用容器。
 
@@ -56,7 +56,12 @@ v3.0 目标：
 ### 页面与 API
 
 - `app/page.tsx` — 根路径入口。当前直接重定向到 `/exam`，避免继续露出旧首页 UI。
-- `app/exam/page.tsx` — 当前主诊断页。已接入 Agent 2 v3.0 结构化响应和层级推进；空回答不能提交，避免报告把系统合成文本当成用户原话；已完成三栏工作台第一版：左侧当前 session 工作区和当前诊断记录，中间内嵌知识点列表和微信式对话区，右侧诊断旁注，报告在当前页弹层预览。上传文件名会清洗成诊断记录标题；上传后会先发诊断计划消息；新建诊断在有活跃内容时会提示清空风险；诊断记录和知识点行支持置顶、重命名、删除，分享入口置灰。
+- `app/exam/page.tsx` — 当前主诊断页入口。现在只做页面装配：左侧工作区、中间知识点栏、对话区、右侧诊断旁注和报告弹层都从独立组件引入，行为由 `useExamController` 聚合。
+- `app/exam/_hooks/useExamController.ts` — `/exam` 的轻量编排层。负责把 store、上传分析、对话推进、报告、本地历史和 UI 状态组合成页面需要的 view model。
+- `app/exam/_hooks/useMaterialAnalysis.ts` — 上传或粘贴材料后的分析流程，负责文件提交、标题清洗、诊断计划消息和分析状态。
+- `app/exam/_hooks/useQuestionFlow.ts` — Agent 2 请求、初始问题触发、提示/答案、层级跳转、快速路径完成和节点切换。
+- `app/exam/_hooks/useReportFlow.ts` — Agent 3 报告生成、报告弹层状态和报告失败重试。
+- `app/exam/_hooks/useLocalDiagnosisHistory.ts` — IndexedDB 本地历史加载、自动保存、记录加载、置顶、重命名和删除。
 - `app/report/page.tsx` — 当前报告页容器。它只读取 `overallScore`、`summary` 和 `nodes`，报告字段展示由 `components/ReportCard.tsx` 承担。
 - `app/api/analyze/route.ts` — 调用 Agent 1，返回 `id`、`name`、`context`、`sourceExcerpt`、`suitableLevels` 和 `priorityReason`；节点质量校验留在 `lib/agents/analyzer.ts`。
 - `app/api/question/route.ts` — 调用 Agent 2。当前接收节点、当前层级、层级状态、对话历史和 `normal` / `hint` / `answer` 请求类型；不再拒绝 3 个用户回答后的历史，返回 Agent 2 的结构化诊断响应。
@@ -64,6 +69,12 @@ v3.0 目标：
 
 ### 组件
 
+- `app/exam/_components/WorkspaceSidebar.tsx` — `/exam` 左侧工作区，包含新建诊断、本地历史、记录菜单和设置入口占位。
+- `app/exam/_components/KnowledgeNodeRail.tsx` — `/exam` 中间左侧知识点栏，包含材料标题、书本图标、阶段文字、选中态和知识点菜单。
+- `app/exam/_components/ConversationPanel.tsx` — `/exam` 中间对话区和底部输入区，包含消息气泡、提示/答案、重试、拖拽上传和语音 mock 入口。
+- `app/exam/_components/DiagnosticPanel.tsx` — `/exam` 右侧诊断旁注，包含层级状态、分数、目标、路径状态、盲点和报告按钮。
+- `app/exam/_components/ReportModal.tsx` — `/exam` 当前页报告弹层，负责摘要指标和知识点折叠展示。
+- `app/exam/_components/ActionMenu.tsx` — 诊断记录和知识点共用的三点操作菜单。
 - `components/InputForm.tsx` — 文件上传入口。当前仍可保留。
 - `components/VoiceInput.tsx` — 语音输入。不是 v3.0 核心，改造早期不要优先动。
 - `components/ProgressBar.tsx` — 旧进度条。后续可能被右侧诊断面板替代。
@@ -73,7 +84,11 @@ v3.0 目标：
 ### 核心逻辑
 
 - `lib/types.ts` — 已完成 v3.0 第一阶段底座。新增 `CognitiveLevel`、`LevelStatus`、`SupportRecord`、`NodeLevelState`、`QuestionNextAction`、`KnowledgeNode.suitableLevels`、`KnowledgeNode.priorityReason`、`KnowledgeNode.pinned`，并扩展 `QuestionResponse` 支持自然回复、当前层级、通过状态、下一步动作和盲点摘要。`ExamReport` / `NodeEvaluation` 已切到 v3.0 报告字段：层级状态、用户原话证据、盲点、支持记录、正确理解和下一步建议；旧掌握等级字段已从 `NodeEvaluation` 移除。
-- `lib/examFlow.ts` — 提供层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作、支持记录和状态更新。当前深入路径只自动覆盖分析和评价，创造层不自动进入。当前已被 `store/examStore.tsx` 和 `app/exam/page.tsx` 用于层级推进。
+- `app/exam/_lib/examPageHelpers.ts` — `/exam` 页面纯工具，包含层级中文名、书本颜色、报告关注判断、状态样式和诊断计划文本。
+- `app/exam/_lib/materialFile.ts` — `/exam` 文件类型和大小校验。
+- `app/exam/_lib/questionApi.ts` — `/exam` 调用 `/api/question` 的薄封装，包含前端响应归一化。
+- `app/exam/_lib/reportApi.ts` — `/exam` 调用 `/api/evaluate` 的薄封装。
+- `lib/examFlow.ts` — 提供层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作、支持记录和状态更新。当前深入路径只自动覆盖分析和评价，创造层不自动进入。当前已被 `store/examStore.tsx` 和 `app/exam/_hooks/useQuestionFlow.ts` 用于层级推进。
 - `lib/score.ts` — 已保留旧掌握等级评分，并新增快速路径评分：记忆 33、理解 33、应用 34；深入层级不参与基础分；看答案后通过不计该层分。
 - `lib/apiResponse.ts` — 保留。前端 API 响应仍应走防御性解析。
 - `lib/localHistory.ts` — IndexedDB 本地历史。保存一条诊断记录的标题、置顶状态、创建/更新时间和完整 `StoreExamState`；当前只做当前浏览器本地保存，不涉及账号或云同步。
@@ -109,6 +124,7 @@ v3.0 目标：
 ```text
 app/page.tsx
   -> app/exam/page.tsx
+  -> app/exam/_hooks/useMaterialAnalysis.ts
   -> POST /api/analyze
   -> app/api/analyze/route.ts
   -> lib/pdf.ts
@@ -130,6 +146,7 @@ app/page.tsx
 
 ```text
 app/exam/page.tsx
+  -> app/exam/_hooks/useQuestionFlow.ts
   -> store/examStore.tsx
   -> POST /api/question
   -> app/api/question/route.ts
@@ -149,11 +166,12 @@ app/exam/page.tsx
 
 ```text
 app/exam/page.tsx
+  -> app/exam/_hooks/useReportFlow.ts
   -> POST /api/evaluate
   -> app/api/evaluate/route.ts
   -> lib/agents/evaluator.ts
   -> lib/score.ts
-  -> app/report/page.tsx
+  -> app/exam/_components/ReportModal.tsx
   -> components/ReportCard.tsx
 ```
 
