@@ -289,9 +289,21 @@ describe('exam store v3 state', () => {
       turn: { role: 'user', content: '我想继续问一下。' },
     })
 
-    expect(withReport.phase).toBe('examining')
+    expect(withReport.phase).toBe('reviewing')
     expect(withReport.reportStatus).toBe('ready')
     expect(withNewTurn.reportStatus).toBe('stale')
+  })
+
+  it('normalizes legacy done phase to reviewing on restore', () => {
+    const restored = reducer(initialState, {
+      type: 'RESTORE',
+      state: {
+        ...initialState,
+        phase: 'done',
+      } as typeof initialState,
+    })
+
+    expect(restored.phase).toBe('reviewing')
   })
 
   it('RESET restores the initial state', () => {

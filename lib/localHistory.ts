@@ -65,6 +65,7 @@ export function toPersistedDiagnosisState(state: StoreExamState): PersistedDiagn
 export function restorePersistedDiagnosisState(state: PersistedDiagnosisState): StoreExamState {
   return {
     ...state,
+    phase: (state.phase as string) === 'done' ? 'reviewing' : state.phase,
     currentAgentResponse: null,
     error: null,
   }

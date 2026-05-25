@@ -102,8 +102,8 @@ export type ExamPhase =
   | 'idle'
   | 'analyzing'
   | 'examining'
+  | 'reviewing'
   | 'reporting'
-  | 'done'
 
 // Full client-side exam session state
 export interface ExamState {

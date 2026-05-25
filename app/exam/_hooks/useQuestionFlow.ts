@@ -54,6 +54,7 @@ export function useQuestionFlow({
   const turns = currentConversation?.turns ?? []
   const currentNodeId = currentNode?.id
   const currentLevelStates = currentNodeId ? state.nodeLevelStates[currentNodeId] ?? [] : []
+  const canContinueDialogue = state.phase === 'examining' || state.phase === 'reviewing'
 
   async function completeCurrentNode(nodeId: string, nodeConversations: NodeConversation[]): Promise<void> {
     const nodeIndex = state.nodes.findIndex((node) => node.id === nodeId)
@@ -187,7 +188,7 @@ export function useQuestionFlow({
       await handlePastedMaterial()
       return
     }
-    if (state.phase !== 'examining') return
+    if (!canContinueDialogue) return
     if (!answer) {
       dispatch({ type: 'SET_ERROR', error: '请先输入你的回答' })
       return
