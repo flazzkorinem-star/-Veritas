@@ -83,6 +83,29 @@ describe('getNextQuestion', () => {
     expect(result.nextLevel).toBe('application')
   })
 
+  it('在 Agent 2 parse 层清理回复里的破折号', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '这个方向对——接下来用一个具体场景说明。',
+      currentLevel: 'understanding',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+    }))
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      levelStates,
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+        { role: 'user', content: '它先检索资料，再让模型结合资料回答。' },
+      ],
+    })
+
+    expect(result.reply).toBe('这个方向对，接下来用一个具体场景说明。')
+  })
+
   it('hint 请求不会标记独立通过，并记录提示使用', async () => {
     vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
       reply: '先想两件事：检索负责什么，生成负责什么。',

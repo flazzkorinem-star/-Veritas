@@ -23,10 +23,6 @@ export function formatPathProgress(progress: string | undefined): string {
   return '未开始'
 }
 
-export function cleanAssistantText(text: string): string {
-  return text.replace(/[—–]+/g, '，')
-}
-
 export function hasSupportKind(levelState: { supportRecords?: SupportRecord[] } | undefined, kind: SupportKind): boolean {
   return Boolean(levelState?.supportRecords?.some((record) => record.kind === kind))
 }
