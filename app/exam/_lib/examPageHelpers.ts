@@ -83,12 +83,8 @@ ${previewNames}
 我们先从「${firstNodeName}」开始。`
 }
 
-export function isDiagnosisPlanTurn(turn: { role: 'assistant' | 'user'; content: string } | undefined): boolean {
-  return Boolean(
-    turn?.role === 'assistant'
-    && turn.content.startsWith('我已经从')
-    && turn.content.includes('适合诊断的知识点')
-  )
+export function isDiagnosisPlanTurn(turn: { role?: string; content?: string; kind?: string } | undefined): boolean {
+  return turn?.kind === 'diagnosis_plan'
 }
 
 export function getNodeStageText(state: StoreExamState, nodeId: string, index: number): string {

@@ -55,6 +55,7 @@ export interface KnowledgeNode {
 export interface ConversationTurn {
   role: 'assistant' | 'user'
   content: string
+  kind?: 'diagnosis_plan'
 }
 
 // All dialogue for one knowledge node

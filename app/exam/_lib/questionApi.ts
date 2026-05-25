@@ -1,10 +1,10 @@
 import { readApiJson } from '@/lib/apiResponse'
 import { createSupportRecord } from '@/lib/examFlow'
-import type { CognitiveLevel, KnowledgeNode, NodeLevelState } from '@/lib/types'
+import type { CognitiveLevel, ConversationTurn, KnowledgeNode, NodeLevelState } from '@/lib/types'
 import type { QuestionApiResponse, QuestionRequestType, StructuredQuestionResponse } from './examPageTypes'
 import { getLastAssistantQuestion } from './examPageHelpers'
 
-type Turn = { role: 'assistant' | 'user'; content: string }
+type Turn = ConversationTurn
 
 function normalizeQuestionResponse(
   data: QuestionApiResponse,
