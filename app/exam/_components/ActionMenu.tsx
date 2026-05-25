@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 export interface ActionMenuItem {
   icon: 'pin' | 'rename' | 'share' | 'delete'
@@ -68,16 +68,21 @@ export function ActionMenu({
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const [menuHeight, setMenuHeight] = useState(0)
   const position = useMemo(() => {
     if (typeof window === 'undefined') return { left: anchor.right, top: anchor.bottom }
     const width = 124
-    const height = 168
     const margin = 8
     return {
       left: Math.max(margin, Math.min(anchor.right - width, window.innerWidth - width - margin)),
-      top: Math.max(margin, Math.min(anchor.bottom + 6, window.innerHeight - height - margin)),
+      top: Math.max(margin, Math.min(anchor.bottom + 6, window.innerHeight - menuHeight - margin)),
     }
-  }, [anchor])
+  }, [anchor, menuHeight])
+
+  useLayoutEffect(() => {
+    const height = menuRef.current?.getBoundingClientRect().height ?? 0
+    setMenuHeight(height)
+  }, [items.length])
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {

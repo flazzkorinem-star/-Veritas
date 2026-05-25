@@ -200,6 +200,28 @@ describe('exam store v3 state', () => {
     })
   })
 
+  it('keeps node-targeted race guards from mutating the active node', () => {
+    const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
+    const selectedSecondNode = reducer(withNodes, { type: 'SELECT_NEXT_NODE' })
+    const ignoredLevel = reducer(selectedSecondNode, {
+      type: 'SET_CURRENT_LEVEL',
+      nodeId: 'node-1',
+      level: 'analysis',
+    })
+    const ignoredNextNode = reducer(selectedSecondNode, { type: 'NEXT_NODE', fromNodeId: 'node-1' })
+    const quickComplete = reducer(selectedSecondNode, { type: 'COMPLETE_QUICK_PATH', nodeId: 'node-1' })
+    const deepPath = reducer(selectedSecondNode, { type: 'ENTER_DEEP_PATH', nodeId: 'node-1' })
+
+    expect(ignoredLevel.currentNodeId).toBe('node-2')
+    expect(ignoredLevel.currentLevel).toBe('memory')
+    expect(ignoredNextNode.currentNodeId).toBe('node-2')
+    expect(quickComplete.nodePathStates['node-1'].quickPath).toBe('completed')
+    expect(quickComplete.nodePathStates['node-2'].quickPath).toBe('in_progress')
+    expect(deepPath.currentNodeId).toBe('node-2')
+    expect(deepPath.currentLevel).toBe('memory')
+    expect(deepPath.nodePathStates['node-1'].deepPath).toBe('in_progress')
+  })
+
   it('marks quick path complete, enters deep path, and selects the next node', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
     const quickComplete = reducer(withNodes, { type: 'COMPLETE_QUICK_PATH' })

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { Action, StoreExamState } from '@/store/examStore'
 import {
   appendTurnToNodeConversationById,
-  appendTurnToNodeConversations,
   buildNodeCompletion,
   getDeepDiveStartLevel,
   getLevelAfterNextAction,
@@ -45,7 +44,7 @@ export function useQuestionFlow({
   waitingForReportRetry: boolean
   answerChoicePending: boolean
   handlePastedMaterial: () => Promise<void>
-  runEvaluate: (nodeConversations?: NodeConversation[]) => Promise<void>
+  runEvaluate: (nodeConversations: NodeConversation[]) => Promise<void>
 }) {
   const initialQuestionRequestedRef = useRef<string | null>(null)
   const [retryQuestionRequest, setRetryQuestionRequest] = useState<RetryQuestionRequest | null>(null)
@@ -214,9 +213,9 @@ export function useQuestionFlow({
   async function handleSimilarQuestion() {
     if (submitting || !currentNode) return
     dispatch({ type: 'SET_ERROR', error: '' })
-    const nextNodeConversations = appendTurnToNodeConversations(
+    const nextNodeConversations = appendTurnToNodeConversationById(
       state.nodeConversations,
-      state.currentNodeIndex,
+      currentNode.id,
       { role: 'user', content: '继续问我一个类似问题' }
     )
     dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '继续问我一个类似问题' } })
@@ -233,9 +232,9 @@ export function useQuestionFlow({
     dispatch({ type: 'SET_ERROR', error: '' })
     const skippedLevel = state.currentLevel
     const nextLevel = getNextSuitableLevel(skippedLevel, currentNode.suitableLevels)
-    const nextNodeConversations = appendTurnToNodeConversations(
+    const nextNodeConversations = appendTurnToNodeConversationById(
       state.nodeConversations,
-      state.currentNodeIndex,
+      currentNode.id,
       { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' }
     )
     dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
@@ -266,9 +265,9 @@ export function useQuestionFlow({
     if (submitting) return
     if (!currentNode) return
     dispatch({ type: 'SET_ERROR', error: '' })
-    const nextNodeConversations = appendTurnToNodeConversations(
+    const nextNodeConversations = appendTurnToNodeConversationById(
       state.nodeConversations,
-      state.currentNodeIndex,
+      currentNode.id,
       { role: 'user', content: '完成这个节点' }
     )
     dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '完成这个节点' } })
@@ -286,9 +285,9 @@ export function useQuestionFlow({
     }
 
     dispatch({ type: 'SET_ERROR', error: '' })
-    const nextNodeConversations = appendTurnToNodeConversations(
+    const nextNodeConversations = appendTurnToNodeConversationById(
       state.nodeConversations,
-      state.currentNodeIndex,
+      currentNode.id,
       { role: 'user', content: '继续深入这个节点' }
     )
     dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '继续深入这个节点' } })

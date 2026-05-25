@@ -448,10 +448,11 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       const nodeId = action.nodeId ?? getCurrentNodeId(state)
       const node = state.nodes.find((item) => item.id === nodeId)
       const firstDeepLevel = getFirstDeepLevel(node?.suitableLevels)
+      const isCurrentNode = nodeId === getCurrentNodeId(state)
       if (!nodeId || !firstDeepLevel) return state
       return {
         ...state,
-        currentLevel: firstDeepLevel,
+        currentLevel: isCurrentNode ? firstDeepLevel : state.currentLevel,
         nodePathStates: {
           ...state.nodePathStates,
           [nodeId]: {
