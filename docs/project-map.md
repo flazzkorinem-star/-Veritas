@@ -59,10 +59,10 @@ v3.0 目标：
 
 - `app/page.tsx` — 根路径入口。当前直接重定向到 `/exam`，避免继续露出旧首页 UI。
 - `app/exam/page.tsx` — 当前主诊断页入口。现在只做页面装配：左侧工作区、中间知识点栏、对话区、右侧诊断旁注和报告弹层都从独立组件引入，行为由 `useExamController` 聚合。
-- `app/exam/_hooks/useExamController.ts` — `/exam` 的轻量编排层。负责把 store、上传分析、对话推进、报告、本地历史和 UI 状态组合成页面需要的 view model。
+- `app/exam/_hooks/useExamController.ts` — `/exam` 的轻量编排层。负责把 store、上传分析、对话推进、报告、本地历史和 UI 状态组合成页面需要的 view model；对页面显式列出返回字段，避免子 hook 返回值通过 spread 隐式外泄。
 - `app/exam/_hooks/useMaterialAnalysis.ts` — 上传或粘贴材料后的分析流程，负责文件提交、标题清洗、诊断计划消息和分析状态。
 - `app/exam/_hooks/useQuestionFlow.ts` — Agent 2 请求、初始问题触发、提示/答案、层级跳转、快速路径完成和节点切换。异步请求会捕获发起时的 `nodeId`，返回后只写回目标节点，避免知识点之间记忆串位。
-- `app/exam/_hooks/useReportFlow.ts` — Agent 3 报告生成、报告弹层状态和报告失败重试。
+- `app/exam/_hooks/useReportFlow.ts` — Agent 3 报告生成、报告弹层状态、报告按钮决策和报告失败重试。
 - `app/exam/_hooks/useLocalDiagnosisHistory.ts` — IndexedDB 本地历史加载、自动保存、记录加载、置顶、重命名和删除。
 - `app/report/page.tsx` — 当前报告页容器。它只读取 `overallScore`、`summary` 和 `nodes`，报告字段展示由 `components/ReportCard.tsx` 承担。
 - `app/api/analyze/route.ts` — 调用 Agent 1，返回 `id`、`name`、`context`、`sourceExcerpt`、`suitableLevels` 和 `priorityReason`；节点质量校验留在 `lib/agents/analyzer.ts`。
@@ -105,7 +105,7 @@ v3.0 目标：
 
 ### 状态管理
 
-- `store/examStore.tsx` — 已接入 v3.0 状态层底座，同时保留旧字段兼容页面渐进迁移。当前支持 `currentNodeId`、`currentLevel`、`nodeLevelStates`、`nodePathStates`、`currentAgentResponse` 和 `reportStatus`；`nodePathStates` 记录每个节点的路径和完成状态；报告生成后继续对话会把 `reportStatus` 标记为 `stale`；知识点支持重命名、置顶和删除；提示、答案、主动类比记录只存放在对应节点层级的 `supportRecords` 中，避免重复状态；`ADD_TURN`、`SET_AGENT_RESPONSE`、`SET_CURRENT_LEVEL` 和 `NEXT_NODE` 支持按 `nodeId` 定向更新，避免节点切换后的异步串话；旧 `currentQuestion`、`currentNodeIndex`、`nodeConversations` 仍保留桥接。`getDialogueStatus` 从 `currentAgentResponse` 派生当前对话状态，不单独持久化。
+- `store/examStore.tsx` — 已接入 v3.0 状态层底座，同时保留旧字段兼容页面渐进迁移。当前支持 `currentNodeId`、`currentLevel`、`nodeLevelStates`、`nodePathStates`、`currentAgentResponse` 和 `reportStatus`；`nodePathStates` 记录每个节点的路径和完成状态，`COMPLETE_NODE` 会按节点写入完成标记；报告生成后继续对话会把 `reportStatus` 标记为 `stale`；知识点支持重命名、置顶和删除；提示、答案、主动类比记录只存放在对应节点层级的 `supportRecords` 中，避免重复状态；`ADD_TURN`、`SET_AGENT_RESPONSE`、`SET_CURRENT_LEVEL` 和 `NEXT_NODE` 支持按 `nodeId` 定向更新，`NEXT_NODE.fromNodeId` 会阻止延迟请求在用户切换节点后误跳转；旧 `currentQuestion`、`currentNodeIndex`、`nodeConversations` 仍保留桥接。`getDialogueStatus` 从 `currentAgentResponse` 派生当前对话状态，不单独持久化。
 - 本地诊断历史已接入 IndexedDB；当前仍保留 `sessionStorage` 做会话恢复。左栏“最近”显示诊断记录，记录下的知识点只显示在中间知识点栏。新建诊断会清空当前工作区，但当前诊断会自动保留在本地历史中。
 
 ### 测试

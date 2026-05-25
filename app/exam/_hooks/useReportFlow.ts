@@ -10,15 +10,17 @@ export function useReportFlow({
   state,
   dispatch,
   setSubmitting,
+  isDiagnosisComplete,
 }: {
   state: StoreExamState
   dispatch: Dispatch<Action>
   setSubmitting: (submitting: boolean) => void
+  isDiagnosisComplete: boolean
 }) {
   const [reportOpen, setReportOpen] = useState(false)
   const [retryReportConversations, setRetryReportConversations] = useState<NodeConversation[] | null>(null)
 
-  async function runEvaluate(nodeConversations: NodeConversation[] = state.nodeConversations) {
+  async function runEvaluate(nodeConversations: NodeConversation[]) {
     setRetryReportConversations(null)
     dispatch({ type: 'START_REPORTING' })
     try {
@@ -35,6 +37,12 @@ export function useReportFlow({
     setSubmitting(false)
   }
 
+  function handleReportAction() {
+    if (state.reportStatus === 'stale') runEvaluate(state.nodeConversations)
+    else if (state.report) setReportOpen(true)
+    else if (isDiagnosisComplete) runEvaluate(state.nodeConversations)
+  }
+
   async function handleRetryReport() {
     if (retryReportConversations === null) return
     dispatch({ type: 'SET_ERROR', error: '' })
@@ -47,6 +55,7 @@ export function useReportFlow({
     setReportOpen,
     retryReportConversations,
     runEvaluate,
+    handleReportAction,
     handleRetryReport,
   }
 }

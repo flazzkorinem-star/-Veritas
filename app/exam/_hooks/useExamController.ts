@@ -40,7 +40,7 @@ export function useExamController() {
   const material = useMaterialAnalysis({ dispatch, textAnswer, setTextAnswer })
   const isBusy = submitting || material.analyzing || state.phase === 'reporting'
 
-  const report = useReportFlow({ state, dispatch, setSubmitting })
+  const report = useReportFlow({ state, dispatch, setSubmitting, isDiagnosisComplete })
   const waitingForReportRetry = report.retryReportConversations !== null
   const answerChoicePending = Boolean(
     currentLevelState
@@ -163,9 +163,28 @@ export function useExamController() {
     handleNodePin,
     handleNodeRename,
     handleNodeDelete,
-    ...material,
-    ...report,
-    ...question,
-    ...history,
+    analyzeMessage: material.analyzeMessage,
+    analyzeWarning: material.analyzeWarning,
+    handleMaterialFile: material.handleMaterialFile,
+    reportOpen: report.reportOpen,
+    setReportOpen: report.setReportOpen,
+    retryReportConversations: report.retryReportConversations,
+    handleReportAction: report.handleReportAction,
+    handleRetryReport: report.handleRetryReport,
+    retryQuestionRequest: question.retryQuestionRequest,
+    handleSubmit: question.handleSubmit,
+    handleHint: question.handleHint,
+    handleAnswer: question.handleAnswer,
+    handleSimilarQuestion: question.handleSimilarQuestion,
+    handleSkipLevel: question.handleSkipLevel,
+    handleCompleteNode: question.handleCompleteNode,
+    handleEnterDeepPath: question.handleEnterDeepPath,
+    handleRetryQuestion: question.handleRetryQuestion,
+    nextSuitableLevel: question.nextSuitableLevel,
+    historyRecords: history.historyRecords,
+    handleLoadRecord: history.handleLoadRecord,
+    handleRecordPin: history.handleRecordPin,
+    handleRecordRename: history.handleRecordRename,
+    handleRecordDelete: history.handleRecordDelete,
   }
 }

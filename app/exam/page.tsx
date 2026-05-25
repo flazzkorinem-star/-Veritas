@@ -12,12 +12,6 @@ export default function ExamPage() {
 
   if (!workspace.isHydrated) return null
 
-  function handleReportAction() {
-    if (workspace.state.reportStatus === 'stale') workspace.runEvaluate()
-    else if (workspace.state.report) workspace.setReportOpen(true)
-    else if (workspace.isDiagnosisComplete) workspace.runEvaluate()
-  }
-
   return (
     <main className="h-screen overflow-hidden bg-[#F8F9FA] text-slate-900">
       <div className="grid h-full grid-cols-[260px_minmax(0,1fr)_360px]">
@@ -96,7 +90,7 @@ export default function ExamPage() {
           completedNodeCount={workspace.completedNodeCount}
           isDiagnosisComplete={workspace.isDiagnosisComplete}
           isBusy={workspace.isBusy}
-          onReportAction={handleReportAction}
+          onReportAction={workspace.handleReportAction}
         />
       </div>
 

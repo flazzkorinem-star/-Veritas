@@ -2,8 +2,9 @@
 
 import type { RefObject } from 'react'
 import type { StoreExamState } from '@/store/examStore'
-import type { KnowledgeNode } from '@/lib/types'
+import type { CognitiveLevel, KnowledgeNode, NodeConversation } from '@/lib/types'
 import { MATERIAL_FILE_ACCEPT } from '../_lib/materialFile'
+import type { RetryQuestionRequest } from '../_lib/examPageTypes'
 
 export function ConversationPanel({
   state,
@@ -49,15 +50,15 @@ export function ConversationPanel({
   waitingForDeepDiveChoice: boolean
   waitingForReportRetry: boolean
   answerChoicePending: boolean
-  retryQuestionRequest: unknown
-  retryReportConversations: unknown
+  retryQuestionRequest: RetryQuestionRequest | null
+  retryReportConversations: NodeConversation[] | null
   analyzeWarning: string
   analyzeMessage: string
   textAnswer: string
   setTextAnswer: (value: string) => void
   historyEndRef: RefObject<HTMLDivElement | null>
   fileInputRef: RefObject<HTMLInputElement | null>
-  nextSuitableLevel: unknown
+  nextSuitableLevel: CognitiveLevel | null
   onSubmit: () => void
   onHint: () => void
   onAnswer: () => void
