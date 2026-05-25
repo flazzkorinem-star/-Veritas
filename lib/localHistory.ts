@@ -37,28 +37,30 @@ export interface LocalDiagnosisRecord {
 
 type LegacyDiagnosisRecord = Omit<LocalDiagnosisRecord, 'schemaVersion' | 'state'> & {
   schemaVersion?: number
-  state: StoreExamState | PersistedDiagnosisState
+  state: Partial<StoreExamState> | PersistedDiagnosisState
 }
 
-export function toPersistedDiagnosisState(state: StoreExamState): PersistedDiagnosisState {
+export function toPersistedDiagnosisState(state: Partial<StoreExamState>): PersistedDiagnosisState {
   return {
-    phase: state.phase,
-    documentContent: state.documentContent,
-    recordId: state.recordId,
-    materialTitle: state.materialTitle,
-    recordPinned: state.recordPinned,
-    createdAt: state.createdAt,
-    updatedAt: state.updatedAt,
-    nodes: state.nodes,
-    currentNodeIndex: state.currentNodeIndex,
-    nodeConversations: state.nodeConversations,
-    currentQuestion: state.currentQuestion,
-    report: state.report,
-    currentNodeId: state.currentNodeId,
-    currentLevel: state.currentLevel,
-    nodeLevelStates: state.nodeLevelStates,
-    nodePathStates: state.nodePathStates,
-    reportStatus: state.reportStatus,
+    phase: state.phase === 'analyzing' || state.phase === 'reporting'
+      ? 'idle'
+      : state.phase ?? 'idle',
+    documentContent: state.documentContent ?? '',
+    recordId: state.recordId ?? null,
+    materialTitle: state.materialTitle ?? '当前诊断',
+    recordPinned: state.recordPinned ?? false,
+    createdAt: state.createdAt ?? null,
+    updatedAt: state.updatedAt ?? null,
+    nodes: state.nodes ?? [],
+    currentNodeIndex: state.currentNodeIndex ?? 0,
+    nodeConversations: state.nodeConversations ?? [],
+    currentQuestion: state.currentQuestion ?? '',
+    report: state.report ?? null,
+    currentNodeId: state.currentNodeId ?? state.nodes?.[state.currentNodeIndex ?? 0]?.id ?? null,
+    currentLevel: state.currentLevel ?? 'memory',
+    nodeLevelStates: state.nodeLevelStates ?? {},
+    nodePathStates: state.nodePathStates ?? {},
+    reportStatus: state.reportStatus ?? (state.report ? 'ready' : 'idle'),
   }
 }
 
@@ -74,10 +76,7 @@ export function restorePersistedDiagnosisState(state: PersistedDiagnosisState): 
 export function migrateDiagnosisRecord(record: LocalDiagnosisRecord | LegacyDiagnosisRecord): LocalDiagnosisRecord {
   if (record.schemaVersion === LOCAL_DIAGNOSIS_SCHEMA_VERSION) return record as LocalDiagnosisRecord
 
-  const legacyState = record.state as StoreExamState
-  const persistedState = 'currentAgentResponse' in legacyState
-    ? toPersistedDiagnosisState(legacyState)
-    : record.state as PersistedDiagnosisState
+  const persistedState = toPersistedDiagnosisState(record.state as Partial<StoreExamState>)
 
   return {
     ...record,

@@ -156,4 +156,31 @@ describe('localHistory', () => {
     expect('currentAgentResponse' in migrated.state).toBe(false)
     expect('error' in migrated.state).toBe(false)
   })
+
+  it('迁移缺少 v3 字段的早期记录时补齐安全默认值', () => {
+    const migrated = migrateDiagnosisRecord({
+      id: 'legacy-minimal',
+      title: '',
+      createdAt: '2026-05-24T00:00:00.000Z',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      state: {
+        phase: 'done' as StoreExamState['phase'],
+        documentContent: '旧材料',
+        nodes: [],
+        currentNodeIndex: 0,
+        nodeConversations: [],
+        currentQuestion: '',
+        report: null,
+        error: '旧运行态错误',
+      },
+    })
+
+    expect(migrated.schemaVersion).toBe(LOCAL_DIAGNOSIS_SCHEMA_VERSION)
+    expect(migrated.title).toBe('当前诊断')
+    expect(migrated.state.phase).toBe('done')
+    expect(migrated.state.nodeLevelStates).toEqual({})
+    expect(migrated.state.nodePathStates).toEqual({})
+    expect(migrated.state.reportStatus).toBe('idle')
+    expect(restorePersistedDiagnosisState(migrated.state).phase).toBe('reviewing')
+  })
 })
