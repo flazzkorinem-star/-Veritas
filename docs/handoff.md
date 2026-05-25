@@ -41,8 +41,8 @@ Do not delete the old code base. Reuse the existing file parsing, LLM wrapper, A
 
 1. Polish the `/exam` workspace against real diagnostic sessions after node-isolated dialogue, IndexedDB history, and menus are in place.
 2. If creation-layer diagnosis is needed, design an explicit entry instead of auto-entering it after evaluation.
-4. Clean up old compatibility fields such as `QuestionResponse.question` / `levelPassed` after page migration is complete.
-5. Material library, achievements, mobile adaptation, and richer motion remain out of the first UI slice.
+3. Clean up old compatibility fields such as `QuestionResponse.question` / `levelPassed` after page migration is complete.
+4. Material library, achievements, mobile adaptation, and richer motion remain out of the first UI slice.
 
 ## Guardrails
 
