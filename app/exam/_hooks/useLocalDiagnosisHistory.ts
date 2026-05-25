@@ -6,8 +6,11 @@ import {
   deleteDiagnosisRecord,
   getDiagnosisRecord,
   listDiagnosisRecords,
+  LOCAL_DIAGNOSIS_SCHEMA_VERSION,
+  restorePersistedDiagnosisState,
   type LocalDiagnosisRecord,
   saveDiagnosisRecord,
+  toPersistedDiagnosisState,
 } from '@/lib/localHistory'
 import type { MenuTarget } from '../_lib/examPageTypes'
 
@@ -46,12 +49,13 @@ export function useLocalDiagnosisHistory({
       const updatedAt = new Date().toISOString()
       const stateToPersist = { ...state, updatedAt }
       saveDiagnosisRecord({
+        schemaVersion: LOCAL_DIAGNOSIS_SCHEMA_VERSION,
         id: state.recordId ?? updatedAt,
         title: state.materialTitle,
         createdAt: state.createdAt ?? updatedAt,
         updatedAt,
         pinned: state.recordPinned,
-        state: stateToPersist,
+        state: toPersistedDiagnosisState(stateToPersist),
       })
         .then(() => listDiagnosisRecords())
         .then(setHistoryRecords)
@@ -74,7 +78,7 @@ export function useLocalDiagnosisHistory({
       dispatch({ type: 'SET_ERROR', error: '没有找到这条本地记录' })
       return
     }
-    dispatch({ type: 'RESTORE', state: record.state })
+    dispatch({ type: 'RESTORE', state: restorePersistedDiagnosisState(record.state) })
     setTextAnswer('')
     setReportOpen(false)
     setOpenMenu(null)
