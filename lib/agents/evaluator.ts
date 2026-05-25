@@ -49,12 +49,12 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成�
       "nodeName": "string",
       "sourceExcerpt": "string",
       "levelStatus": {
-        "memory": "not_started | in_progress | passed | failed | not_applicable",
-        "understanding": "not_started | in_progress | passed | failed | not_applicable",
-        "application": "not_started | in_progress | passed | failed | not_applicable",
-        "analysis": "not_started | in_progress | passed | failed | not_applicable",
-        "evaluation": "not_started | in_progress | passed | failed | not_applicable",
-        "creation": "not_started | in_progress | passed | failed | not_applicable"
+        "memory": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
+        "understanding": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
+        "application": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
+        "analysis": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
+        "evaluation": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
+        "creation": "not_started | in_progress | passed | answer_assisted | failed | not_applicable"
       },
       "evidenceQuotes": ["用户说过的原话"],
       "blindSpot": "具体盲点",
@@ -77,6 +77,7 @@ function isLevelStatus(value: unknown): value is LevelStatus {
     value === 'not_started'
     || value === 'in_progress'
     || value === 'passed'
+    || value === 'answer_assisted'
     || value === 'failed'
     || value === 'not_applicable'
   )

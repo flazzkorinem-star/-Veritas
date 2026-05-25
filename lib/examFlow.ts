@@ -217,3 +217,11 @@ export function updateLevelStatus(
     state.level === level ? { ...state, status } : state
   ))
 }
+
+export function getSkippedLevelStatus(levelState: NodeLevelState | undefined): LevelStatus {
+  return levelState?.supportRecords?.some((record) => (
+    record.level === levelState.level && record.kind === 'answer'
+  ))
+    ? 'answer_assisted'
+    : 'failed'
+}

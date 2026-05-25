@@ -13,6 +13,7 @@ export type LevelStatus =
   | 'not_started'
   | 'in_progress'
   | 'passed'
+  | 'answer_assisted'
   | 'failed'
   | 'not_applicable'
 

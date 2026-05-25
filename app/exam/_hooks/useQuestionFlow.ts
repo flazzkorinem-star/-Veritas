@@ -8,6 +8,7 @@ import {
   getDeepDiveStartLevel,
   getLevelAfterNextAction,
   getNextSuitableLevel,
+  getSkippedLevelStatus,
   shouldRequestInitialQuestion,
 } from '@/lib/examFlow'
 import type { NodeConversation } from '@/lib/types'
@@ -238,11 +239,12 @@ export function useQuestionFlow({
       { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' }
     )
     dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
+    const skippedLevelState = currentLevelStates.find((item) => item.level === skippedLevel)
     dispatch({
       type: 'UPDATE_NODE_LEVEL_STATUS',
       nodeId: currentNode.id,
       level: skippedLevel,
-      status: 'failed',
+      status: getSkippedLevelStatus(skippedLevelState),
     })
 
     setSubmitting(true)

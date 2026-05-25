@@ -13,6 +13,7 @@ const STATUS_LABELS: Record<LevelStatus, string> = {
   not_started: '未尝试',
   in_progress: '未通过',
   passed: '通过',
+  answer_assisted: '答案辅助',
   failed: '未通过',
   not_applicable: '不适用',
 }

@@ -105,6 +105,20 @@ describe('exam store v3 state', () => {
     })
   })
 
+  it('can mark a level as answer-assisted without treating it as passed', () => {
+    const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
+    const updated = reducer(withNodes, {
+      type: 'UPDATE_NODE_LEVEL_STATUS',
+      level: 'memory',
+      status: 'answer_assisted',
+    })
+
+    expect(updated.nodeLevelStates['node-1']).toContainEqual({
+      level: 'memory',
+      status: 'answer_assisted',
+    })
+  })
+
   it('records hint, answer, and analogy support events', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
     const records: SupportRecord[] = [
