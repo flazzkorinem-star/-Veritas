@@ -100,7 +100,7 @@ v3.0 目标：
 ### Agent
 
 - `lib/agents/analyzer.ts` — Agent 1。已对齐 v3.0：最多 8 个节点、少材料不凑数、输出 `suitableLevels`（共享英文 `CognitiveLevel`）和 `priorityReason`；缺字段或非法层级会被丢弃，不连续层级会归一化为从 `memory` 到最高适用层级的连续路径。
-- `lib/agents/questioner.ts` — Agent 2。已从“只提问”升级为“诊断对话者”：负责提示词、LLM 输出解析、层级推进归一化、hint/answer 不独立通过、suitableLevels 约束和 malformed 输出 fallback；没有真实用户作答时不会接受模型给出的通过判断。
+- `lib/agents/questioner.ts` — Agent 2。已从“只提问”升级为“带知识检验目标的家教”：负责精简家教原则提示词、LLM 输出解析、层级推进归一化、hint/answer 不独立通过、suitableLevels 约束和朴素 fallback；没有真实用户作答时不会接受模型给出的通过判断。代码只拦截前端按钮写入的流程控制文本，不用关键词规则判断自然语言。
 - `lib/agents/evaluator.ts` — Agent 3。已改成基于层级通过、原话证据、盲点和下一步建议生成报告；会过滤伪造原话和流程控制文本，汇总提示/答案/类比记录，并使用本地快速路径分数覆盖模型分数。
 
 ### 状态管理
@@ -112,7 +112,7 @@ v3.0 目标：
 
 - `tests/lib/analyzer.test.ts` — 改 Agent 1 时同步改；当前覆盖最多 8 个节点、少材料不凑数、必填字段过滤和 `suitableLevels` 连续路径归一化。
 - `tests/app/analyzeRoute.test.ts` — 覆盖 `/api/analyze` 文件上传和 v3.0 节点字段透传；节点质量规则由 `tests/lib/analyzer.test.ts` 覆盖。
-- `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、normal/hint/answer、suitableLevels 约束、malformed fallback、三轮后不固定停止，以及无真实用户作答时不通过。
+- `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、精简家教式 system prompt、normal/hint/answer、suitableLevels 约束、malformed fallback、流程控制文本不计作答、fallback 不保护固定话术、三轮后不固定停止，以及无用户作答时不通过。
 - `tests/lib/evaluator.test.ts` — 覆盖 Agent 3 v3.0 报告结构、用户原话过滤、流程控制文本过滤、本地分数覆盖、深入层级不计分、支持记录透传和 malformed fallback。
 - `tests/lib/examFlow.test.ts` — 覆盖层级推进、快速路径后的深入选择、深入入口、提示/答案支持记录、按 `nodeId` 追加对话、节点完成提示，以及创造层当前不自动进入；旧 3 轮结束节点预期已不再作为测试目标。
 - `tests/app/useQuestionFlow.test.tsx` — 覆盖 `/exam` 提交回答、点击提示或答案时先写入用户气泡，再请求 Agent 回复；同时守护请求历史包含刚提交的回答、失败重试不重复插入用户气泡、失败后不回填输入框。

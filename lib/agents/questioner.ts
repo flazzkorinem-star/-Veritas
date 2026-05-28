@@ -12,7 +12,6 @@ import {
 import { extractJSON } from '../parseJSON'
 import {
   COGNITIVE_LEVELS,
-  DEEP_PATH_LEVELS,
   getFirstDeepLevel,
   getNextActionForLevelResult,
   getNextSuitableLevel,
@@ -40,16 +39,13 @@ export type DiagnosticQuestionResponse = Omit<QuestionResponse, 'levelPassed'> &
   nextLevel?: CognitiveLevel
 }
 
-const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考官。
+const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：一个带着知识检验目标的家教。
 
-你要围绕用户材料中的当前知识节点，按认知层级推进诊断。不要扩展无关知识点，不要讲成长课。
+你正在和学生确认他是否真的理解当前知识节点的当前层级。像朋友一样聊天，学生说什么都先回应他刚才那句话本身，再自然回到知识点。可见回复要站在学生体验上，不要替自己辩解，也不要为沟通问题编原因。不要把非知识回答改写成“没准备好回答”，不要套话术，不要播报状态。
 
-风格：
-- 像对话者，简洁自然，不用标题和长 bullet point。
-- 用户答对要有明确反馈，答错要指出问题。
-- 每次回复只服务当前节点和当前层级。
-- 可以构造场景和类比，但考察对象必须来自材料里的概念。
-- 不使用破折号，用逗号或句号表达停顿。
+只服务当前节点和当前层级，不扩展无关知识点。你可以构造场景和类比，但必须服务材料里的概念。
+
+只有当学生真的在回答当前知识问题时，你才判断层级是否通过；闲聊、抱怨、骂人、求陪伴、元沟通都不能当作知识作答。
 
 层级最低通过标准：
 - memory：能识别概念或说出基本定义。
@@ -59,7 +55,7 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考�
 - evaluation：能做判断和取舍，并说出理由。
 - creation：能提出新方案、变式或迁移用法，且和概念逻辑一致。
 
-推进规则：
+内部推进规则：
 - 只有通过当前层级，才能进入下一层。
 - 没通过就继续追问或换角度。
 - 不使用固定轮次判断是否完成。
@@ -73,12 +69,6 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考�
 - hint：给结构化线索，但不要给完整答案，passedCurrentLevel 必须是 false。
 - answer：给当前问题答案，但该层不能视为独立通过，passedCurrentLevel 必须是 false。
 
-错误处理：
-- 事实性错误：先轻量纠正，再问一个对比问题。
-- 逻辑错误：用反例或追问暴露断点。
-- 应用错误：换一个更具体的场景，让用户重新判断。
-- 用户持续卡住时，可以主动用类比。
-
 只输出严格 JSON，不要输出任何额外文本：
 {
   "reply": "展示给用户的自然语言回复",
@@ -91,8 +81,7 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：诊断对话者，不是考�
 
 const MAX_LLM_ATTEMPTS = 2
 const VALID_SUPPORT_USED: SupportUsed[] = ['none', 'hint', 'answer', 'analogy']
-const NON_DIAGNOSTIC_USER_MESSAGES = new Set([
-  '用户未能作答',
+const FLOW_CONTROL_MESSAGES = new Set([
   '完成这个节点',
   '继续深入这个节点',
   '给我提示',
@@ -136,63 +125,38 @@ function getLastAssistantQuestion(conversationHistory: ConversationTurn[]): stri
   return [...conversationHistory].reverse().find((turn) => turn.role === 'assistant')?.content ?? ''
 }
 
-function hasRecentDiagnosticUserAnswer(conversationHistory: ConversationTurn[]): boolean {
-  const lastUserAnswer = [...conversationHistory].reverse()
-    .find((turn) => turn.role === 'user')
-    ?.content
-    .trim()
+function getLastUserMessage(conversationHistory: ConversationTurn[]): string {
+  return [...conversationHistory].reverse().find((turn) => turn.role === 'user')?.content.trim() ?? ''
+}
 
-  return Boolean(lastUserAnswer && !NON_DIAGNOSTIC_USER_MESSAGES.has(lastUserAnswer))
+function hasRecentDiagnosticUserAnswer(conversationHistory: ConversationTurn[]): boolean {
+  const lastUserAnswer = getLastUserMessage(conversationHistory)
+
+  return Boolean(lastUserAnswer && !FLOW_CONTROL_MESSAGES.has(lastUserAnswer))
 }
 
 function buildFallbackReply({
   node,
   conversationHistory,
-  currentLevel,
-  passedCurrentLevel,
-  nextAction,
   requestType,
 }: {
   node: KnowledgeNode
   conversationHistory: ConversationTurn[]
-  currentLevel: CognitiveLevel
-  passedCurrentLevel: boolean
-  nextAction: QuestionNextAction
   requestType: QuestionRequestType
 }): string {
   if (requestType === 'hint') {
-    return `可以先抓住两个线索：它在材料里解决的核心问题是什么，以及材料给出的证据片段里哪些词能支撑这个判断。你先不用答完整，先说你认为最关键的一点。`
+    return `提示一下：先看材料里「${node.name}」对应的证据片段。`
   }
 
   if (requestType === 'answer') {
-    return `这一层可以这样答：${node.name} 在材料里的重点是「${node.context}」，证据是「${node.sourceExcerpt}」。不过看过答案不算独立通过，接下来我会换个角度让你重新判断。`
+    return `材料里的说法是：${node.context} 证据片段：「${node.sourceExcerpt}」。`
   }
 
   if (conversationHistory.length === 0) {
-    return `好，我们开始。先聊聊「${node.name}」：你能用自己的话说说它在这份材料里主要解决什么问题吗？`
+    return `好，我们先从「${node.name}」开始。你按自己的理解说一句就行。`
   }
 
-  if (passedCurrentLevel && nextAction === 'offer_deep_dive') {
-    return `这一层可以，通过快速路径已经够稳了。这个节点可以先完成，也可以继续深入到分析和评价层；你想继续深入吗？`
-  }
-
-  if (passedCurrentLevel && nextAction === 'complete_node') {
-    return `这一层可以，这个节点先到这里就够了。`
-  }
-
-  if (passedCurrentLevel) {
-    return `这一层基本过了。我们往下一层走：你能把「${node.name}」换成一个更具体的场景，再说明它怎么发挥作用吗？`
-  }
-
-  if (currentLevel === 'application') {
-    return `这里还没有真正落到场景里。换个具体情境：如果你正在处理材料里类似的问题，你会在哪一步用到「${node.name}」，为什么？`
-  }
-
-  if (DEEP_PATH_LEVELS.includes(currentLevel)) {
-    return `这里的推理还不够清楚。你先拆一层：这个概念成立需要哪个关键条件？如果这个条件不存在，你的判断还成立吗？`
-  }
-
-  return `这里还不够稳。你先别复述材料原句，换成自己的话说说「${node.name}」到底在处理什么问题。`
+  return '我没太接住，能再说一下吗？'
 }
 
 function cleanReply(text: string): string {
@@ -243,9 +207,6 @@ function normalizeQuestionerResponse(
     : buildFallbackReply({
         node: input.node,
         conversationHistory: input.conversationHistory,
-        currentLevel,
-        passedCurrentLevel,
-        nextAction,
         requestType,
       }))
 

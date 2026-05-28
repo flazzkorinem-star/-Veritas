@@ -56,6 +56,42 @@ describe('parseQuestionerResponse', () => {
 })
 
 describe('getNextQuestion', () => {
+  it('system prompt 使用知识检验家教原则，并避免场景话术表', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '我听到了。我们先把这个点换成更好接的话法，你说说 RAG 里检索负责什么就行。',
+      currentLevel: 'understanding',
+      passedCurrentLevel: false,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+    }))
+
+    await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      levelStates,
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+        { role: 'user', content: '你为什么不回答我的问题。' },
+      ],
+    })
+
+    const messages = vi.mocked(chat).mock.calls[0][0]
+    const systemPrompt = messages[0].content
+    expect(systemPrompt).toContain('带着知识检验目标的家教')
+    expect(systemPrompt).toContain('像朋友一样聊天')
+    expect(systemPrompt).toContain('先回应他刚才那句话本身')
+    expect(systemPrompt).toContain('不要替自己辩解')
+    expect(systemPrompt).toContain('不要为沟通问题编原因')
+    expect(systemPrompt).toContain('只有当学生真的在回答当前知识问题时')
+    expect(systemPrompt).not.toContain('错误处理')
+    expect(systemPrompt).not.toContain('事实性错误')
+    expect(systemPrompt).not.toContain('逻辑错误')
+    expect(systemPrompt).not.toContain('应用错误')
+    expect(systemPrompt).not.toContain('主动类比触发条件')
+    expect(systemPrompt).not.toContain('用户骂你时')
+  })
+
   it('normal 请求返回 reply、currentLevel 和 nextAction', async () => {
     vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
       reply: '这个说法能抓到重点。下一步你试着放到一个具体使用场景里。',
@@ -247,9 +283,75 @@ describe('getNextQuestion', () => {
     })
 
     expect(chat).toHaveBeenCalledTimes(2)
-    expect(result.reply).toContain('具体情境')
+    expect(result.reply.trim().length).toBeGreaterThan(0)
+    expect(result.reply).not.toContain('不知道')
     expect(result.currentLevel).toBe('application')
+    expect(result.passedCurrentLevel).toBe(false)
     expect(result.nextAction).toBe('continue_current_level')
+  })
+
+  it('fallback 不复读固定追问，也不把异常路径标记通过', async () => {
+    vi.mocked(chat)
+      .mockResolvedValueOnce('不是 JSON')
+      .mockResolvedValueOnce('还是不是 JSON')
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+        { role: 'user', content: '你为什么不回答我的问题。' },
+      ],
+    })
+
+    expect(result.reply.trim().length).toBeGreaterThan(0)
+    expect(result.reply).not.toContain('你为什么不回答我的问题')
+    expect(result.reply).not.toContain('你已经提到了一部分')
+    expect(result.passedCurrentLevel).toBe(false)
+  })
+
+  it('answer fallback 只返回材料信息，不追加诊断话术', async () => {
+    vi.mocked(chat)
+      .mockResolvedValueOnce('不是 JSON')
+      .mockResolvedValueOnce('还是不是 JSON')
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      requestType: 'answer',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+        { role: 'user', content: '不知道，你解释一下。' },
+      ],
+    })
+
+    expect(result.reply).toContain(node.context)
+    expect(result.reply).toContain(node.sourceExcerpt)
+    expect(result.reply).not.toContain('消化一下')
+    expect(result.reply).not.toContain('复述一遍')
+    expect(result.passedCurrentLevel).toBe(false)
+  })
+
+  it('fallback 不用关键词分类打断正常作答', async () => {
+    vi.mocked(chat)
+      .mockResolvedValueOnce('不是 JSON')
+      .mockResolvedValueOnce('还是不是 JSON')
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'analysis',
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: 'RAG 的应用边界是什么？' },
+        { role: 'user', content: '我说过，操作流程复杂时会比较麻烦。' },
+      ],
+    })
+
+    expect(result.reply.trim().length).toBeGreaterThan(0)
+    expect(result.reply).not.toContain('我说过')
+    expect(result.reply).not.toContain('我先不继续追问')
+    expect(result.reply).not.toContain('我可能误解')
   })
 
   it('三次用户回答后仍继续按层级诊断，不再固定停止', async () => {
