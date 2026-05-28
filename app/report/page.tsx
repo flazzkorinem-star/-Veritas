@@ -21,11 +21,11 @@ export default function ReportPage() {
   const hasReportNodes = Boolean(state.report?.nodes.length)
 
   useEffect(() => {
-    if (state.phase !== 'done' || !hasReportNodes) {
+    if (!hasReportNodes) {
       dispatch({ type: 'RESET' })
       router.push('/')
     }
-  }, [state.phase, hasReportNodes, dispatch, router])
+  }, [hasReportNodes, dispatch, router])
 
   if (!state.report || !hasReportNodes) return null
 

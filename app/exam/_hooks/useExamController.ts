@@ -39,6 +39,7 @@ export function useExamController() {
 
   const material = useMaterialAnalysis({ dispatch, textAnswer, setTextAnswer })
   const isBusy = submitting || material.analyzing || state.phase === 'reporting'
+  const canContinueDialogue = state.phase === 'examining' || state.phase === 'reviewing'
 
   const report = useReportFlow({ state, dispatch, setSubmitting, isDiagnosisComplete })
   const waitingForReportRetry = report.retryReportConversations !== null
@@ -82,7 +83,7 @@ export function useExamController() {
   }, [turns.length])
 
   useEffect(() => {
-    if (state.phase !== 'examining') return
+    if (!canContinueDialogue) return
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
@@ -91,7 +92,7 @@ export function useExamController() {
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [state.phase])
+  }, [canContinueDialogue])
 
   function handleBackHome() {
     if (hasActiveDiagnosis && !window.confirm('当前诊断会自动保存在本地历史。确定新建诊断吗？')) {
@@ -130,7 +131,7 @@ export function useExamController() {
     || waitingForDeepDiveChoice
     || answerChoicePending
     || !currentNode
-    || state.phase !== 'examining'
+    || !canContinueDialogue
   )
 
   return {

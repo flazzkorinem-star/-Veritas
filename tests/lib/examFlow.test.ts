@@ -13,6 +13,7 @@ import {
   getLevelAfterNextAction,
   getNextActionForLevelResult,
   getNextSuitableLevel,
+  getSkippedLevelStatus,
   isLevelSuitable,
   shouldRequestInitialQuestion,
 } from '../../lib/examFlow'
@@ -263,5 +264,25 @@ describe('v3 level flow helpers', () => {
       question: '什么时候该用 RAG？',
       content: '适合需要外部材料支撑的回答。',
     })
+  })
+
+  it('marks skipped answer-assisted levels separately from failed levels', () => {
+    expect(getSkippedLevelStatus({
+      level: 'understanding',
+      status: 'in_progress',
+      supportRecords: [
+        {
+          kind: 'answer',
+          level: 'understanding',
+          question: '为什么需要 RAG？',
+          content: 'RAG 用检索片段补充上下文。',
+        },
+      ],
+    })).toBe('answer_assisted')
+
+    expect(getSkippedLevelStatus({
+      level: 'understanding',
+      status: 'in_progress',
+    })).toBe('failed')
   })
 })

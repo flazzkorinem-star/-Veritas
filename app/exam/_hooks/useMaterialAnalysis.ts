@@ -60,6 +60,7 @@ export function useMaterialAnalysis({
         type: 'ADD_TURN',
         turn: {
           role: 'assistant',
+          kind: 'diagnosis_plan',
           content: buildDiagnosisPlan(materialTitle, data.nodes),
         },
       })

@@ -1,6 +1,6 @@
 # Veritas 项目地图
 
-Last synchronized: 2026-05-25
+Last synchronized: 2026-05-28
 
 ## 用途
 
@@ -19,7 +19,7 @@ Last synchronized: 2026-05-25
 - 对话请求返回时按 `nodeId` 写回目标知识点，避免用户切换节点后异步回复污染当前对话。
 - 知识点完成后会写入完成状态，并在知识点栏和对话区提示已完成。
 - Agent 3 已生成 v3.0 报告数据，分数使用本地快速路径计分；报告弹层现在按文件级摘要 + 折叠知识点条目展示，避免把所有问答平铺。
-- 状态仍会写入 `sessionStorage` 做当前会话恢复，同时 `/exam` 已用 IndexedDB 自动保存本地诊断历史。左侧“最近”显示诊断记录，一条上传材料对应一条记录，记录下的知识点只显示在中间知识点栏。
+- 状态仍会写入 `sessionStorage` 做当前会话恢复，同时 `/exam` 已用 IndexedDB 自动保存本地诊断历史。左侧“最近”显示诊断记录，一条上传材料对应一条记录，记录下的知识点只显示在中间知识点栏。`sessionStorage` 只负责刷新当前页后的快速恢复，IndexedDB 是跨会话本地历史来源。
 
 v3.0 目标：
 
@@ -39,7 +39,7 @@ v3.0 目标：
    TODO：`lib/types.ts` 里的旧 `levelPassed` 和 `question` 兼容字段仍待后续清理；当前 store 已优先读取 `passedCurrentLevel`。
 4. `/exam` 的页面入口已解耦：`app/exam/page.tsx` 只负责装配工作台；上传分析、本地历史、Agent 请求、层级推进、报告生成和 UI 区块分别拆到 `app/exam/_hooks`、`app/exam/_lib` 和 `app/exam/_components`。
 5. Agent 3、`/api/evaluate`、评分集成已完成第一条 v3.0 报告数据链路；报告弹层已改成摘要优先和知识点折叠展示。
-6. 三栏 UI 第一版已完成：`/exam` 现在是桌面端三栏工作台，外层约为 260px 左栏 / 自适应中间 / 360px 右栏，中间区内嵌约 220px 知识点列表；支持空态上传/粘贴材料、上传后诊断计划消息、微信式对话区、右侧诊断旁注、报告弹层、上传材料标题清洗、IndexedDB 本地历史、新建诊断自动保留历史、提示/答案用户气泡、答案后的层级选择，以及诊断记录和知识点的 DeepSeek 风格固定浮层三点菜单。
+6. 三栏 UI 第一版已完成：`/exam` 现在是桌面端三栏工作台，外层约为 260px 左栏 / 自适应中间 / 360px 右栏，中间区内嵌约 220px 知识点列表；支持空态上传/粘贴材料、上传后诊断计划消息、微信式对话区、右侧诊断旁注、报告弹层、上传材料标题清洗、IndexedDB 本地历史、新建诊断自动保留历史、用户消息即时入流、提示/答案用户气泡、答案后的层级选择，以及诊断记录和知识点的 DeepSeek 风格固定浮层三点菜单。
 
 报告分两步处理：Agent 3 的报告数据结构已完成第一条 v3.0 数据链路；`/exam` 报告弹层已完成摘要优先和知识点折叠展示，独立 `/report` 页面仍是备用容器。
 
@@ -61,7 +61,7 @@ v3.0 目标：
 - `app/exam/page.tsx` — 当前主诊断页入口。现在只做页面装配：左侧工作区、中间知识点栏、对话区、右侧诊断旁注和报告弹层都从独立组件引入，行为由 `useExamController` 聚合。
 - `app/exam/_hooks/useExamController.ts` — `/exam` 的轻量编排层。负责把 store、上传分析、对话推进、报告、本地历史和 UI 状态组合成页面需要的 view model；对页面显式列出返回字段，避免子 hook 返回值通过 spread 隐式外泄。
 - `app/exam/_hooks/useMaterialAnalysis.ts` — 上传或粘贴材料后的分析流程，负责文件提交、标题清洗、诊断计划消息和分析状态。
-- `app/exam/_hooks/useQuestionFlow.ts` — Agent 2 请求、初始问题触发、提示/答案、层级跳转、快速路径完成和节点切换。异步请求会捕获发起时的 `nodeId`，返回后只写回目标节点，避免知识点之间记忆串位。
+- `app/exam/_hooks/useQuestionFlow.ts` — Agent 2 请求、初始问题触发、提示/答案、层级跳转、快速路径完成和节点切换。用户提交普通回答、提示或答案时，用户气泡会先写入当前节点对话，再请求 Agent 回复；异步请求会捕获发起时的 `nodeId`，返回后只写回目标节点，避免知识点之间记忆串位。
 - `app/exam/_hooks/useReportFlow.ts` — Agent 3 报告生成、报告弹层状态、报告按钮决策和报告失败重试。
 - `app/exam/_hooks/useLocalDiagnosisHistory.ts` — IndexedDB 本地历史加载、自动保存、记录加载、置顶、重命名和删除。
 - `app/report/page.tsx` — 当前报告页容器。它只读取 `overallScore`、`summary` 和 `nodes`，报告字段展示由 `components/ReportCard.tsx` 承担。
@@ -85,15 +85,15 @@ v3.0 目标：
 
 ### 核心逻辑
 
-- `lib/types.ts` — 已完成 v3.0 第一阶段底座。新增 `CognitiveLevel`、`LevelStatus`、`SupportRecord`、`NodeLevelState`、`QuestionNextAction`、`KnowledgeNode.suitableLevels`、`KnowledgeNode.priorityReason`、`KnowledgeNode.pinned`，并扩展 `QuestionResponse` 支持自然回复、当前层级、通过状态、下一步动作和盲点摘要。`ExamReport` / `NodeEvaluation` 已切到 v3.0 报告字段：层级状态、用户原话证据、盲点、支持记录、正确理解和下一步建议；旧掌握等级字段已从 `NodeEvaluation` 移除。
-- `app/exam/_lib/examPageHelpers.ts` — `/exam` 页面纯工具，包含层级中文名、书本颜色、报告关注判断、状态样式、知识点阶段文案和诊断计划文本；知识点完成时阶段文案优先显示“已完成”。
+- `lib/types.ts` — 已完成 v3.0 第一阶段底座。新增 `CognitiveLevel`、`LevelStatus`、`SupportRecord`、`NodeLevelState`、`QuestionNextAction`、`KnowledgeNode.suitableLevels`、`KnowledgeNode.priorityReason`、`KnowledgeNode.pinned`，并扩展 `QuestionResponse` 支持自然回复、当前层级、通过状态、下一步动作和盲点摘要。`LevelStatus` 包含 `answer_assisted`，用于表达看过答案后继续推进但不计独立通过的层级。`ExamReport` / `NodeEvaluation` 已切到 v3.0 报告字段：层级状态、用户原话证据、盲点、支持记录、正确理解和下一步建议；旧掌握等级字段已从 `NodeEvaluation` 移除。
+- `app/exam/_lib/examPageHelpers.ts` — `/exam` 页面纯工具，包含层级中文名、书本颜色、报告关注判断、状态样式、知识点阶段文案和诊断计划文本；知识点完成时阶段文案优先显示“已完成”。上传后的诊断计划通过 `ConversationTurn.kind = 'diagnosis_plan'` 标识，不再依赖中文文案嗅探。
 - `app/exam/_lib/materialFile.ts` — `/exam` 文件类型和大小校验。
 - `app/exam/_lib/questionApi.ts` — `/exam` 调用 `/api/question` 的薄封装，包含前端响应归一化。
 - `app/exam/_lib/reportApi.ts` — `/exam` 调用 `/api/evaluate` 的薄封装。
 - `lib/examFlow.ts` — 提供层级推进纯函数：认知层级常量、快速/深入路径常量、适用层级判断、初始层级状态、下一适用层级、深入路径入口、下一步动作、支持记录、状态更新、按 `nodeId` 追加对话和节点完成提示。当前深入路径只自动覆盖分析和评价，创造层不自动进入。当前已被 `store/examStore.tsx` 和 `app/exam/_hooks/useQuestionFlow.ts` 用于层级推进。
 - `lib/score.ts` — 已保留旧掌握等级评分，并新增快速路径评分：记忆 33、理解 33、应用 34；深入层级不参与基础分；看答案后通过不计该层分。
 - `lib/apiResponse.ts` — 保留。前端 API 响应仍应走防御性解析。
-- `lib/localHistory.ts` — IndexedDB 本地历史。保存一条诊断记录的标题、置顶状态、创建/更新时间和完整 `StoreExamState`；当前只做当前浏览器本地保存，不涉及账号或云同步。
+- `lib/localHistory.ts` — IndexedDB 本地历史。保存一条诊断记录的标题、置顶状态、创建/更新时间、`schemaVersion` 和 `PersistedDiagnosisState`。`PersistedDiagnosisState` 是显式持久化 schema，只包含跨会话需要恢复的诊断态；`currentAgentResponse`、`error` 等运行态字段不写入 IndexedDB。顶层 `title` 和 `pinned` 是列表索引缓存，保存时从持久化状态派生；加载旧记录时通过 `migrateDiagnosisRecord` 归一化到当前 schema。当前只做当前浏览器本地保存，不涉及账号或云同步。
 - `lib/pdf.ts` — 保留。文件解析不是当前改造重点。
 - `lib/llm.ts` — 保留。不要未经确认修改 DeepSeek provider 或模型名。
 
@@ -105,8 +105,8 @@ v3.0 目标：
 
 ### 状态管理
 
-- `store/examStore.tsx` — 已接入 v3.0 状态层底座，同时保留旧字段兼容页面渐进迁移。当前支持 `currentNodeId`、`currentLevel`、`nodeLevelStates`、`nodePathStates`、`currentAgentResponse` 和 `reportStatus`；`nodePathStates` 记录每个节点的路径和完成状态，`COMPLETE_NODE` 会按节点写入完成标记；报告生成后继续对话会把 `reportStatus` 标记为 `stale`；知识点支持重命名、置顶和删除；提示、答案、主动类比记录只存放在对应节点层级的 `supportRecords` 中，避免重复状态；`ADD_TURN`、`SET_AGENT_RESPONSE`、`SET_CURRENT_LEVEL` 和 `NEXT_NODE` 支持按 `nodeId` 定向更新，`NEXT_NODE.fromNodeId` 会阻止延迟请求在用户切换节点后误跳转；旧 `currentQuestion`、`currentNodeIndex`、`nodeConversations` 仍保留桥接。`getDialogueStatus` 从 `currentAgentResponse` 派生当前对话状态，不单独持久化。
-- 本地诊断历史已接入 IndexedDB；当前仍保留 `sessionStorage` 做会话恢复。左栏“最近”显示诊断记录，记录下的知识点只显示在中间知识点栏。新建诊断会清空当前工作区，但当前诊断会自动保留在本地历史中。
+- `store/examStore.tsx` — 已接入 v3.0 状态层底座，同时保留旧字段兼容页面渐进迁移。当前支持 `currentNodeId`、`currentLevel`、`nodeLevelStates`、`nodePathStates`、`currentAgentResponse` 和 `reportStatus`；`nodePathStates` 记录每个节点的路径和完成状态，`COMPLETE_NODE` 会按节点写入完成标记；`SET_REPORT` 会进入 `reviewing` phase，表示正式报告已生成但诊断对话仍可继续，继续对话会把 `reportStatus` 标记为 `stale`；知识点支持重命名、置顶和删除；提示、答案、主动类比记录只存放在对应节点层级的 `supportRecords` 中，避免重复状态；`ADD_TURN`、`SET_AGENT_RESPONSE`、`SET_CURRENT_LEVEL` 和 `NEXT_NODE` 支持按 `nodeId` 定向更新，`NEXT_NODE.fromNodeId` 会阻止延迟请求在用户切换节点后误跳转；旧 `currentQuestion`、`currentNodeIndex`、`nodeConversations` 仍保留桥接。`getDialogueStatus` 从 `currentAgentResponse` 派生当前对话状态，不单独持久化。
+- 本地诊断历史已接入 IndexedDB；当前仍保留 `sessionStorage` 做会话恢复。页面刷新优先恢复 `sessionStorage` 中的当前工作区；左栏历史列表和跨会话记录来自 IndexedDB。左栏“最近”显示诊断记录，记录下的知识点只显示在中间知识点栏。新建诊断会清空当前工作区，但当前诊断会自动保留在本地历史中。
 
 ### 测试
 
@@ -115,6 +115,7 @@ v3.0 目标：
 - `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、normal/hint/answer、suitableLevels 约束、malformed fallback、三轮后不固定停止，以及无真实用户作答时不通过。
 - `tests/lib/evaluator.test.ts` — 覆盖 Agent 3 v3.0 报告结构、用户原话过滤、流程控制文本过滤、本地分数覆盖、深入层级不计分、支持记录透传和 malformed fallback。
 - `tests/lib/examFlow.test.ts` — 覆盖层级推进、快速路径后的深入选择、深入入口、提示/答案支持记录、按 `nodeId` 追加对话、节点完成提示，以及创造层当前不自动进入；旧 3 轮结束节点预期已不再作为测试目标。
+- `tests/app/useQuestionFlow.test.tsx` — 覆盖 `/exam` 提交回答、点击提示或答案时先写入用户气泡，再请求 Agent 回复；同时守护请求历史包含刚提交的回答、失败重试不重复插入用户气泡、失败后不回填输入框。
 - `tests/lib/score.test.ts` — 改评分时同步改。
 - `tests/store/examStore.test.ts` — 覆盖 v3.0 store 初始状态、`SET_NODES` 初始化、层级状态更新、提示/答案/类比记录、Agent 2 结构化响应、快速/深入路径、节点选择、按 `nodeId` 写回延迟响应和 `RESET`。
 - `tests/components/ReportCard.test.tsx` — 覆盖报告卡片读取 v3.0 字段和材料证据展示。
@@ -197,7 +198,7 @@ app/exam/page.tsx
 
 ### 4. 本地保存
 
-当前有两层本地状态：`sessionStorage` 用于当前会话恢复；IndexedDB 用于跨会话本地诊断历史。每条 IndexedDB 记录保存 `id`、清洗后的 `title`、`pinned`、`createdAt`、`updatedAt` 和完整诊断状态。账号、云同步、分享链接暂不做。
+当前有两层本地状态：`sessionStorage` 用于当前页面刷新后的工作区恢复；IndexedDB 用于跨会话本地诊断历史。每条 IndexedDB 记录保存 `schemaVersion`、`id`、清洗后的 `title`、`pinned`、`createdAt`、`updatedAt` 和显式的 `PersistedDiagnosisState`。`PersistedDiagnosisState` 保存材料、节点、对话、层级状态、路径状态、报告和记录元信息；不保存 `currentAgentResponse`、`error`、分析中或报告中请求等运行态字段。账号、云同步、分享链接暂不做。
 
 ## 文档状态
 

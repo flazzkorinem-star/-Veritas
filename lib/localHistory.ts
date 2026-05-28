@@ -3,14 +3,88 @@ import type { StoreExamState } from '@/store/examStore'
 const DB_NAME = 'veritas-local-history'
 const DB_VERSION = 1
 const STORE_NAME = 'diagnoses'
+export const LOCAL_DIAGNOSIS_SCHEMA_VERSION = 2
+
+export interface PersistedDiagnosisState {
+  phase: StoreExamState['phase']
+  documentContent: StoreExamState['documentContent']
+  recordId: StoreExamState['recordId']
+  materialTitle: StoreExamState['materialTitle']
+  recordPinned: StoreExamState['recordPinned']
+  createdAt: StoreExamState['createdAt']
+  updatedAt: StoreExamState['updatedAt']
+  nodes: StoreExamState['nodes']
+  currentNodeIndex: StoreExamState['currentNodeIndex']
+  nodeConversations: StoreExamState['nodeConversations']
+  currentQuestion: StoreExamState['currentQuestion']
+  report: StoreExamState['report']
+  currentNodeId: StoreExamState['currentNodeId']
+  currentLevel: StoreExamState['currentLevel']
+  nodeLevelStates: StoreExamState['nodeLevelStates']
+  nodePathStates: StoreExamState['nodePathStates']
+  reportStatus: StoreExamState['reportStatus']
+}
 
 export interface LocalDiagnosisRecord {
+  schemaVersion: typeof LOCAL_DIAGNOSIS_SCHEMA_VERSION
   id: string
   title: string
   createdAt: string
   updatedAt: string
   pinned?: boolean
-  state: StoreExamState
+  state: PersistedDiagnosisState
+}
+
+type LegacyDiagnosisRecord = Omit<LocalDiagnosisRecord, 'schemaVersion' | 'state'> & {
+  schemaVersion?: number
+  state: Partial<StoreExamState> | PersistedDiagnosisState
+}
+
+export function toPersistedDiagnosisState(state: Partial<StoreExamState>): PersistedDiagnosisState {
+  return {
+    phase: state.phase === 'analyzing' || state.phase === 'reporting'
+      ? 'idle'
+      : state.phase ?? 'idle',
+    documentContent: state.documentContent ?? '',
+    recordId: state.recordId ?? null,
+    materialTitle: state.materialTitle ?? '当前诊断',
+    recordPinned: state.recordPinned ?? false,
+    createdAt: state.createdAt ?? null,
+    updatedAt: state.updatedAt ?? null,
+    nodes: state.nodes ?? [],
+    currentNodeIndex: state.currentNodeIndex ?? 0,
+    nodeConversations: state.nodeConversations ?? [],
+    currentQuestion: state.currentQuestion ?? '',
+    report: state.report ?? null,
+    currentNodeId: state.currentNodeId ?? state.nodes?.[state.currentNodeIndex ?? 0]?.id ?? null,
+    currentLevel: state.currentLevel ?? 'memory',
+    nodeLevelStates: state.nodeLevelStates ?? {},
+    nodePathStates: state.nodePathStates ?? {},
+    reportStatus: state.reportStatus ?? (state.report ? 'ready' : 'idle'),
+  }
+}
+
+export function restorePersistedDiagnosisState(state: PersistedDiagnosisState): StoreExamState {
+  return {
+    ...state,
+    phase: (state.phase as string) === 'done' ? 'reviewing' : state.phase,
+    currentAgentResponse: null,
+    error: null,
+  }
+}
+
+export function migrateDiagnosisRecord(record: LocalDiagnosisRecord | LegacyDiagnosisRecord): LocalDiagnosisRecord {
+  if (record.schemaVersion === LOCAL_DIAGNOSIS_SCHEMA_VERSION) return record as LocalDiagnosisRecord
+
+  const persistedState = toPersistedDiagnosisState(record.state as Partial<StoreExamState>)
+
+  return {
+    ...record,
+    schemaVersion: LOCAL_DIAGNOSIS_SCHEMA_VERSION,
+    title: record.title || persistedState.materialTitle,
+    pinned: record.pinned ?? persistedState.recordPinned,
+    state: persistedState,
+  }
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -53,12 +127,20 @@ export async function saveDiagnosisRecord(record: LocalDiagnosisRecord): Promise
 }
 
 export async function getDiagnosisRecord(id: string): Promise<LocalDiagnosisRecord | undefined> {
-  return withStore('readonly', (store) => store.get(id))
+  const record = await withStore<LocalDiagnosisRecord | LegacyDiagnosisRecord | undefined>(
+    'readonly',
+    (store) => store.get(id)
+  )
+  return record ? migrateDiagnosisRecord(record) : undefined
 }
 
 export async function listDiagnosisRecords(): Promise<LocalDiagnosisRecord[]> {
-  const records = await withStore('readonly', (store) => store.getAll())
-  return records.sort((a, b) => {
+  const records = await withStore<Array<LocalDiagnosisRecord | LegacyDiagnosisRecord>>(
+    'readonly',
+    (store) => store.getAll()
+  )
+  const migratedRecords = records.map(migrateDiagnosisRecord)
+  return migratedRecords.sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
     return b.updatedAt.localeCompare(a.updatedAt)
   })

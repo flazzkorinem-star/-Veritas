@@ -14,7 +14,7 @@ export default function ExamPage() {
 
   return (
     <main className="h-screen overflow-hidden bg-[#F8F9FA] text-slate-900">
-      <div className="grid h-full grid-cols-[260px_minmax(0,1fr)_360px]">
+      <div className="grid h-full grid-cols-[280px_minmax(0,1fr)_330px]">
         <WorkspaceSidebar
           historyRecords={workspace.historyRecords}
           selectedRecordId={workspace.state.recordId}
@@ -30,7 +30,7 @@ export default function ExamPage() {
         />
 
         <section className="min-h-0 bg-[#F8F9FA]">
-          <div className="grid h-full grid-cols-[220px_minmax(0,1fr)]">
+          <div className="grid h-full grid-cols-[260px_minmax(0,1fr)]">
             <KnowledgeNodeRail
               state={workspace.state}
               displayedTitle={workspace.displayedTitle}

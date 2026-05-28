@@ -74,6 +74,16 @@ describe('calculateQuickPathScore', () => {
     expect(calculateQuickPathScore(states)).toBe(67)
   })
 
+  it('does not score answer-assisted levels', () => {
+    const states: NodeLevelState[] = [
+      { level: 'memory', status: 'passed' },
+      { level: 'understanding', status: 'answer_assisted' },
+      { level: 'application', status: 'passed' },
+    ]
+
+    expect(calculateQuickPathScore(states)).toBe(67)
+  })
+
   it('keeps score for hint-assisted and analogy-assisted passes', () => {
     expect(calculateQuickPathScore([
       {
@@ -107,6 +117,10 @@ describe('calculateQuickPathScore', () => {
 describe('isScoredQuickPathPass', () => {
   it('returns false for deep levels and answer-assisted quick levels', () => {
     expect(isScoredQuickPathPass({ level: 'analysis', status: 'passed' })).toBe(false)
+    expect(isScoredQuickPathPass({
+      level: 'memory',
+      status: 'answer_assisted',
+    })).toBe(false)
     expect(isScoredQuickPathPass({
       level: 'memory',
       status: 'passed',

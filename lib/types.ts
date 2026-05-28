@@ -13,6 +13,7 @@ export type LevelStatus =
   | 'not_started'
   | 'in_progress'
   | 'passed'
+  | 'answer_assisted'
   | 'failed'
   | 'not_applicable'
 
@@ -55,6 +56,7 @@ export interface KnowledgeNode {
 export interface ConversationTurn {
   role: 'assistant' | 'user'
   content: string
+  kind?: 'diagnosis_plan'
 }
 
 // All dialogue for one knowledge node
@@ -100,8 +102,8 @@ export type ExamPhase =
   | 'idle'
   | 'analyzing'
   | 'examining'
+  | 'reviewing'
   | 'reporting'
-  | 'done'
 
 // Full client-side exam session state
 export interface ExamState {

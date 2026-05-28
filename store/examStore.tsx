@@ -120,6 +120,7 @@ function normalizeState(state: ExamState | StoreExamState): StoreExamState {
   return {
     ...initialState,
     ...state,
+    phase: (state.phase as string) === 'done' ? 'reviewing' : state.phase,
     recordId: 'recordId' in state ? state.recordId : null,
     materialTitle: 'materialTitle' in state ? state.materialTitle : '当前诊断',
     recordPinned: 'recordPinned' in state ? state.recordPinned : false,
@@ -497,10 +498,15 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       return { ...state, phase: 'reporting', reportStatus: 'generating', error: null }
 
     case 'SET_REPORT':
-      return { ...state, phase: 'examining', report: action.report, reportStatus: 'ready' }
+      return { ...state, phase: 'reviewing', report: action.report, reportStatus: 'ready' }
 
     case 'REPORT_FAILED':
-      return { ...state, phase: 'examining', reportStatus: 'failed', error: action.error }
+      return {
+        ...state,
+        phase: state.report ? 'reviewing' : 'examining',
+        reportStatus: 'failed',
+        error: action.error,
+      }
 
     case 'SET_ERROR':
       return { ...state, error: action.error }

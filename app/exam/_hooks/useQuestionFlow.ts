@@ -8,6 +8,7 @@ import {
   getDeepDiveStartLevel,
   getLevelAfterNextAction,
   getNextSuitableLevel,
+  getSkippedLevelStatus,
   shouldRequestInitialQuestion,
 } from '@/lib/examFlow'
 import type { NodeConversation } from '@/lib/types'
@@ -53,6 +54,7 @@ export function useQuestionFlow({
   const turns = currentConversation?.turns ?? []
   const currentNodeId = currentNode?.id
   const currentLevelStates = currentNodeId ? state.nodeLevelStates[currentNodeId] ?? [] : []
+  const canContinueDialogue = state.phase === 'examining' || state.phase === 'reviewing'
 
   async function completeCurrentNode(nodeId: string, nodeConversations: NodeConversation[]): Promise<void> {
     const nodeIndex = state.nodes.findIndex((node) => node.id === nodeId)
@@ -87,6 +89,8 @@ export function useQuestionFlow({
     userAnswer,
     requestType,
     levelOverride,
+    // Visible user text is committed by default; retries set this false to avoid duplicating the existing bubble.
+    commitUserTurn = Boolean(userAnswer),
     baseConversations,
   }: FetchQuestionOptions): Promise<void> {
     if (!currentNode) return
@@ -95,14 +99,16 @@ export function useQuestionFlow({
     const requestLevelStates = currentLevelStates
     setRetryQuestionRequest(null)
     try {
-      const shouldCommitUserTurn = Boolean(userAnswer)
       const startingConversations = baseConversations ?? state.nodeConversations
-      const nextNodeConversations = shouldCommitUserTurn
+      const nextNodeConversations = commitUserTurn
         ? appendTurnToNodeConversationById(startingConversations, requestNodeId, {
             role: 'user',
             content: userAnswer,
           })
         : startingConversations
+      if (commitUserTurn) {
+        dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'user', content: userAnswer } })
+      }
 
       const conversationTurns = nextNodeConversations.find((conversation) => (
         conversation.node.id === requestNodeId
@@ -120,10 +126,6 @@ export function useQuestionFlow({
         requestNodeId,
         { role: 'assistant', content: response.reply }
       )
-
-      if (shouldCommitUserTurn) {
-        dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'user', content: userAnswer } })
-      }
 
       dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'assistant', content: response.reply } })
       dispatch({ type: 'SET_AGENT_RESPONSE', nodeId: requestNodeId, response })
@@ -152,13 +154,17 @@ export function useQuestionFlow({
       }
 
       setSubmitting(false)
-      if (requestType === 'normal' && userAnswer) setTextAnswer('')
     } catch {
       if (!userAnswer && requestType === 'normal') {
         initialQuestionRequestedRef.current = null
       }
       setSubmitting(false)
-      setRetryQuestionRequest({ userAnswer, requestType, levelOverride })
+      setRetryQuestionRequest({
+        userAnswer,
+        requestType,
+        levelOverride,
+        commitUserTurn: false,
+      })
       dispatch({ type: 'SET_ERROR', error: '生成出现问题，请重试或回到首页' })
     }
   }
@@ -186,13 +192,14 @@ export function useQuestionFlow({
       await handlePastedMaterial()
       return
     }
-    if (state.phase !== 'examining') return
+    if (!canContinueDialogue) return
     if (!answer) {
       dispatch({ type: 'SET_ERROR', error: '请先输入你的回答' })
       return
     }
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
+    setTextAnswer('')
     await runFetch({ userAnswer: answer, requestType: 'normal' })
   }
 
@@ -238,11 +245,12 @@ export function useQuestionFlow({
       { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' }
     )
     dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
+    const skippedLevelState = currentLevelStates.find((item) => item.level === skippedLevel)
     dispatch({
       type: 'UPDATE_NODE_LEVEL_STATUS',
       nodeId: currentNode.id,
       level: skippedLevel,
-      status: 'failed',
+      status: getSkippedLevelStatus(skippedLevelState),
     })
 
     setSubmitting(true)
