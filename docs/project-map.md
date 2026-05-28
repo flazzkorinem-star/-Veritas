@@ -1,6 +1,6 @@
 # Veritas 项目地图
 
-Last synchronized: 2026-05-25
+Last synchronized: 2026-05-28
 
 ## 用途
 
@@ -39,7 +39,7 @@ v3.0 目标：
    TODO：`lib/types.ts` 里的旧 `levelPassed` 和 `question` 兼容字段仍待后续清理；当前 store 已优先读取 `passedCurrentLevel`。
 4. `/exam` 的页面入口已解耦：`app/exam/page.tsx` 只负责装配工作台；上传分析、本地历史、Agent 请求、层级推进、报告生成和 UI 区块分别拆到 `app/exam/_hooks`、`app/exam/_lib` 和 `app/exam/_components`。
 5. Agent 3、`/api/evaluate`、评分集成已完成第一条 v3.0 报告数据链路；报告弹层已改成摘要优先和知识点折叠展示。
-6. 三栏 UI 第一版已完成：`/exam` 现在是桌面端三栏工作台，外层约为 260px 左栏 / 自适应中间 / 360px 右栏，中间区内嵌约 220px 知识点列表；支持空态上传/粘贴材料、上传后诊断计划消息、微信式对话区、右侧诊断旁注、报告弹层、上传材料标题清洗、IndexedDB 本地历史、新建诊断自动保留历史、提示/答案用户气泡、答案后的层级选择，以及诊断记录和知识点的 DeepSeek 风格固定浮层三点菜单。
+6. 三栏 UI 第一版已完成：`/exam` 现在是桌面端三栏工作台，外层约为 260px 左栏 / 自适应中间 / 360px 右栏，中间区内嵌约 220px 知识点列表；支持空态上传/粘贴材料、上传后诊断计划消息、微信式对话区、右侧诊断旁注、报告弹层、上传材料标题清洗、IndexedDB 本地历史、新建诊断自动保留历史、用户消息即时入流、提示/答案用户气泡、答案后的层级选择，以及诊断记录和知识点的 DeepSeek 风格固定浮层三点菜单。
 
 报告分两步处理：Agent 3 的报告数据结构已完成第一条 v3.0 数据链路；`/exam` 报告弹层已完成摘要优先和知识点折叠展示，独立 `/report` 页面仍是备用容器。
 
@@ -61,7 +61,7 @@ v3.0 目标：
 - `app/exam/page.tsx` — 当前主诊断页入口。现在只做页面装配：左侧工作区、中间知识点栏、对话区、右侧诊断旁注和报告弹层都从独立组件引入，行为由 `useExamController` 聚合。
 - `app/exam/_hooks/useExamController.ts` — `/exam` 的轻量编排层。负责把 store、上传分析、对话推进、报告、本地历史和 UI 状态组合成页面需要的 view model；对页面显式列出返回字段，避免子 hook 返回值通过 spread 隐式外泄。
 - `app/exam/_hooks/useMaterialAnalysis.ts` — 上传或粘贴材料后的分析流程，负责文件提交、标题清洗、诊断计划消息和分析状态。
-- `app/exam/_hooks/useQuestionFlow.ts` — Agent 2 请求、初始问题触发、提示/答案、层级跳转、快速路径完成和节点切换。异步请求会捕获发起时的 `nodeId`，返回后只写回目标节点，避免知识点之间记忆串位。
+- `app/exam/_hooks/useQuestionFlow.ts` — Agent 2 请求、初始问题触发、提示/答案、层级跳转、快速路径完成和节点切换。用户提交普通回答、提示或答案时，用户气泡会先写入当前节点对话，再请求 Agent 回复；异步请求会捕获发起时的 `nodeId`，返回后只写回目标节点，避免知识点之间记忆串位。
 - `app/exam/_hooks/useReportFlow.ts` — Agent 3 报告生成、报告弹层状态、报告按钮决策和报告失败重试。
 - `app/exam/_hooks/useLocalDiagnosisHistory.ts` — IndexedDB 本地历史加载、自动保存、记录加载、置顶、重命名和删除。
 - `app/report/page.tsx` — 当前报告页容器。它只读取 `overallScore`、`summary` 和 `nodes`，报告字段展示由 `components/ReportCard.tsx` 承担。
@@ -115,6 +115,7 @@ v3.0 目标：
 - `tests/lib/questioner.test.ts` — 覆盖 Agent 2 结构化解析、normal/hint/answer、suitableLevels 约束、malformed fallback、三轮后不固定停止，以及无真实用户作答时不通过。
 - `tests/lib/evaluator.test.ts` — 覆盖 Agent 3 v3.0 报告结构、用户原话过滤、流程控制文本过滤、本地分数覆盖、深入层级不计分、支持记录透传和 malformed fallback。
 - `tests/lib/examFlow.test.ts` — 覆盖层级推进、快速路径后的深入选择、深入入口、提示/答案支持记录、按 `nodeId` 追加对话、节点完成提示，以及创造层当前不自动进入；旧 3 轮结束节点预期已不再作为测试目标。
+- `tests/app/useQuestionFlow.test.tsx` — 覆盖 `/exam` 提交回答、点击提示或答案时先写入用户气泡，再请求 Agent 回复；同时守护请求历史包含刚提交的回答、失败重试不重复插入用户气泡、失败后不回填输入框。
 - `tests/lib/score.test.ts` — 改评分时同步改。
 - `tests/store/examStore.test.ts` — 覆盖 v3.0 store 初始状态、`SET_NODES` 初始化、层级状态更新、提示/答案/类比记录、Agent 2 结构化响应、快速/深入路径、节点选择、按 `nodeId` 写回延迟响应和 `RESET`。
 - `tests/components/ReportCard.test.tsx` — 覆盖报告卡片读取 v3.0 字段和材料证据展示。

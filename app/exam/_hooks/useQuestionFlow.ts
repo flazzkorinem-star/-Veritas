@@ -89,6 +89,8 @@ export function useQuestionFlow({
     userAnswer,
     requestType,
     levelOverride,
+    // Visible user text is committed by default; retries set this false to avoid duplicating the existing bubble.
+    commitUserTurn = Boolean(userAnswer),
     baseConversations,
   }: FetchQuestionOptions): Promise<void> {
     if (!currentNode) return
@@ -97,14 +99,16 @@ export function useQuestionFlow({
     const requestLevelStates = currentLevelStates
     setRetryQuestionRequest(null)
     try {
-      const shouldCommitUserTurn = Boolean(userAnswer)
       const startingConversations = baseConversations ?? state.nodeConversations
-      const nextNodeConversations = shouldCommitUserTurn
+      const nextNodeConversations = commitUserTurn
         ? appendTurnToNodeConversationById(startingConversations, requestNodeId, {
             role: 'user',
             content: userAnswer,
           })
         : startingConversations
+      if (commitUserTurn) {
+        dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'user', content: userAnswer } })
+      }
 
       const conversationTurns = nextNodeConversations.find((conversation) => (
         conversation.node.id === requestNodeId
@@ -122,10 +126,6 @@ export function useQuestionFlow({
         requestNodeId,
         { role: 'assistant', content: response.reply }
       )
-
-      if (shouldCommitUserTurn) {
-        dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'user', content: userAnswer } })
-      }
 
       dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'assistant', content: response.reply } })
       dispatch({ type: 'SET_AGENT_RESPONSE', nodeId: requestNodeId, response })
@@ -154,13 +154,17 @@ export function useQuestionFlow({
       }
 
       setSubmitting(false)
-      if (requestType === 'normal' && userAnswer) setTextAnswer('')
     } catch {
       if (!userAnswer && requestType === 'normal') {
         initialQuestionRequestedRef.current = null
       }
       setSubmitting(false)
-      setRetryQuestionRequest({ userAnswer, requestType, levelOverride })
+      setRetryQuestionRequest({
+        userAnswer,
+        requestType,
+        levelOverride,
+        commitUserTurn: false,
+      })
       dispatch({ type: 'SET_ERROR', error: '生成出现问题，请重试或回到首页' })
     }
   }
@@ -195,6 +199,7 @@ export function useQuestionFlow({
     }
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
+    setTextAnswer('')
     await runFetch({ userAnswer: answer, requestType: 'normal' })
   }
 

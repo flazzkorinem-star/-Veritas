@@ -34,6 +34,7 @@ export interface RetryQuestionRequest {
   userAnswer: string
   requestType: QuestionRequestType
   levelOverride?: CognitiveLevel
+  commitUserTurn?: boolean
 }
 
 export interface FetchQuestionOptions extends RetryQuestionRequest {
