@@ -1,135 +1,20 @@
-# Veritas / 你真的懂吗
+# Veritas / 你真的理解吗
 
-Veritas 是面向备考和面试场景的 AI 理解诊断工具。
+Veritas 是一个 AI 理解诊断工具。你上传一份学习材料（PDF、Word、PPT、Markdown 等），它会读懂材料、挑出最值得检验的几个知识点，然后像家教一样跟你一问一答、层层追问，最后确认你理解到了哪个层次。
 
-用户上传自己的学习材料后，Veritas 会主动抽取高价值知识节点，通过分层追问暴露理解盲点，最后生成基于用户原话的诊断报告。它不替用户学习完整课程，也不做通用答疑。
+和刷题不同，题目不是预设好的，而是 AI 根据你的材料和你的每一句回答现场生成。判断你理解与否靠的是对话，而不是选择题对错。适合面试备考、考试复习、资格认证这类"已经学过、想确认自己真的理解知识点"的场景。
 
-核心流程：
+## 直接试用
 
-```text
-上传材料 -> 抽知识节点 -> 苏格拉底追问 -> 诊断报告
-```
+打开 **https://veritas-red.vercel.app** 就能用，上传一份材料就能开始。
 
-## 当前状态
+## 它怎么工作
 
-产品规格已更新到 `docs/design-guide.md` v3.0。
-
-当前代码正在向 v3.0 改造。旧代码里的文件解析、LLM 调用、错误处理、测试和部署配置仍然可复用；核心诊断流程已从“固定轮次提问”迁移到“按认知层级推进”的第一条可用链路。
-
-`/exam` 已完成桌面端三栏工作台第一版：左侧工作区，中间知识点列表 + 微信式诊断对话，右侧诊断旁注；上传后会先显示一条轻量诊断计划，报告在当前页面弹层预览。诊断记录会自动保存到当前浏览器的 IndexedDB，本地历史里一条上传材料对应一条诊断记录，记录内包含多个知识点和各自对话；本地记录和知识点支持置顶、重命名和删除，分享入口暂时置灰。材料库、账号系统、云同步、成就系统和移动端适配暂不做。
-
-下一步改造优先级见 `docs/project-map.md`。
-
-## 产品方向
-
-Veritas 当前阶段只做核心诊断体验：
-
-- 用户上传 PDF / DOCX / PPTX / TXT / Markdown。
-- Agent 1 抽取最多 8 个高诊断价值知识节点。
-- Agent 2 按记忆、理解、应用、分析、评价推进；创造层暂不强制进入。
-- 每个节点先完成快速路径 1-3，再由用户选择完成或深入。
-- 用户可随时请求提示或答案。
-- Agent 3 生成引用用户原话的个人化诊断报告。
-- 分数保留为 0-100，但只作为辅助摘要。
-
-当前不做账号、云同步、分享链接、真实 RAG、OCR、图片理解、知识图谱、游戏化和选择题主流程。
+1. **上传材料**，AI 从中挑出 1–8 个最值得检验的知识点。
+2. **逐个知识点对话检验**，每个都从浅到深问四层：记忆→理解→应用→分析。答得上来才进下一层。
+3. **不会可以索要提示或直接看答案**：用提示后答对照样算过；直接看答案则会被单独标记出来。
+4. **全部检验完生成一份报告**，引用你自己说过的原话，指出具体盲点和下一步该做什么。
 
 ## 技术栈
 
-- Next.js App Router
-- React
-- TypeScript
-- Tailwind CSS
-- OpenAI SDK，调用 DeepSeek-compatible chat completions
-- `pdf-parse`、`mammoth`、`jszip`、`fast-xml-parser` 用于文件文本提取
-- `@napi-rs/canvas` 用于 Vercel Serverless 下的 PDF.js 兼容
-- Vitest / Testing Library / jsdom
-
-## 本地运行
-
-安装依赖：
-
-```bash
-npm install
-```
-
-创建 `.env.local`：
-
-```text
-DEEPSEEK_API_KEY=<your key>
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL_FAST=<confirmed fast model>
-LLM_MODEL_SMART=<confirmed smart model>
-```
-
-启动开发服务器：
-
-```bash
-npm run dev
-```
-
-打开：
-
-```text
-http://localhost:3000/exam
-```
-
-Windows 环境可使用等价命令：
-
-```powershell
-npm.cmd install
-npm.cmd run dev
-```
-
-如果本机 3000 端口不可用，可以换端口：
-
-```powershell
-npm.cmd run dev -- --port 3127 --hostname 127.0.0.1
-```
-
-然后打开：
-
-```text
-http://127.0.0.1:3127/exam
-```
-
-## 验证
-
-运行测试：
-
-```bash
-npm run test:run
-```
-
-生产构建：
-
-```bash
-npm run build
-```
-
-Windows 环境可使用：
-
-```powershell
-npm.cmd run test:run
-npm.cmd run build
-```
-
-## 部署
-
-当前生产地址：
-
-```text
-https://veritas-red.vercel.app
-```
-
-Vercel Production 环境变量在 Vercel 后台配置，不提交到仓库。`.env.local` 不应打印、提交或修改真实密钥。
-
-## 文档
-
-- `docs/design-guide.md` — 产品真相源。
-- `docs/project-map.md` — 代码导航和 v3.0 改造入口。
-- `AGENTS.md` — Agent 协作规则、工程原则和验证要求。
-- `docs/operator-runbook.md` — 运行、测试、部署手册，后续可继续精简。
-- `docs/handoff.md` — 当前阶段交接和并行开发说明。
-
-`docs/architecture.md` 已归档，等 v3.0 核心流程实现后再重写。
+Next.js（App Router）+ React + TypeScript + Tailwind CSS，AI 部分通过 OpenAI 兼容接口调用 DeepSeek，测试用 Vitest。
