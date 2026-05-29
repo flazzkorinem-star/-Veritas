@@ -6,7 +6,6 @@ import {
   appendTurnToNodeConversationById,
   buildNodeCompletion,
   getDeepDiveStartLevel,
-  getLevelAfterNextAction,
   getNextSuitableLevel,
   getSkippedLevelStatus,
   shouldRequestInitialQuestion,
@@ -14,6 +13,7 @@ import {
 import type { NodeConversation } from '@/lib/types'
 import { hasSupportKind, isDiagnosisPlanTurn } from '../_lib/examPageHelpers'
 import { requestQuestion } from '../_lib/questionApi'
+import { buildQuestionResponseActions } from '../_lib/questionFlowTransitions'
 import type { FetchQuestionOptions, RetryQuestionRequest } from '../_lib/examPageTypes'
 
 export function useQuestionFlow({
@@ -127,29 +127,14 @@ export function useQuestionFlow({
         { role: 'assistant', content: response.reply }
       )
 
-      dispatch({ type: 'ADD_TURN', nodeId: requestNodeId, turn: { role: 'assistant', content: response.reply } })
-      dispatch({ type: 'SET_AGENT_RESPONSE', nodeId: requestNodeId, response })
+      const transition = buildQuestionResponseActions({
+        response,
+        requestNode,
+        requestNodeId,
+      })
+      transition.actions.forEach(dispatch)
 
-      if (response.nextAction === 'advance_next_level') {
-        dispatch({
-          type: 'SET_CURRENT_LEVEL',
-          nodeId: requestNodeId,
-          level: response.nextLevel ?? getLevelAfterNextAction({
-            currentLevel: response.currentLevel,
-            nextAction: response.nextAction,
-            suitableLevels: requestNode.suitableLevels,
-          }),
-        })
-      }
-
-      if (response.nextAction === 'offer_deep_dive') {
-        dispatch({ type: 'COMPLETE_QUICK_PATH', nodeId: requestNodeId })
-      }
-
-      if (response.nextAction === 'complete_node') {
-        if (response.currentLevel === 'application' && response.passedCurrentLevel) {
-          dispatch({ type: 'COMPLETE_QUICK_PATH', nodeId: requestNodeId })
-        }
+      if (transition.shouldCompleteNode) {
         await completeCurrentNode(requestNodeId, nextNodeConversationsWithAssistant)
       }
 
