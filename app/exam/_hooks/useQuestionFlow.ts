@@ -5,13 +5,11 @@ import type { Action, StoreExamState } from '@/store/examStore'
 import {
   appendTurnToNodeConversationById,
   buildNodeCompletion,
-  getDeepDiveStartLevel,
   getNextSuitableLevel,
-  getSkippedLevelStatus,
   shouldRequestInitialQuestion,
 } from '@/lib/examFlow'
-import type { NodeConversation } from '@/lib/types'
-import { hasSupportKind, isDiagnosisPlanTurn } from '../_lib/examPageHelpers'
+import type { LevelStatus, NodeConversation, NodeLevelState } from '@/lib/types'
+import { isDiagnosisPlanTurn } from '../_lib/examPageHelpers'
 import { requestQuestion } from '../_lib/questionApi'
 import { buildQuestionResponseActions } from '../_lib/questionFlowTransitions'
 import type { FetchQuestionOptions, RetryQuestionRequest } from '../_lib/examPageTypes'
@@ -24,12 +22,8 @@ export function useQuestionFlow({
   setSubmitting,
   textAnswer,
   setTextAnswer,
-  hasActiveDiagnosis,
   isBusy,
-  waitingForDeepDiveChoice,
   waitingForReportRetry,
-  answerChoicePending,
-  handlePastedMaterial,
   runEvaluate,
 }: {
   state: StoreExamState
@@ -39,13 +33,12 @@ export function useQuestionFlow({
   setSubmitting: Dispatch<SetStateAction<boolean>>
   textAnswer: string
   setTextAnswer: (value: string) => void
-  hasActiveDiagnosis: boolean
   isBusy: boolean
-  waitingForDeepDiveChoice: boolean
   waitingForReportRetry: boolean
-  answerChoicePending: boolean
-  handlePastedMaterial: () => Promise<void>
-  runEvaluate: (nodeConversations: NodeConversation[]) => Promise<void>
+  runEvaluate: (
+    nodeConversations: NodeConversation[],
+    nodeLevelStatesOverride?: Record<string, NodeLevelState[]>
+  ) => Promise<void>
 }) {
   const initialQuestionRequestedRef = useRef<string | null>(null)
   const [retryQuestionRequest, setRetryQuestionRequest] = useState<RetryQuestionRequest | null>(null)
@@ -56,7 +49,11 @@ export function useQuestionFlow({
   const currentLevelStates = currentNodeId ? state.nodeLevelStates[currentNodeId] ?? [] : []
   const canContinueDialogue = state.phase === 'examining' || state.phase === 'reviewing'
 
-  async function completeCurrentNode(nodeId: string, nodeConversations: NodeConversation[]): Promise<void> {
+  async function completeCurrentNode(
+    nodeId: string,
+    nodeConversations: NodeConversation[],
+    completedNodeLevelStates?: Record<string, NodeLevelState[]>
+  ): Promise<void> {
     const nodeIndex = state.nodes.findIndex((node) => node.id === nodeId)
     const completedNode = state.nodes[nodeIndex]
     if (!completedNode) return
@@ -78,7 +75,7 @@ export function useQuestionFlow({
     })
 
     if (isLastNode) {
-      await runEvaluate(completedConversations)
+      await runEvaluate(completedConversations, completedNodeLevelStates)
       return
     }
 
@@ -129,13 +126,53 @@ export function useQuestionFlow({
 
       const transition = buildQuestionResponseActions({
         response,
-        requestNode,
         requestNodeId,
       })
       transition.actions.forEach(dispatch)
 
+      if (requestType === 'answer') {
+        dispatch({
+          type: 'UPDATE_NODE_LEVEL_STATUS',
+          nodeId: requestNodeId,
+          level: response.currentLevel,
+          status: 'answer_assisted',
+          // 与 SET_AGENT_RESPONSE 写入保持一致，避免把刚写的盲点覆盖成 undefined。
+          blindSpotSummary: response.blindSpotSummary,
+        })
+      }
+
       if (transition.shouldCompleteNode) {
-        await completeCurrentNode(requestNodeId, nextNodeConversationsWithAssistant)
+        // 报告用刚算好的层级状态，不依赖尚未 re-render 的闭包 state。
+        const finalStatus: LevelStatus = requestType === 'answer' ? 'answer_assisted' : 'passed'
+        const completedNodeLevelStates: Record<string, NodeLevelState[]> = {
+          ...state.nodeLevelStates,
+          [requestNodeId]: (state.nodeLevelStates[requestNodeId] ?? []).map((levelState) => (
+            levelState.level === response.currentLevel
+              ? {
+                  ...levelState,
+                  status: finalStatus,
+                  blindSpotSummary: response.blindSpotSummary,
+                  supportRecords: response.supportRecords
+                    ? [...(levelState.supportRecords ?? []), ...response.supportRecords]
+                    : levelState.supportRecords,
+                }
+              : levelState
+          )),
+        }
+        await completeCurrentNode(requestNodeId, nextNodeConversationsWithAssistant, completedNodeLevelStates)
+        setSubmitting(false)
+        return
+      }
+
+      // 看答案后确定性进入下一层，自动取下一层的开场问题。
+      if (requestType === 'answer' && response.nextAction === 'advance_next_level') {
+        await runFetch({
+          userAnswer: '',
+          requestType: 'normal',
+          levelOverride: response.nextLevel ?? getNextSuitableLevel(response.currentLevel) ?? response.currentLevel,
+          baseConversations: nextNodeConversationsWithAssistant,
+        })
+        return
       }
 
       setSubmitting(false)
@@ -172,11 +209,7 @@ export function useQuestionFlow({
 
   async function handleSubmit() {
     const answer = textAnswer.trim()
-    if (isBusy || waitingForDeepDiveChoice) return
-    if (!hasActiveDiagnosis) {
-      await handlePastedMaterial()
-      return
-    }
+    if (isBusy) return
     if (!canContinueDialogue) return
     if (!answer) {
       dispatch({ type: 'SET_ERROR', error: '请先输入你的回答' })
@@ -189,109 +222,17 @@ export function useQuestionFlow({
   }
 
   async function handleHint() {
-    if (submitting || waitingForDeepDiveChoice || waitingForReportRetry || answerChoicePending) return
+    if (submitting || waitingForReportRetry) return
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
     await runFetch({ userAnswer: '给我提示', requestType: 'hint' })
   }
 
   async function handleAnswer() {
-    if (submitting || waitingForDeepDiveChoice || waitingForReportRetry || answerChoicePending) return
+    if (submitting || waitingForReportRetry) return
     dispatch({ type: 'SET_ERROR', error: '' })
     setSubmitting(true)
     await runFetch({ userAnswer: '给我答案', requestType: 'answer' })
-  }
-
-  async function handleSimilarQuestion() {
-    if (submitting || !currentNode) return
-    dispatch({ type: 'SET_ERROR', error: '' })
-    const nextNodeConversations = appendTurnToNodeConversationById(
-      state.nodeConversations,
-      currentNode.id,
-      { role: 'user', content: '继续问我一个类似问题' }
-    )
-    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '继续问我一个类似问题' } })
-    setSubmitting(true)
-    await runFetch({
-      userAnswer: '',
-      requestType: 'normal',
-      baseConversations: nextNodeConversations,
-    })
-  }
-
-  async function handleSkipLevel() {
-    if (submitting || !currentNode) return
-    dispatch({ type: 'SET_ERROR', error: '' })
-    const skippedLevel = state.currentLevel
-    const nextLevel = getNextSuitableLevel(skippedLevel, currentNode.suitableLevels)
-    const nextNodeConversations = appendTurnToNodeConversationById(
-      state.nodeConversations,
-      currentNode.id,
-      { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' }
-    )
-    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: nextLevel ? '下一层级' : '结束这个节点' } })
-    const skippedLevelState = currentLevelStates.find((item) => item.level === skippedLevel)
-    dispatch({
-      type: 'UPDATE_NODE_LEVEL_STATUS',
-      nodeId: currentNode.id,
-      level: skippedLevel,
-      status: getSkippedLevelStatus(skippedLevelState),
-    })
-
-    setSubmitting(true)
-    if (!nextLevel) {
-      await completeCurrentNode(currentNode.id, nextNodeConversations)
-      setSubmitting(false)
-      return
-    }
-
-    dispatch({ type: 'SET_CURRENT_LEVEL', nodeId: currentNode.id, level: nextLevel })
-    await runFetch({
-      userAnswer: '',
-      requestType: 'normal',
-      levelOverride: nextLevel,
-      baseConversations: nextNodeConversations,
-    })
-  }
-
-  async function handleCompleteNode() {
-    if (submitting) return
-    if (!currentNode) return
-    dispatch({ type: 'SET_ERROR', error: '' })
-    const nextNodeConversations = appendTurnToNodeConversationById(
-      state.nodeConversations,
-      currentNode.id,
-      { role: 'user', content: '完成这个节点' }
-    )
-    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '完成这个节点' } })
-    setSubmitting(true)
-    await completeCurrentNode(currentNode.id, nextNodeConversations)
-    setSubmitting(false)
-  }
-
-  async function handleEnterDeepPath() {
-    if (submitting || !currentNode) return
-    const deepLevel = getDeepDiveStartLevel(currentNode.suitableLevels)
-    if (!deepLevel) {
-      await handleCompleteNode()
-      return
-    }
-
-    dispatch({ type: 'SET_ERROR', error: '' })
-    const nextNodeConversations = appendTurnToNodeConversationById(
-      state.nodeConversations,
-      currentNode.id,
-      { role: 'user', content: '继续深入这个节点' }
-    )
-    dispatch({ type: 'ADD_TURN', nodeId: currentNode.id, turn: { role: 'user', content: '继续深入这个节点' } })
-    dispatch({ type: 'ENTER_DEEP_PATH', nodeId: currentNode.id })
-    setSubmitting(true)
-    await runFetch({
-      userAnswer: '',
-      requestType: 'normal',
-      levelOverride: deepLevel,
-      baseConversations: nextNodeConversations,
-    })
   }
 
   async function handleRetryQuestion() {
@@ -306,15 +247,6 @@ export function useQuestionFlow({
     handleSubmit,
     handleHint,
     handleAnswer,
-    handleSimilarQuestion,
-    handleSkipLevel,
-    handleCompleteNode,
-    handleEnterDeepPath,
     handleRetryQuestion,
-    nextSuitableLevel: currentNode ? getNextSuitableLevel(state.currentLevel, currentNode.suitableLevels) : null,
-    hasCurrentAnswerSupport: hasSupportKind(
-      currentLevelStates.find((item) => item.level === state.currentLevel),
-      'answer'
-    ),
   }
 }

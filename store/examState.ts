@@ -12,8 +12,7 @@ import type {
   SupportRecord,
 } from '@/lib/types'
 
-export type PathProgress = 'not_started' | 'in_progress' | 'completed' | 'not_applicable'
-export type DialogueStatus = 'idle' | 'agent_replied' | 'deep_dive_choice' | 'node_complete'
+export type DialogueStatus = 'idle' | 'agent_replied' | 'node_complete'
 export type ReportStatus = 'idle' | 'generating' | 'ready' | 'stale' | 'failed'
 
 export type AgentResponseV3 = QuestionResponse & {
@@ -23,8 +22,6 @@ export type AgentResponseV3 = QuestionResponse & {
 }
 
 export interface NodePathState {
-  quickPath: PathProgress
-  deepPath: PathProgress
   completed: boolean
 }
 
@@ -91,9 +88,7 @@ export type Action =
       userQuote?: string
     }
   | { type: 'RECORD_SUPPORT'; nodeId?: string; record: SupportRecord }
-  | { type: 'COMPLETE_QUICK_PATH'; nodeId?: string }
   | { type: 'COMPLETE_NODE'; nodeId?: string }
-  | { type: 'ENTER_DEEP_PATH'; nodeId?: string }
   | { type: 'SELECT_NEXT_NODE'; nodeIndex?: number }
   | { type: 'SET_AGENT_RESPONSE'; response: QuestionResponse; nodeId?: string }
   | { type: 'START_REPORTING' }

@@ -14,7 +14,6 @@ function validNode(id: string, overrides: Record<string, unknown> = {}) {
     name: `节点${id}`,
     context: `节点${id}能暴露理解和应用断点。`,
     sourceExcerpt: `材料证据${id}`,
-    suitableLevels: ['memory', 'understanding', 'application'],
     priorityReason: `优先理由${id}`,
     ...overrides,
   }
@@ -29,7 +28,6 @@ describe('parseAnalyzerResponse', () => {
           name: 'RAG',
           context: 'Mentioned as solution to hallucination',
           sourceExcerpt: 'RAG retrieves relevant passages before generation.',
-          suitableLevels: ['memory', 'understanding', 'application'],
           priorityReason: 'RAG 容易被误解为普通搜索，适合诊断流程理解。',
         },
         {
@@ -37,7 +35,6 @@ describe('parseAnalyzerResponse', () => {
           name: 'Embedding',
           context: 'Used to convert text to vectors',
           sourceExcerpt: 'Embeddings convert text into vectors for retrieval.',
-          suitableLevels: ['memory', 'understanding'],
           priorityReason: 'Embedding 是检索链路的基础概念。',
         },
       ]
@@ -47,7 +44,6 @@ describe('parseAnalyzerResponse', () => {
     expect(nodes[0].name).toBe('RAG')
     expect(nodes[0].context).toBe('Mentioned as solution to hallucination')
     expect(nodes[0].sourceExcerpt).toBe('RAG retrieves relevant passages before generation.')
-    expect(nodes[0].suitableLevels).toEqual(['memory', 'understanding', 'application'])
     expect(nodes[0].priorityReason).toBe('RAG 容易被误解为普通搜索，适合诊断流程理解。')
   })
 
@@ -78,36 +74,17 @@ describe('parseAnalyzerResponse', () => {
     expect(nodes[0].name).toBe('RAG')
   })
 
-  it('drops nodes missing evidence or usable suitableLevels', () => {
+  it('drops nodes missing evidence', () => {
     const nodes = parseAnalyzerResponse(JSON.stringify({
       nodes: [
         validNode('1', { sourceExcerpt: '' }),
         validNode('2', { evidence: '', sourceExcerpt: undefined }),
-        validNode('3', { suitableLevels: undefined }),
-        validNode('4', { suitableLevels: ['recall', 'associate'] }),
-        validNode('5', {
-          suitableLevels: ['memory', '错误层级', 'analysis'],
-          priorityReason: '这个节点能检查定义和机制拆解。',
-        }),
+        validNode('3', { priorityReason: '这个节点能检查定义和机制拆解。' }),
       ],
     }))
 
     expect(nodes).toHaveLength(1)
-    expect(nodes[0].id).toBe('5')
-    expect(nodes[0].suitableLevels).toEqual(['memory', 'understanding', 'application', 'analysis'])
-  })
-
-  it('normalizes non-contiguous suitableLevels into a continuous path from memory', () => {
-    const nodes = parseAnalyzerResponse(JSON.stringify({
-      nodes: [
-        validNode('1', {
-          suitableLevels: ['analysis'],
-          priorityReason: '这个节点适合诊断到机制分析层。',
-        }),
-      ],
-    }))
-
-    expect(nodes[0].suitableLevels).toEqual(['memory', 'understanding', 'application', 'analysis'])
+    expect(nodes[0].id).toBe('3')
   })
 
   it('keeps priorityReason from the analyzer response', () => {
@@ -162,7 +139,6 @@ describe('analyzeContent', () => {
             name: '注意力机制',
             context: '材料解释了注意力机制如何分配权重。',
             sourceExcerpt: '注意力机制会根据查询和键的相关性分配权重。',
-            suitableLevels: ['memory', 'understanding', 'application', 'analysis'],
             priorityReason: '注意力机制容易暴露用户对权重分配机制的理解断点。',
           },
         ],

@@ -1,19 +1,9 @@
 import { chat, MODEL_FAST } from '../llm'
-import { CognitiveLevel, KnowledgeNode } from '../types'
+import { KnowledgeNode } from '../types'
 import { randomUUID } from 'crypto'
 import { extractJSON } from '../parseJSON'
 
-const COGNITIVE_LEVELS: readonly CognitiveLevel[] = [
-  'memory',
-  'understanding',
-  'application',
-  'analysis',
-  'evaluation',
-  'creation',
-] as const
-
-export type AnalyzerKnowledgeNode = Omit<KnowledgeNode, 'suitableLevels' | 'priorityReason'> & {
-  suitableLevels: CognitiveLevel[]
+export type AnalyzerKnowledgeNode = Omit<KnowledgeNode, 'priorityReason'> & {
   priorityReason: string
 }
 
@@ -21,45 +11,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function isCognitiveLevel(level: unknown): level is CognitiveLevel {
-  return typeof level === 'string' && (COGNITIVE_LEVELS as readonly string[]).includes(level)
-}
-
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function readSuitableLevels(value: unknown): CognitiveLevel[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  const levels = Array.from(new Set(value.filter(isCognitiveLevel)))
-  const highestIndex = levels.reduce((max, level) => (
-    Math.max(max, COGNITIVE_LEVELS.indexOf(level))
-  ), -1)
-
-  if (highestIndex < 0) return []
-  return COGNITIVE_LEVELS.slice(0, highestIndex + 1)
-}
-
 const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一段学习内容，只提取高诊断价值知识节点，不做泛泛总结。
 
+每个节点都会被统一按四层诊断：记忆→理解→应用→分析。所以只选能完整支撑这四层追问的概念。
+
 选择标准：
-- 单次最多 8 个节点；材料少就少抽，不为了凑数降低质量
+- 单次最多 8 个节点，宁少勿滥；材料少就少抽，不为了凑数降低质量
+- 每个节点必须能撑起记忆、理解、应用、分析四层追问；撑不满四层的内容不要选
 - 优先选择核心概念和定义、容易混淆的对比点、能迁移到场景应用的问题、容易暴露推理断点的机制/因果链/决策点
 - 避免纯背景描述、孤立事实、过细或诊断价值低的内容
 - 只围绕材料中出现或明确暗示的概念
 - 不生成对话问题，不评价用户，不扩展成课程大纲
-- 每个节点必须有材料证据片段、适用层级和优先级理由；如果材料不足以支撑高价值节点，可以少于 8 个，哪怕只有 1 个
-
-suitableLevels 必须使用以下英文标识，对应认知层级：
-- memory（记忆）
-- understanding（理解）
-- application（应用）
-- analysis（分析）
-- evaluation（评价）
-- creation（创造）
+- 材料很大时也只保留最值得诊断的重点，不超过 8 个；材料不足以支撑高价值节点时可以少于 8 个，哪怕只有 1 个
 
 用JSON格式回复：
 {
@@ -69,7 +36,6 @@ suitableLevels 必须使用以下英文标识，对应认知层级：
       "name": "节点名称",
       "context": "一句话说明这个节点为什么值得诊断",
       "sourceExcerpt": "材料中能证明该节点的证据片段，直接引用1-3句话",
-      "suitableLevels": ["memory", "understanding", "application"],
       "priorityReason": "为什么优先诊断这个节点"
     }
   ]
@@ -104,10 +70,9 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
       const name = readString(n.name)
       const context = readString(n.context)
       const sourceExcerpt = readString(n.sourceExcerpt) || readString(n.evidence)
-      const suitableLevels = readSuitableLevels(n.suitableLevels)
       const priorityReason = readString(n.priorityReason)
 
-      if (!name || !context || !sourceExcerpt || suitableLevels.length === 0 || !priorityReason) {
+      if (!name || !context || !sourceExcerpt || !priorityReason) {
         return null
       }
 
@@ -116,7 +81,6 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
         name,
         context,
         sourceExcerpt,
-        suitableLevels,
         priorityReason,
       }
     })

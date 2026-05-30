@@ -29,7 +29,7 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 - `types.ts` — 全栈共享类型；改字段会波及 store / agents / hooks / 组件。
 - `examFlow.ts` — 层级推进纯函数（被 `store` 和 `useQuestionFlow` 用）。
 - `score.ts` — 评分计算。
-- `localHistory.ts` — IndexedDB 本地历史；`PersistedDiagnosisState` 持久化 schema + `migrateDiagnosisRecord` 迁移；只存跨会话需恢复的诊断态。
+- `localHistory.ts` — IndexedDB 本地历史；`PersistedDiagnosisState` 持久化 schema（`LOCAL_DIAGNOSIS_SCHEMA_VERSION`），读取时丢弃版本不符的旧记录；只存跨会话需恢复的诊断态。
 - `apiResponse.ts` / `parseJSON.ts` — 防御性响应解析 / JSON 抽取。
 - `pdf.ts` — 上传文件抽文本（PDF/DOCX/PPTX/TXT/MD）。
 - `llm.ts` — DeepSeek 客户端封装；未经确认不改 provider / 模型名。
@@ -49,7 +49,7 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 `page.tsx` 只装配 UI；行为聚合在 `useExamController`。
 
 - `_hooks/useExamController.ts` — 编排层，把下面 4 个 hook + store 组合成页面 view model。
-- `_hooks/useMaterialAnalysis.ts` — 上传/粘贴材料 → `/api/analyze`。
+- `_hooks/useMaterialAnalysis.ts` — 上传材料 → `/api/analyze`。
 - `_hooks/useQuestionFlow.ts` — 对话/提示/答案请求编排 → `/api/question`；按 `nodeId` 写回，防节点间串位。
 - `_hooks/useReportFlow.ts` — 报告生成 → `/api/evaluate`，含失败重试。
 - `_hooks/useLocalDiagnosisHistory.ts` — IndexedDB 历史加载/保存/置顶/重命名/删除。

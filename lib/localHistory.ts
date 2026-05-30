@@ -3,7 +3,7 @@ import type { StoreExamState } from '@/store/examStore'
 const DB_NAME = 'veritas-local-history'
 const DB_VERSION = 1
 const STORE_NAME = 'diagnoses'
-export const LOCAL_DIAGNOSIS_SCHEMA_VERSION = 2
+export const LOCAL_DIAGNOSIS_SCHEMA_VERSION = 3
 
 export interface PersistedDiagnosisState {
   phase: StoreExamState['phase']
@@ -33,11 +33,6 @@ export interface LocalDiagnosisRecord {
   updatedAt: string
   pinned?: boolean
   state: PersistedDiagnosisState
-}
-
-type LegacyDiagnosisRecord = Omit<LocalDiagnosisRecord, 'schemaVersion' | 'state'> & {
-  schemaVersion?: number
-  state: Partial<StoreExamState> | PersistedDiagnosisState
 }
 
 export function toPersistedDiagnosisState(state: Partial<StoreExamState>): PersistedDiagnosisState {
@@ -73,18 +68,9 @@ export function restorePersistedDiagnosisState(state: PersistedDiagnosisState): 
   }
 }
 
-export function migrateDiagnosisRecord(record: LocalDiagnosisRecord | LegacyDiagnosisRecord): LocalDiagnosisRecord {
-  if (record.schemaVersion === LOCAL_DIAGNOSIS_SCHEMA_VERSION) return record as LocalDiagnosisRecord
-
-  const persistedState = toPersistedDiagnosisState(record.state as Partial<StoreExamState>)
-
-  return {
-    ...record,
-    schemaVersion: LOCAL_DIAGNOSIS_SCHEMA_VERSION,
-    title: record.title || persistedState.materialTitle,
-    pinned: record.pinned ?? persistedState.recordPinned,
-    state: persistedState,
-  }
+// Old-schema records are structurally incompatible and are dropped on read.
+function isCurrentSchema(record: { schemaVersion?: number }): record is LocalDiagnosisRecord {
+  return record.schemaVersion === LOCAL_DIAGNOSIS_SCHEMA_VERSION
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -127,23 +113,24 @@ export async function saveDiagnosisRecord(record: LocalDiagnosisRecord): Promise
 }
 
 export async function getDiagnosisRecord(id: string): Promise<LocalDiagnosisRecord | undefined> {
-  const record = await withStore<LocalDiagnosisRecord | LegacyDiagnosisRecord | undefined>(
+  const record = await withStore<{ schemaVersion?: number } | undefined>(
     'readonly',
     (store) => store.get(id)
   )
-  return record ? migrateDiagnosisRecord(record) : undefined
+  return record && isCurrentSchema(record) ? record : undefined
 }
 
 export async function listDiagnosisRecords(): Promise<LocalDiagnosisRecord[]> {
-  const records = await withStore<Array<LocalDiagnosisRecord | LegacyDiagnosisRecord>>(
+  const records = await withStore<Array<{ schemaVersion?: number }>>(
     'readonly',
     (store) => store.getAll()
   )
-  const migratedRecords = records.map(migrateDiagnosisRecord)
-  return migratedRecords.sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-    return b.updatedAt.localeCompare(a.updatedAt)
-  })
+  return records
+    .filter(isCurrentSchema)
+    .sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
 }
 
 export async function deleteDiagnosisRecord(id: string): Promise<void> {

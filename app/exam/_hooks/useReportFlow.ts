@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch } from 'react'
 import type { Action } from '@/store/examStore'
-import type { NodeConversation } from '@/lib/types'
+import type { NodeConversation, NodeLevelState } from '@/lib/types'
 import { requestReport } from '../_lib/reportApi'
 import type { StoreExamState } from '@/store/examStore'
 
@@ -20,13 +20,16 @@ export function useReportFlow({
   const [reportOpen, setReportOpen] = useState(false)
   const [retryReportConversations, setRetryReportConversations] = useState<NodeConversation[] | null>(null)
 
-  async function runEvaluate(nodeConversations: NodeConversation[]) {
+  async function runEvaluate(
+    nodeConversations: NodeConversation[],
+    nodeLevelStatesOverride?: Record<string, NodeLevelState[]>
+  ) {
     setRetryReportConversations(null)
     dispatch({ type: 'START_REPORTING' })
     try {
       const report = await requestReport({
         nodeConversations,
-        nodeLevelStates: state.nodeLevelStates,
+        nodeLevelStates: nodeLevelStatesOverride ?? state.nodeLevelStates,
       })
       dispatch({ type: 'SET_REPORT', report })
       setReportOpen(true)

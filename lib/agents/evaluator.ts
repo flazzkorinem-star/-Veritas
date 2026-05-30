@@ -2,14 +2,13 @@ import { chat, MODEL_FAST } from '../llm'
 import {
   CognitiveLevel,
   ExamReport,
-  KnowledgeNode,
   LevelStatus,
   NodeConversation,
   NodeEvaluation,
   NodeLevelState,
   SupportKind,
 } from '../types'
-import { calculateOverallScore, calculateQuickPathScore } from '../score'
+import { calculateOverallScore, calculateNodeScore } from '../score'
 import { extractJSON } from '../parseJSON'
 
 const LEVELS: CognitiveLevel[] = [
@@ -17,15 +16,11 @@ const LEVELS: CognitiveLevel[] = [
   'understanding',
   'application',
   'analysis',
-  'evaluation',
-  'creation',
 ]
 
 const SUPPORT_KINDS: SupportKind[] = ['hint', 'answer', 'analogy']
 const NON_DIAGNOSTIC_USER_MESSAGES = new Set([
   '用户未能作答',
-  '完成这个节点',
-  '继续深入这个节点',
 ])
 
 const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成器。
@@ -49,12 +44,10 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成�
       "nodeName": "string",
       "sourceExcerpt": "string",
       "levelStatus": {
-        "memory": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
-        "understanding": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
-        "application": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
-        "analysis": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
-        "evaluation": "not_started | in_progress | passed | answer_assisted | failed | not_applicable",
-        "creation": "not_started | in_progress | passed | answer_assisted | failed | not_applicable"
+        "memory": "not_started | in_progress | passed | answer_assisted | failed",
+        "understanding": "not_started | in_progress | passed | answer_assisted | failed",
+        "application": "not_started | in_progress | passed | answer_assisted | failed",
+        "analysis": "not_started | in_progress | passed | answer_assisted | failed"
       },
       "evidenceQuotes": ["用户说过的原话"],
       "blindSpot": "具体盲点",
@@ -79,7 +72,6 @@ function isLevelStatus(value: unknown): value is LevelStatus {
     || value === 'passed'
     || value === 'answer_assisted'
     || value === 'failed'
-    || value === 'not_applicable'
   )
 }
 
@@ -95,17 +87,11 @@ function getLevelStates(
 }
 
 function buildLevelStatus(
-  node: KnowledgeNode,
   states: NodeLevelState[],
   modelStatus?: unknown
 ): Record<CognitiveLevel, LevelStatus> {
   const status = Object.fromEntries(
-    LEVELS.map((level) => [
-      level,
-      node.suitableLevels && !node.suitableLevels.includes(level)
-        ? 'not_applicable'
-        : 'not_started',
-    ])
+    LEVELS.map((level) => [level, 'not_started'])
   ) as Record<CognitiveLevel, LevelStatus>
 
   if (states.length > 0) {
@@ -118,7 +104,7 @@ function buildLevelStatus(
   if (modelStatus && typeof modelStatus === 'object') {
     const raw = modelStatus as Record<string, unknown>
     LEVELS.forEach((level) => {
-      if (status[level] !== 'not_applicable' && isLevelStatus(raw[level])) {
+      if (isLevelStatus(raw[level])) {
         status[level] = raw[level]
       }
     })
@@ -202,7 +188,7 @@ function makeNodeEvaluation({
   states: NodeLevelState[]
 }): NodeEvaluation {
   const userTurns = getUserTurns(conversation)
-  const score = calculateQuickPathScore(states)
+  const score = calculateNodeScore(states)
   const blindSpot = typeof rawNode.blindSpot === 'string' && rawNode.blindSpot.trim()
     ? rawNode.blindSpot.trim()
     : firstBlindSpot(states)
@@ -219,7 +205,7 @@ function makeNodeEvaluation({
     sourceExcerpt: typeof rawNode.sourceExcerpt === 'string' && rawNode.sourceExcerpt
       ? rawNode.sourceExcerpt
       : conversation.node.sourceExcerpt,
-    levelStatus: buildLevelStatus(conversation.node, states, rawNode.levelStatus),
+    levelStatus: buildLevelStatus(states, rawNode.levelStatus),
     evidenceQuotes: normalizeEvidenceQuotes(rawNode.evidenceQuotes, userTurns, states),
     blindSpot,
     supportUsed: buildSupportUsed(states, rawNode.supportUsed),
@@ -271,13 +257,13 @@ function buildFallbackSummary(nodes: NodeEvaluation[]): string {
 function buildFallbackReport(input: EvaluationInput): ExamReport {
   const nodes = input.nodeConversations.map((conversation) => {
     const states = getLevelStates(conversation.node.id, input.nodeLevelStates)
-    const score = calculateQuickPathScore(states)
+    const score = calculateNodeScore(states)
     const blindSpot = firstBlindSpot(states)
     return {
       nodeId: conversation.node.id,
       nodeName: conversation.node.name,
       sourceExcerpt: conversation.node.sourceExcerpt,
-      levelStatus: buildLevelStatus(conversation.node, states),
+      levelStatus: buildLevelStatus(states),
       evidenceQuotes: [],
       blindSpot,
       supportUsed: buildSupportUsed(states),

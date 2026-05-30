@@ -8,7 +8,6 @@ const requestNode: KnowledgeNode = {
   name: 'RAG',
   context: '检索增强生成用于降低幻觉。',
   sourceExcerpt: 'RAG 会先检索相关文档片段，再交给模型生成回答。',
-  suitableLevels: ['memory', 'understanding', 'application'],
   priorityReason: '能考察定义、理解和应用。',
 }
 
@@ -25,7 +24,7 @@ function makeResponse(overrides: Partial<StructuredQuestionResponse> = {}): Stru
 }
 
 function build(response: StructuredQuestionResponse) {
-  return buildQuestionResponseActions({ response, requestNode, requestNodeId: requestNode.id })
+  return buildQuestionResponseActions({ response, requestNodeId: requestNode.id })
 }
 
 describe('buildQuestionResponseActions', () => {
@@ -58,7 +57,7 @@ describe('buildQuestionResponseActions', () => {
     })
   })
 
-  it('advance_next_level 缺 nextLevel 时回退到 suitableLevels 的下一层', () => {
+  it('advance_next_level 缺 nextLevel 时回退到下一层', () => {
     const { actions } = build(makeResponse({
       nextAction: 'advance_next_level',
       currentLevel: 'memory',
@@ -71,29 +70,13 @@ describe('buildQuestionResponseActions', () => {
     })
   })
 
-  it('offer_deep_dive 完成快速通道但不完成节点', () => {
-    const { actions, shouldCompleteNode } = build(makeResponse({ nextAction: 'offer_deep_dive' }))
-    expect(actions).toContainEqual({ type: 'COMPLETE_QUICK_PATH', nodeId: 'node-1' })
-    expect(shouldCompleteNode).toBe(false)
-  })
-
-  it('complete_node 在 application 层通过时补一条 COMPLETE_QUICK_PATH 并要求完成节点', () => {
+  it('complete_node 只产出基础动作并要求完成节点', () => {
     const { actions, shouldCompleteNode } = build(makeResponse({
       nextAction: 'complete_node',
-      currentLevel: 'application',
+      currentLevel: 'analysis',
       passedCurrentLevel: true,
     }))
-    expect(actions).toContainEqual({ type: 'COMPLETE_QUICK_PATH', nodeId: 'node-1' })
-    expect(shouldCompleteNode).toBe(true)
-  })
-
-  it('complete_node 非 application 通过时不补 COMPLETE_QUICK_PATH 但仍要求完成节点', () => {
-    const { actions, shouldCompleteNode } = build(makeResponse({
-      nextAction: 'complete_node',
-      currentLevel: 'understanding',
-      passedCurrentLevel: true,
-    }))
-    expect(actions).not.toContainEqual({ type: 'COMPLETE_QUICK_PATH', nodeId: 'node-1' })
+    expect(actions).toHaveLength(2)
     expect(shouldCompleteNode).toBe(true)
   })
 })

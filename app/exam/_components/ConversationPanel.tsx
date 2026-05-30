@@ -2,7 +2,7 @@
 
 import type { RefObject } from 'react'
 import type { StoreExamState } from '@/store/examStore'
-import type { CognitiveLevel, KnowledgeNode, NodeConversation } from '@/lib/types'
+import type { KnowledgeNode, NodeConversation } from '@/lib/types'
 import { MATERIAL_FILE_ACCEPT } from '../_lib/materialFile'
 import type { RetryQuestionRequest } from '../_lib/examPageTypes'
 
@@ -15,9 +15,7 @@ export function ConversationPanel({
   hasActiveDiagnosis,
   isBusy,
   actionDisabled,
-  waitingForDeepDiveChoice,
   waitingForReportRetry,
-  answerChoicePending,
   retryQuestionRequest,
   retryReportConversations,
   analyzeWarning,
@@ -26,14 +24,9 @@ export function ConversationPanel({
   setTextAnswer,
   historyEndRef,
   fileInputRef,
-  nextSuitableLevel,
   onSubmit,
   onHint,
   onAnswer,
-  onSimilarQuestion,
-  onSkipLevel,
-  onCompleteNode,
-  onEnterDeepPath,
   onRetryQuestion,
   onRetryReport,
   onMaterialFile,
@@ -47,9 +40,7 @@ export function ConversationPanel({
   hasActiveDiagnosis: boolean
   isBusy: boolean
   actionDisabled: boolean
-  waitingForDeepDiveChoice: boolean
   waitingForReportRetry: boolean
-  answerChoicePending: boolean
   retryQuestionRequest: RetryQuestionRequest | null
   retryReportConversations: NodeConversation[] | null
   analyzeWarning: string
@@ -58,14 +49,9 @@ export function ConversationPanel({
   setTextAnswer: (value: string) => void
   historyEndRef: RefObject<HTMLDivElement | null>
   fileInputRef: RefObject<HTMLInputElement | null>
-  nextSuitableLevel: CognitiveLevel | null
   onSubmit: () => void
   onHint: () => void
   onAnswer: () => void
-  onSimilarQuestion: () => void
-  onSkipLevel: () => void
-  onCompleteNode: () => void
-  onEnterDeepPath: () => void
   onRetryQuestion: () => void
   onRetryReport: () => void
   onMaterialFile: (file: File | undefined) => void
@@ -85,7 +71,7 @@ export function ConversationPanel({
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">把材料给我，我们开始检验</h1>
             <p className="mt-3 text-sm leading-6 text-slate-500">
-              Veritas 只基于你上传或粘贴的材料诊断理解，不做无材料的通用问答。
+              Veritas 只基于你上传的材料诊断理解，不做无材料的通用问答。
             </p>
           </div>
         )}
@@ -173,66 +159,24 @@ export function ConversationPanel({
             </div>
           )}
 
-          {waitingForDeepDiveChoice && (
-            <div className="mb-3 rounded-2xl border border-[#FFA726]/25 bg-[#FFA726]/10 px-4 py-3 text-sm text-amber-800">
-              <p>快速路径已完成。可以结束这个节点，也可以继续深入。</p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={onCompleteNode}
-                  disabled={isBusy || waitingForReportRetry}
-                  className="rounded-full bg-[#5C6BC0] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                >
-                  完成这个节点
-                </button>
-                <button
-                  onClick={onEnterDeepPath}
-                  disabled={isBusy || waitingForReportRetry}
-                  className="rounded-full border border-[#5C6BC0]/30 bg-white px-4 py-2 text-xs font-semibold text-[#5C6BC0] disabled:opacity-50"
-                >
-                  继续深入
-                </button>
-              </div>
+          {hasActiveDiagnosis && (
+            <div className="mb-2 flex gap-2">
+              <button
+                onClick={onHint}
+                disabled={actionDisabled}
+                className="rounded-full border border-[#FFA726] bg-white px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-[#FFA726]/10 disabled:opacity-40"
+              >
+                💡 给我提示
+              </button>
+              <button
+                onClick={onAnswer}
+                disabled={actionDisabled}
+                className="rounded-full border border-[#58CC02] bg-white px-4 py-2 text-sm font-semibold text-green-700 transition-colors hover:bg-[#58CC02]/10 disabled:opacity-40"
+              >
+                📖 给我答案
+              </button>
             </div>
           )}
-
-          {answerChoicePending && (
-            <div className="mb-3 rounded-2xl border border-[#FFA726]/25 bg-[#FFA726]/10 px-4 py-3 text-sm text-amber-800">
-              <p>这一层已经看过答案，不算独立通过。你可以继续练一个类似问题，或者跳到下一层级。</p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={onSimilarQuestion}
-                  disabled={isBusy || waitingForReportRetry}
-                  className="rounded-full bg-[#5C6BC0] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                >
-                  继续问我一个类似问题
-                </button>
-                <button
-                  onClick={onSkipLevel}
-                  disabled={isBusy || waitingForReportRetry}
-                  className="rounded-full border border-[#5C6BC0]/30 bg-white px-4 py-2 text-xs font-semibold text-[#5C6BC0] disabled:opacity-50"
-                >
-                  {nextSuitableLevel ? '下一层级' : '结束这个节点'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="mb-2 flex gap-2">
-            <button
-              onClick={onHint}
-              disabled={actionDisabled}
-              className="rounded-full border border-[#FFA726] bg-white px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-[#FFA726]/10 disabled:opacity-40"
-            >
-              💡 给我提示
-            </button>
-            <button
-              onClick={onAnswer}
-              disabled={actionDisabled}
-              className="rounded-full border border-[#58CC02] bg-white px-4 py-2 text-sm font-semibold text-green-700 transition-colors hover:bg-[#58CC02]/10 disabled:opacity-40"
-            >
-              📖 给我答案
-            </button>
-          </div>
 
           <div
             onDragOver={(event) => event.preventDefault()}
@@ -251,49 +195,62 @@ export function ConversationPanel({
               className="hidden"
               onChange={(event) => onMaterialFile(event.target.files?.[0])}
             />
-            <textarea
-              value={textAnswer}
-              onChange={(event) => setTextAnswer(event.target.value)}
-              placeholder={hasActiveDiagnosis ? '像聊天一样回答这个问题...' : '粘贴一段材料，或点击下方上传 PDF / DOCX / PPTX / TXT / Markdown'}
-              rows={hasActiveDiagnosis ? 3 : 5}
-              className="w-full resize-none rounded-2xl bg-transparent px-2 py-2 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
-              disabled={isBusy || waitingForReportRetry || waitingForDeepDiveChoice}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  onSubmit()
-                }
-              }}
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isBusy}
-                className={`rounded-full border border-[#5C6BC0]/40 bg-white text-sm font-semibold text-[#5C6BC0] transition-colors hover:bg-[#5C6BC0]/10 disabled:opacity-50 ${
-                  hasActiveDiagnosis ? 'px-3 py-2' : 'px-5 py-3'
-                }`}
-              >
-                📎 上传材料
-              </button>
-              <div className="flex items-center gap-2">
+            {hasActiveDiagnosis ? (
+              <>
+                <textarea
+                  value={textAnswer}
+                  onChange={(event) => setTextAnswer(event.target.value)}
+                  placeholder="像聊天一样回答这个问题..."
+                  rows={3}
+                  className="w-full resize-none rounded-2xl bg-transparent px-2 py-2 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
+                  disabled={isBusy || waitingForReportRetry}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      onSubmit()
+                    }
+                  }}
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isBusy}
+                    className="rounded-full border border-[#5C6BC0]/40 bg-white px-3 py-2 text-sm font-semibold text-[#5C6BC0] transition-colors hover:bg-[#5C6BC0]/10 disabled:opacity-50"
+                  >
+                    📎 上传材料
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={onVoiceInput}
+                      disabled={isBusy}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 disabled:opacity-50"
+                      aria-label="语音输入"
+                    >
+                      🎤
+                    </button>
+                    <button
+                      onClick={onSubmit}
+                      disabled={isBusy || waitingForReportRetry || !textAnswer.trim()}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-[#5C6BC0] text-white transition-colors hover:bg-[#505eb0] disabled:opacity-40"
+                      aria-label="发送回答"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <p className="text-sm text-slate-500">上传 PDF / DOCX / PPTX / TXT / Markdown 开始检验</p>
                 <button
-                  onClick={onVoiceInput}
+                  onClick={() => fileInputRef.current?.click()}
                   disabled={isBusy}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 disabled:opacity-50"
-                  aria-label="语音输入"
+                  className="rounded-full border border-[#5C6BC0]/40 bg-white px-5 py-3 text-sm font-semibold text-[#5C6BC0] transition-colors hover:bg-[#5C6BC0]/10 disabled:opacity-50"
                 >
-                  🎤
-                </button>
-                <button
-                  onClick={onSubmit}
-                  disabled={isBusy || waitingForReportRetry || waitingForDeepDiveChoice || !textAnswer.trim()}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[#5C6BC0] text-white transition-colors hover:bg-[#505eb0] disabled:opacity-40"
-                  aria-label={hasActiveDiagnosis ? '发送回答' : '分析材料'}
-                >
-                  →
+                  📎 上传材料
                 </button>
               </div>
-            </div>
+            )}
           </div>
 
           {analyzeMessage && (

@@ -15,26 +15,6 @@ export const COGNITIVE_LEVELS: CognitiveLevel[] = [
   'understanding',
   'application',
   'analysis',
-  'evaluation',
-  'creation',
-]
-
-export const QUICK_PATH_LEVELS: CognitiveLevel[] = [
-  'memory',
-  'understanding',
-  'application',
-]
-
-export const DEEP_PATH_LEVELS: CognitiveLevel[] = [
-  'analysis',
-  'evaluation',
-  'creation',
-]
-
-const ACTIVE_DEEP_PATH_LEVELS: CognitiveLevel[] = [
-  // V1 keeps the automatic deep path to analysis/evaluation; creation needs a future explicit entry.
-  'analysis',
-  'evaluation',
 ]
 
 export function appendTurnToNodeConversations(
@@ -107,83 +87,38 @@ export function shouldRequestInitialQuestion({
   )
 }
 
-export function isLevelSuitable(
-  level: CognitiveLevel,
-  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
-): boolean {
-  return suitableLevels.includes(level)
-}
-
-export function createInitialLevelStates(
-  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
-): NodeLevelState[] {
+export function createInitialLevelStates(): NodeLevelState[] {
   return COGNITIVE_LEVELS.map((level) => ({
     level,
-    status: isLevelSuitable(level, suitableLevels) ? 'not_started' : 'not_applicable',
+    status: 'not_started',
   }))
 }
 
-export function getNextSuitableLevel(
-  currentLevel: CognitiveLevel,
-  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
-): CognitiveLevel | null {
+export function getNextSuitableLevel(currentLevel: CognitiveLevel): CognitiveLevel | null {
   const currentIndex = COGNITIVE_LEVELS.indexOf(currentLevel)
-  return COGNITIVE_LEVELS.slice(currentIndex + 1)
-    .find((level) => isLevelSuitable(level, suitableLevels)) ?? null
-}
-
-export function getFirstDeepLevel(
-  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
-): CognitiveLevel | null {
-  return ACTIVE_DEEP_PATH_LEVELS.find((level) => isLevelSuitable(level, suitableLevels)) ?? null
+  return COGNITIVE_LEVELS[currentIndex + 1] ?? null
 }
 
 export function getNextActionForLevelResult({
   currentLevel,
   levelPassed,
-  suitableLevels = COGNITIVE_LEVELS,
 }: {
   currentLevel: CognitiveLevel
   levelPassed: boolean
-  suitableLevels?: CognitiveLevel[]
 }): QuestionNextAction {
   if (!levelPassed) return 'continue_current_level'
-
-  if (currentLevel === 'application') {
-    return getFirstDeepLevel(suitableLevels) ? 'offer_deep_dive' : 'complete_node'
-  }
-
-  if (currentLevel === 'analysis') {
-    return isLevelSuitable('evaluation', suitableLevels) ? 'advance_next_level' : 'complete_node'
-  }
-
-  if (currentLevel === 'evaluation' || currentLevel === 'creation') return 'complete_node'
-
-  const nextLevel = getNextSuitableLevel(currentLevel, suitableLevels)
-  if (!nextLevel) return 'complete_node'
-
-  if (QUICK_PATH_LEVELS.includes(nextLevel)) return 'advance_next_level'
-
-  return 'complete_node'
+  return getNextSuitableLevel(currentLevel) ? 'advance_next_level' : 'complete_node'
 }
 
 export function getLevelAfterNextAction({
   currentLevel,
   nextAction,
-  suitableLevels = COGNITIVE_LEVELS,
 }: {
   currentLevel: CognitiveLevel
   nextAction: QuestionNextAction
-  suitableLevels?: CognitiveLevel[]
 }): CognitiveLevel {
   if (nextAction !== 'advance_next_level') return currentLevel
-  return getNextSuitableLevel(currentLevel, suitableLevels) ?? currentLevel
-}
-
-export function getDeepDiveStartLevel(
-  suitableLevels: CognitiveLevel[] = COGNITIVE_LEVELS
-): CognitiveLevel | null {
-  return getFirstDeepLevel(suitableLevels)
+  return getNextSuitableLevel(currentLevel) ?? currentLevel
 }
 
 export function createSupportRecord({
@@ -216,12 +151,4 @@ export function updateLevelStatus(
   return states.map((state) => (
     state.level === level ? { ...state, status } : state
   ))
-}
-
-export function getSkippedLevelStatus(levelState: NodeLevelState | undefined): LevelStatus {
-  return levelState?.supportRecords?.some((record) => (
-    record.level === levelState.level && record.kind === 'answer'
-  ))
-    ? 'answer_assisted'
-    : 'failed'
 }

@@ -9,12 +9,8 @@ import type { AnalyzeResponse } from '../_lib/examPageTypes'
 
 export function useMaterialAnalysis({
   dispatch,
-  textAnswer,
-  setTextAnswer,
 }: {
   dispatch: Dispatch<Action>
-  textAnswer: string
-  setTextAnswer: (value: string) => void
 }) {
   const [analyzing, setAnalyzing] = useState(false)
   const [analyzeMessage, setAnalyzeMessage] = useState('')
@@ -89,26 +85,10 @@ export function useMaterialAnalysis({
     await analyzeMaterial(file)
   }
 
-  async function handlePastedMaterial(): Promise<void> {
-    const content = textAnswer.trim()
-    if (!content) {
-      dispatch({ type: 'SET_ERROR', error: '请先上传文件或粘贴一段材料' })
-      return
-    }
-    if (content.length < 80) {
-      dispatch({ type: 'SET_ERROR', error: '材料太短，请粘贴更完整的内容' })
-      return
-    }
-    const file = new File([content], 'veritas-material.txt', { type: 'text/plain' })
-    await analyzeMaterial(file)
-    setTextAnswer('')
-  }
-
   return {
     analyzing,
     analyzeMessage,
     analyzeWarning,
     handleMaterialFile,
-    handlePastedMaterial,
   }
 }

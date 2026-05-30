@@ -20,7 +20,6 @@ const conversations: NodeConversation[] = [
       name: 'RAG',
       context: 'RAG 用检索到的材料片段增强生成回答。',
       sourceExcerpt: 'RAG 会先检索相关材料，再把材料交给模型生成回答。',
-      suitableLevels: ['memory', 'understanding', 'application', 'analysis'],
       priorityReason: '容易把 RAG 混同为普通搜索。',
     },
     turns: [
@@ -60,8 +59,6 @@ const levelStates: Record<string, NodeLevelState[]> = {
       ],
     },
     { level: 'analysis', status: 'passed' },
-    { level: 'evaluation', status: 'not_applicable' },
-    { level: 'creation', status: 'not_applicable' },
   ],
 }
 
@@ -84,8 +81,6 @@ function validRawReport(score = 999) {
           understanding: 'failed',
           application: 'failed',
           analysis: 'failed',
-          evaluation: 'failed',
-          creation: 'failed',
         },
         evidenceQuotes: [
           'RAG 是先找资料，再结合资料回答。',
@@ -160,11 +155,11 @@ describe('parseEvaluatorResponse', () => {
     expect(report.nodes[0].evidenceQuotes).toEqual([])
   })
 
-  it('用本地快速路径分数覆盖模型分数，并且深入层级不参与基础分', () => {
+  it('用本地四层分数覆盖模型分数，答案辅助层不计分', () => {
     const report = parseEvaluatorResponse(validRawReport(999), input)
 
-    expect(report.nodes[0].score).toBe(66)
-    expect(report.overallScore).toBe(66)
+    expect(report.nodes[0].score).toBe(75)
+    expect(report.overallScore).toBe(75)
   })
 
   it('提示、答案、主动类比记录会进入报告', () => {
@@ -192,13 +187,13 @@ describe('parseEvaluatorResponse', () => {
     })
   })
 
-  it('缺少层级状态时使用模型结构和材料适用层级做稳定兜底', () => {
+  it('缺少层级状态时使用模型结构做稳定兜底', () => {
     const report = parseEvaluatorResponse(validRawReport(), {
       nodeConversations: conversations,
     })
 
     expect(report.nodes[0].levelStatus.memory).toBe('failed')
-    expect(report.nodes[0].levelStatus.evaluation).toBe('not_applicable')
+    expect(report.nodes[0].levelStatus.analysis).toBe('failed')
     expect(report.nodes[0].score).toBe(0)
   })
 
@@ -232,7 +227,7 @@ describe('evaluateConversations', () => {
     const firstPrompt = vi.mocked(chat).mock.calls[0][0][1].content
 
     expect(chat).toHaveBeenCalledTimes(2)
-    expect(report.nodes[0].score).toBe(66)
+    expect(report.nodes[0].score).toBe(75)
     expect(firstPrompt).not.toContain('先区分检索和生成。')
     expect(firstPrompt).not.toContain('先检索产品文档，再组织回答。')
   })
@@ -247,6 +242,6 @@ describe('evaluateConversations', () => {
     expect(chat).toHaveBeenCalledTimes(2)
     expect(report.nodes[0].nodeId).toBe('rag')
     expect(report.nodes[0].evidenceQuotes).toEqual([])
-    expect(report.overallScore).toBe(66)
+    expect(report.overallScore).toBe(75)
   })
 })

@@ -9,7 +9,6 @@ const nodes: KnowledgeNode[] = [
     name: 'RAG',
     context: '检索增强生成用于降低幻觉。',
     sourceExcerpt: 'RAG 会先检索相关文档片段，再交给模型生成回答。',
-    suitableLevels: ['memory', 'understanding', 'application', 'analysis'],
     priorityReason: '能同时考察定义、机制和应用边界。',
   },
   {
@@ -17,7 +16,6 @@ const nodes: KnowledgeNode[] = [
     name: '提示词约束',
     context: '提示词用于约束模型输出。',
     sourceExcerpt: '提示词需要明确任务、边界和输出格式。',
-    suitableLevels: ['memory', 'understanding', 'application'],
     priorityReason: '容易暴露只会复述、不知道如何应用的问题。',
   },
 ]
@@ -49,20 +47,10 @@ describe('exam store v3 state', () => {
       { level: 'understanding', status: 'not_started' },
       { level: 'application', status: 'not_started' },
       { level: 'analysis', status: 'not_started' },
-      { level: 'evaluation', status: 'not_applicable' },
-      { level: 'creation', status: 'not_applicable' },
     ])
-    expect(state.nodeLevelStates['node-2']).toHaveLength(6)
-    expect(state.nodePathStates['node-1']).toEqual({
-      quickPath: 'in_progress',
-      deepPath: 'not_started',
-      completed: false,
-    })
-    expect(state.nodePathStates['node-2']).toEqual({
-      quickPath: 'not_started',
-      deepPath: 'not_applicable',
-      completed: false,
-    })
+    expect(state.nodeLevelStates['node-2']).toHaveLength(4)
+    expect(state.nodePathStates['node-1']).toEqual({ completed: false })
+    expect(state.nodePathStates['node-2']).toEqual({ completed: false })
   })
 
   it('stores local diagnosis record metadata', () => {
@@ -160,14 +148,14 @@ describe('exam store v3 state', () => {
         reply: '这个回答已经到应用层了，我们接着看边界。',
         currentLevel: 'application',
         levelPassed: true,
-        nextAction: 'offer_deep_dive',
+        nextAction: 'advance_next_level',
         blindSpotSummary: '还需要区分适用和不适用场景。',
       },
     })
 
     expect(updated.currentQuestion).toBe('这个回答已经到应用层了，我们接着看边界。')
-    expect(updated.currentAgentResponse?.nextAction).toBe('offer_deep_dive')
-    expect(getDialogueStatus(updated.currentAgentResponse)).toBe('deep_dive_choice')
+    expect(updated.currentAgentResponse?.nextAction).toBe('advance_next_level')
+    expect(getDialogueStatus(updated.currentAgentResponse)).toBe('agent_replied')
     expect(updated.currentAgentResponse?.levelPassed).toBe(true)
     expect(updated.currentAgentResponse?.blindSpotSummary).toBe('还需要区分适用和不适用场景。')
     expect(updated.nodeLevelStates['node-1']).toContainEqual({
@@ -223,37 +211,21 @@ describe('exam store v3 state', () => {
       level: 'analysis',
     })
     const ignoredNextNode = reducer(selectedSecondNode, { type: 'NEXT_NODE', fromNodeId: 'node-1' })
-    const quickComplete = reducer(selectedSecondNode, { type: 'COMPLETE_QUICK_PATH', nodeId: 'node-1' })
-    const deepPath = reducer(selectedSecondNode, { type: 'ENTER_DEEP_PATH', nodeId: 'node-1' })
 
     expect(ignoredLevel.currentNodeId).toBe('node-2')
     expect(ignoredLevel.currentLevel).toBe('memory')
     expect(ignoredNextNode.currentNodeId).toBe('node-2')
-    expect(quickComplete.nodePathStates['node-1'].quickPath).toBe('completed')
-    expect(quickComplete.nodePathStates['node-2'].quickPath).toBe('in_progress')
-    expect(deepPath.currentNodeId).toBe('node-2')
-    expect(deepPath.currentLevel).toBe('memory')
-    expect(deepPath.nodePathStates['node-1'].deepPath).toBe('in_progress')
   })
 
-  it('marks quick path complete, enters deep path, and selects the next node', () => {
+  it('completes a node and selects the next node', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
-    const quickComplete = reducer(withNodes, { type: 'COMPLETE_QUICK_PATH' })
-    const deepPath = reducer(quickComplete, { type: 'ENTER_DEEP_PATH' })
-    const completed = reducer(deepPath, { type: 'COMPLETE_NODE' })
+    const completed = reducer(withNodes, { type: 'COMPLETE_NODE' })
     const nextNode = reducer(completed, { type: 'SELECT_NEXT_NODE' })
 
-    expect(quickComplete.nodePathStates['node-1'].quickPath).toBe('completed')
-    expect(deepPath.currentLevel).toBe('analysis')
-    expect(deepPath.nodePathStates['node-1']).toEqual({
-      quickPath: 'completed',
-      deepPath: 'in_progress',
-      completed: false,
-    })
     expect(completed.nodePathStates['node-1'].completed).toBe(true)
     expect(nextNode.currentNodeId).toBe('node-2')
     expect(nextNode.currentNodeIndex).toBe(1)
-    expect(nextNode.nodePathStates['node-2'].quickPath).toBe('in_progress')
+    expect(nextNode.currentLevel).toBe('memory')
   })
 
   it('renames, pins, and deletes knowledge nodes', () => {
@@ -300,7 +272,7 @@ describe('exam store v3 state', () => {
       state: {
         ...initialState,
         phase: 'done',
-      } as typeof initialState,
+      } as unknown as typeof initialState,
     })
 
     expect(restored.phase).toBe('reviewing')

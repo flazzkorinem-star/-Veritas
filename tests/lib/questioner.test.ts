@@ -14,7 +14,6 @@ const node: KnowledgeNode = {
   name: 'RAG',
   context: '检索增强生成会先找相关资料，再把资料交给模型回答。',
   sourceExcerpt: 'RAG 会先检索相关文档片段，再把片段作为上下文交给大模型生成回答。',
-  suitableLevels: ['memory', 'understanding', 'application', 'analysis', 'evaluation'],
   priorityReason: '容易混淆检索和生成的职责。',
 }
 
@@ -23,8 +22,6 @@ const levelStates: NodeLevelState[] = [
   { level: 'understanding', status: 'in_progress' },
   { level: 'application', status: 'not_started' },
   { level: 'analysis', status: 'not_started' },
-  { level: 'evaluation', status: 'not_started' },
-  { level: 'creation', status: 'not_applicable' },
 ]
 
 beforeEach(() => {
@@ -189,12 +186,36 @@ describe('getNextQuestion', () => {
     })
 
     expect(result.passedCurrentLevel).toBe(false)
-    expect(result.nextAction).toBe('continue_current_level')
+    expect(result.nextAction).toBe('advance_next_level')
+    expect(result.nextLevel).toBe('understanding')
     expect(result.supportUsed).toBe('answer')
     expect(result.supportRecords?.[0]).toMatchObject({
       kind: 'answer',
       level: 'memory',
     })
+  })
+
+  it('answer 请求在末层 analysis 完成节点', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '可以答：注意力机制按相关性分配权重。',
+      currentLevel: 'analysis',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      supportUsed: 'none',
+    }))
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'analysis',
+      requestType: 'answer',
+      conversationHistory: [
+        { role: 'assistant', content: '它的机制是什么？' },
+      ],
+    })
+
+    expect(result.passedCurrentLevel).toBe(false)
+    expect(result.nextAction).toBe('complete_node')
+    expect(result.supportUsed).toBe('answer')
   })
 
   it('没有真实用户作答时不会接受模型给出的通过判断', async () => {
@@ -231,7 +252,7 @@ describe('getNextQuestion', () => {
       currentLevel: 'analysis',
       requestType: 'normal',
       conversationHistory: [
-        { role: 'user', content: '继续深入这个节点' },
+        { role: 'user', content: '给我答案' },
       ],
     })
 
@@ -239,7 +260,7 @@ describe('getNextQuestion', () => {
     expect(result.nextAction).toBe('continue_current_level')
   })
 
-  it('不会进入 suitableLevels 不允许的层级', async () => {
+  it('忽略模型返回的非法层级，回退到 memory', async () => {
     vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
       reply: '我们先停在适合这个节点的层级。',
       currentLevel: 'creation',
@@ -250,11 +271,7 @@ describe('getNextQuestion', () => {
     }))
 
     const result = await getNextQuestion({
-      node: {
-        ...node,
-        suitableLevels: ['memory', 'understanding', 'application'],
-      },
-      currentLevel: 'creation',
+      node,
       requestType: 'normal',
       conversationHistory: [
         { role: 'assistant', content: '你能设计一个新方案吗？' },
@@ -264,7 +281,6 @@ describe('getNextQuestion', () => {
 
     expect(result.currentLevel).toBe('memory')
     expect(result.nextLevel).toBe('understanding')
-    expect(result.nextLevel).not.toBe('creation')
   })
 
   it('malformed LLM 输出会 retry 一次，然后返回本地 fallback', async () => {

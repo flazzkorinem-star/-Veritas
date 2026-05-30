@@ -20,7 +20,6 @@ const nodes: KnowledgeNode[] = [
     name: 'RAG',
     context: '检索增强生成用于降低幻觉。',
     sourceExcerpt: 'RAG 会先检索相关文档片段，再交给模型生成回答。',
-    suitableLevels: ['memory', 'understanding', 'application'],
     priorityReason: '能考察定义、理解和应用。',
   },
 ]
@@ -68,12 +67,8 @@ describe('useQuestionFlow', () => {
       setSubmitting,
       textAnswer: 'RAG 是先检索资料，再让模型回答。',
       setTextAnswer,
-      hasActiveDiagnosis: true,
       isBusy: false,
-      waitingForDeepDiveChoice: false,
       waitingForReportRetry: false,
-      answerChoicePending: false,
-      handlePastedMaterial: vi.fn(),
       runEvaluate: vi.fn(),
     }))
 
@@ -163,12 +158,8 @@ describe('useQuestionFlow', () => {
         setSubmitting,
         textAnswer: 'RAG 是先检索资料，再让模型回答。',
         setTextAnswer,
-        hasActiveDiagnosis: true,
         isBusy: false,
-        waitingForDeepDiveChoice: false,
         waitingForReportRetry: false,
-        answerChoicePending: false,
-        handlePastedMaterial: vi.fn(),
         runEvaluate: vi.fn(),
       }),
       { initialProps: { state: currentState } }
@@ -246,12 +237,8 @@ describe('useQuestionFlow', () => {
       setSubmitting: vi.fn(),
       textAnswer: '',
       setTextAnswer: vi.fn(),
-      hasActiveDiagnosis: true,
       isBusy: false,
-      waitingForDeepDiveChoice: false,
       waitingForReportRetry: false,
-      answerChoicePending: false,
-      handlePastedMaterial: vi.fn(),
       runEvaluate: vi.fn(),
     }))
 
@@ -301,5 +288,133 @@ describe('useQuestionFlow', () => {
     await act(async () => {
       await actionPromise
     })
+  })
+
+  it('非末层 answer：标记 answer_assisted、推进下一层并再请求一次开场问题', async () => {
+    vi.mocked(requestQuestion)
+      .mockResolvedValueOnce({
+        question: '答案：RAG 先检索再生成。',
+        reply: '答案：RAG 先检索再生成。',
+        currentLevel: 'memory',
+        passedCurrentLevel: false,
+        nextAction: 'advance_next_level',
+        nextLevel: 'understanding',
+        blindSpotSummary: '没说清检索与生成的分工',
+        supportUsed: 'answer',
+        supportRecords: [{ kind: 'answer', level: 'memory', question: 'RAG 是什么？', content: 'RAG 先检索再生成。' }],
+      })
+      .mockResolvedValueOnce({
+        question: '用自己的话说说 RAG 解决了什么问题？',
+        reply: '用自己的话说说 RAG 解决了什么问题？',
+        currentLevel: 'understanding',
+        passedCurrentLevel: false,
+        nextAction: 'continue_current_level',
+        blindSpotSummary: '',
+      })
+
+    const state = {
+      ...reducer(initialState, { type: 'SET_NODES', nodes }),
+      nodeConversations: [
+        { node: nodes[0], turns: [{ role: 'assistant' as const, content: 'RAG 是什么？' }] },
+      ],
+    }
+    const dispatch = vi.fn()
+
+    const { result } = renderHook(() => useQuestionFlow({
+      state,
+      dispatch,
+      isHydrated: true,
+      submitting: false,
+      setSubmitting: vi.fn(),
+      textAnswer: '',
+      setTextAnswer: vi.fn(),
+      isBusy: false,
+      waitingForReportRetry: false,
+      runEvaluate: vi.fn(),
+    }))
+
+    await act(async () => {
+      await result.current.handleAnswer()
+    })
+
+    expect(dispatch.mock.calls.map(([action]) => action)).toContainEqual({
+      type: 'UPDATE_NODE_LEVEL_STATUS',
+      nodeId: 'node-1',
+      level: 'memory',
+      status: 'answer_assisted',
+      blindSpotSummary: '没说清检索与生成的分工',
+    })
+    expect(dispatch.mock.calls.map(([action]) => action)).toContainEqual({
+      type: 'SET_CURRENT_LEVEL',
+      nodeId: 'node-1',
+      level: 'understanding',
+    })
+    expect(requestQuestion).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(requestQuestion).mock.calls[1][0]).toMatchObject({
+      requestType: 'normal',
+      currentLevel: 'understanding',
+    })
+  })
+
+  it('末层 analysis answer：完成节点并用含 answer_assisted 的层级状态生成报告', async () => {
+    vi.mocked(requestQuestion).mockResolvedValueOnce({
+      question: '答案：注意力按相关性分配权重。',
+      reply: '答案：注意力按相关性分配权重。',
+      currentLevel: 'analysis',
+      passedCurrentLevel: false,
+      nextAction: 'complete_node',
+      blindSpotSummary: '没拆出权重分配的因果',
+      supportUsed: 'answer',
+      supportRecords: [{ kind: 'answer', level: 'analysis', question: '机制是什么？', content: '按相关性分配权重。' }],
+    })
+
+    const base = reducer(initialState, { type: 'SET_NODES', nodes })
+    const state = {
+      ...base,
+      currentLevel: 'analysis' as const,
+      nodeConversations: [
+        { node: nodes[0], turns: [{ role: 'assistant' as const, content: '它的机制是什么？' }] },
+      ],
+      nodeLevelStates: {
+        'node-1': [
+          { level: 'memory' as const, status: 'passed' as const },
+          { level: 'understanding' as const, status: 'passed' as const },
+          { level: 'application' as const, status: 'passed' as const },
+          { level: 'analysis' as const, status: 'in_progress' as const },
+        ],
+      },
+    }
+    const dispatch = vi.fn()
+    const runEvaluate = vi.fn()
+
+    const { result } = renderHook(() => useQuestionFlow({
+      state,
+      dispatch,
+      isHydrated: true,
+      submitting: false,
+      setSubmitting: vi.fn(),
+      textAnswer: '',
+      setTextAnswer: vi.fn(),
+      isBusy: false,
+      waitingForReportRetry: false,
+      runEvaluate,
+    }))
+
+    await act(async () => {
+      await result.current.handleAnswer()
+    })
+
+    expect(dispatch.mock.calls.map(([action]) => action)).toContainEqual(
+      expect.objectContaining({ type: 'COMPLETE_NODE', nodeId: 'node-1' })
+    )
+    expect(runEvaluate).toHaveBeenCalledTimes(1)
+    const reportedLevelStates = runEvaluate.mock.calls[0][1]['node-1']
+    expect(reportedLevelStates).toContainEqual(
+      expect.objectContaining({
+        level: 'analysis',
+        status: 'answer_assisted',
+        blindSpotSummary: '没拆出权重分配的因果',
+      })
+    )
   })
 })

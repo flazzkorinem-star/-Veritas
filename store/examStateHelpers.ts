@@ -8,18 +8,13 @@ import type {
   QuestionResponse,
   SupportRecord,
 } from '@/lib/types'
-import { createInitialLevelStates, getFirstDeepLevel } from '@/lib/examFlow'
+import { createInitialLevelStates } from '@/lib/examFlow'
 import { initialState, type NodePathState, type StoreExamState, type DialogueStatus } from './examState'
 
 export function getDialogueStatus(response: QuestionResponse | null): DialogueStatus {
   if (!response) return 'idle'
-  if (response.nextAction === 'offer_deep_dive') return 'deep_dive_choice'
   if (response.nextAction === 'complete_node') return 'node_complete'
   return 'agent_replied'
-}
-
-export function getFirstSuitableLevel(levelStates: NodeLevelState[]): CognitiveLevel {
-  return levelStates.find((state) => state.status !== 'not_applicable')?.level ?? 'memory'
 }
 
 export function getCurrentNodeId(state: StoreExamState): string | null {
@@ -30,21 +25,14 @@ export function createLevelStatesByNode(nodes: KnowledgeNode[]): Record<string, 
   return Object.fromEntries(
     nodes.map((node) => [
       node.id,
-      createInitialLevelStates(node.suitableLevels),
+      createInitialLevelStates(),
     ])
   )
 }
 
 export function createPathStatesByNode(nodes: KnowledgeNode[]): Record<string, NodePathState> {
   return Object.fromEntries(
-    nodes.map((node, index) => [
-      node.id,
-      {
-        quickPath: index === 0 ? 'in_progress' : 'not_started',
-        deepPath: getFirstDeepLevel(node.suitableLevels) ? 'not_started' : 'not_applicable',
-        completed: false,
-      },
-    ])
+    nodes.map((node) => [node.id, { completed: false }])
   )
 }
 
@@ -58,7 +46,6 @@ export function normalizeState(state: ExamState | StoreExamState): StoreExamStat
   const currentNodeId = 'currentNodeId' in state
     ? state.currentNodeId
     : state.nodes[state.currentNodeIndex]?.id ?? null
-  const currentNodeLevels = currentNodeId ? levelStates[currentNodeId] : undefined
 
   return {
     ...initialState,
@@ -72,7 +59,7 @@ export function normalizeState(state: ExamState | StoreExamState): StoreExamStat
     currentNodeId,
     currentLevel: 'currentLevel' in state
       ? state.currentLevel
-      : getFirstSuitableLevel(currentNodeLevels ?? []),
+      : 'memory',
     nodeLevelStates: levelStates,
     nodePathStates: pathStates,
     currentAgentResponse: 'currentAgentResponse' in state ? state.currentAgentResponse : null,

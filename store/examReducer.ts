@@ -2,14 +2,12 @@ import type { NodeConversation } from '@/lib/types'
 import {
   appendTurnToNodeConversationById,
   appendTurnToNodeConversations,
-  getFirstDeepLevel,
 } from '@/lib/examFlow'
 import { initialState, type Action, type AgentResponseV3, type StoreExamState } from './examState'
 import {
   createLevelStatesByNode,
   createPathStatesByNode,
   getCurrentNodeId,
-  getFirstSuitableLevel,
   normalizeState,
   recordSupport,
   setNodeLevelStatus,
@@ -45,7 +43,7 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
         nodes: action.nodes,
         currentNodeIndex: 0,
         currentNodeId,
-        currentLevel: currentNodeId ? getFirstSuitableLevel(nodeLevelStates[currentNodeId]) : 'memory',
+        currentLevel: 'memory',
         nodeConversations,
         nodeLevelStates,
         nodePathStates,
@@ -105,7 +103,6 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       const resolvedIndex = nextNodeId
         ? Math.max(nodes.findIndex((node) => node.id === nextNodeId), 0)
         : 0
-      const nextLevelStates = nextNodeId ? nodeLevelStates[nextNodeId] : undefined
       return {
         ...state,
         nodes,
@@ -114,7 +111,7 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
         nodePathStates,
         currentNodeIndex: resolvedIndex,
         currentNodeId: nextNodeId,
-        currentLevel: getFirstSuitableLevel(nextLevelStates ?? []),
+        currentLevel: 'memory',
         currentAgentResponse: null,
         report: null,
         reportStatus: 'idle',
@@ -148,25 +145,13 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
         ? action.nodeIndex ?? state.currentNodeIndex + 1
         : state.currentNodeIndex + 1
       const nextNodeId = state.nodes[nextIndex]?.id ?? null
-      const nextLevelStates = nextNodeId ? state.nodeLevelStates[nextNodeId] : undefined
       return {
         ...state,
         currentNodeIndex: nextIndex,
         currentNodeId: nextNodeId,
-        currentLevel: getFirstSuitableLevel(nextLevelStates ?? []),
+        currentLevel: 'memory',
         currentQuestion: '',
         currentAgentResponse: null,
-        nodePathStates: nextNodeId
-          ? {
-              ...state.nodePathStates,
-              [nextNodeId]: {
-                ...state.nodePathStates[nextNodeId],
-                quickPath: state.nodePathStates[nextNodeId]?.quickPath === 'completed'
-                  ? 'completed'
-                  : 'in_progress',
-              },
-            }
-          : state.nodePathStates,
       }
     }
 
@@ -189,21 +174,6 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       return recordSupport(state, nodeId, action.record)
     }
 
-    case 'COMPLETE_QUICK_PATH': {
-      const nodeId = action.nodeId ?? getCurrentNodeId(state)
-      if (!nodeId) return state
-      return {
-        ...state,
-        nodePathStates: {
-          ...state.nodePathStates,
-          [nodeId]: {
-            ...state.nodePathStates[nodeId],
-            quickPath: 'completed',
-          },
-        },
-      }
-    }
-
     case 'COMPLETE_NODE': {
       const nodeId = action.nodeId ?? getCurrentNodeId(state)
       if (!nodeId) return state
@@ -214,26 +184,6 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
           [nodeId]: {
             ...state.nodePathStates[nodeId],
             completed: true,
-          },
-        },
-      }
-    }
-
-    case 'ENTER_DEEP_PATH': {
-      const nodeId = action.nodeId ?? getCurrentNodeId(state)
-      const node = state.nodes.find((item) => item.id === nodeId)
-      const firstDeepLevel = getFirstDeepLevel(node?.suitableLevels)
-      const isCurrentNode = nodeId === getCurrentNodeId(state)
-      if (!nodeId || !firstDeepLevel) return state
-      return {
-        ...state,
-        currentLevel: isCurrentNode ? firstDeepLevel : state.currentLevel,
-        nodePathStates: {
-          ...state.nodePathStates,
-          [nodeId]: {
-            quickPath: 'completed',
-            deepPath: 'in_progress',
-            completed: false,
           },
         },
       }

@@ -5,8 +5,6 @@ const LEVEL_LABELS: Record<CognitiveLevel, string> = {
   understanding: '理解',
   application: '应用',
   analysis: '分析',
-  evaluation: '评价',
-  creation: '创造',
 }
 
 const STATUS_LABELS: Record<LevelStatus, string> = {
@@ -15,22 +13,21 @@ const STATUS_LABELS: Record<LevelStatus, string> = {
   passed: '通过',
   answer_assisted: '答案辅助',
   failed: '未通过',
-  not_applicable: '不适用',
 }
 
 function getCardTone(levelStatus: NodeEvaluation['levelStatus']) {
-  const quickLevels: CognitiveLevel[] = ['memory', 'understanding', 'application']
-  const quickPassed = quickLevels.filter((level) => levelStatus[level] === 'passed').length
+  const levels = Object.keys(LEVEL_LABELS) as CognitiveLevel[]
+  const passed = levels.filter((level) => levelStatus[level] === 'passed').length
 
-  if (quickPassed === 3) {
+  if (passed === levels.length) {
     return {
-      label: '快速路径通过',
+      label: '四层全部通过',
       color: 'bg-emerald-50 border-emerald-200 text-emerald-700',
       dot: 'bg-emerald-500',
     }
   }
 
-  if (quickPassed > 0) {
+  if (passed > 0) {
     return {
       label: '部分层级通过',
       color: 'bg-amber-50 border-amber-200 text-amber-700',

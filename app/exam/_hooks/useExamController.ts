@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { getDialogueStatus, useExam } from '@/store/examStore'
-import { calculateQuickPathScore } from '@/lib/score'
-import { hasSupportKind, levelLabels } from '../_lib/examPageHelpers'
+import { useExam } from '@/store/examStore'
+import { calculateNodeScore } from '@/lib/score'
+import { levelLabels } from '../_lib/examPageHelpers'
 import type { MenuTarget } from '../_lib/examPageTypes'
 import { useLocalDiagnosisHistory } from './useLocalDiagnosisHistory'
 import { useMaterialAnalysis } from './useMaterialAnalysis'
@@ -23,33 +23,22 @@ export function useExamController() {
   const turns = currentConversation?.turns ?? []
   const currentNodeId = currentNode?.id
   const currentLevelStates = currentNodeId ? state.nodeLevelStates[currentNodeId] ?? [] : []
-  const currentLevelState = currentLevelStates.find((item) => item.level === state.currentLevel)
-  const currentPathState = currentNodeId ? state.nodePathStates[currentNodeId] : undefined
-  const dialogueStatus = getDialogueStatus(state.currentAgentResponse)
   const hasActiveDiagnosis = state.nodes.length > 0
   const completedNodeCount = state.nodes.filter((node) => (
     state.nodePathStates[node.id]?.completed
   )).length
   const isDiagnosisComplete = hasActiveDiagnosis && completedNodeCount === state.nodes.length
-  const currentScore = currentNodeId ? calculateQuickPathScore(currentLevelStates) : 0
-  const waitingForDeepDiveChoice = dialogueStatus === 'deep_dive_choice'
+  const currentScore = currentNodeId ? calculateNodeScore(currentLevelStates) : 0
   const displayedTitle = state.materialTitle !== '当前诊断'
     ? state.materialTitle
     : currentNode?.name ?? '当前诊断'
 
-  const material = useMaterialAnalysis({ dispatch, textAnswer, setTextAnswer })
+  const material = useMaterialAnalysis({ dispatch })
   const isBusy = submitting || material.analyzing || state.phase === 'reporting'
   const canContinueDialogue = state.phase === 'examining' || state.phase === 'reviewing'
 
   const report = useReportFlow({ state, dispatch, setSubmitting, isDiagnosisComplete })
   const waitingForReportRetry = report.retryReportConversations !== null
-  const answerChoicePending = Boolean(
-    currentLevelState
-    && hasSupportKind(currentLevelState, 'answer')
-    && state.currentAgentResponse?.supportRecords?.some((record) => (
-      record.kind === 'answer' && record.level === state.currentLevel
-    ))
-  )
 
   const question = useQuestionFlow({
     state,
@@ -59,12 +48,8 @@ export function useExamController() {
     setSubmitting,
     textAnswer,
     setTextAnswer,
-    hasActiveDiagnosis,
     isBusy,
-    waitingForDeepDiveChoice,
     waitingForReportRetry,
-    answerChoicePending,
-    handlePastedMaterial: material.handlePastedMaterial,
     runEvaluate: report.runEvaluate,
   })
 
@@ -128,8 +113,6 @@ export function useExamController() {
   const actionDisabled = (
     isBusy
     || waitingForReportRetry
-    || waitingForDeepDiveChoice
-    || answerChoicePending
     || !currentNode
     || !canContinueDialogue
   )
@@ -148,7 +131,6 @@ export function useExamController() {
     currentNode,
     turns,
     currentLevelStates,
-    currentPathState,
     hasActiveDiagnosis,
     completedNodeCount,
     isDiagnosisComplete,
@@ -156,9 +138,7 @@ export function useExamController() {
     isBusy,
     actionDisabled,
     displayedTitle,
-    waitingForDeepDiveChoice,
     waitingForReportRetry,
-    answerChoicePending,
     levelLabels,
     handleBackHome,
     handleNodePin,
@@ -176,12 +156,7 @@ export function useExamController() {
     handleSubmit: question.handleSubmit,
     handleHint: question.handleHint,
     handleAnswer: question.handleAnswer,
-    handleSimilarQuestion: question.handleSimilarQuestion,
-    handleSkipLevel: question.handleSkipLevel,
-    handleCompleteNode: question.handleCompleteNode,
-    handleEnterDeepPath: question.handleEnterDeepPath,
     handleRetryQuestion: question.handleRetryQuestion,
-    nextSuitableLevel: question.nextSuitableLevel,
     historyRecords: history.historyRecords,
     handleLoadRecord: history.handleLoadRecord,
     handleRecordPin: history.handleRecordPin,

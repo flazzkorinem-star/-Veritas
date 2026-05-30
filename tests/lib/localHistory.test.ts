@@ -3,7 +3,6 @@ import {
   getDiagnosisRecord,
   listDiagnosisRecords,
   LOCAL_DIAGNOSIS_SCHEMA_VERSION,
-  migrateDiagnosisRecord,
   restorePersistedDiagnosisState,
   saveDiagnosisRecord,
   deleteDiagnosisRecord,
@@ -141,46 +140,17 @@ describe('localHistory', () => {
     expect(records.map((record) => record.id)).toEqual(['pinned', 'newer', 'older'])
   })
 
-  it('迁移旧记录并丢弃运行态字段', () => {
-    const legacyState = makeState()
-    const migrated = migrateDiagnosisRecord({
-      id: 'legacy',
-      title: '旧 schema',
-      createdAt: '2026-05-24T00:00:00.000Z',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      state: legacyState,
-    })
+  it('丢弃 schema 版本不符的旧记录', async () => {
+    await saveDiagnosisRecord(makeRecord('current', makeState(), '2026-05-24T01:00:00.000Z'))
+    const legacy = {
+      ...makeRecord('legacy', makeState({ materialTitle: '旧记录' }), '2026-05-24T02:00:00.000Z'),
+      schemaVersion: 2,
+    } as unknown as LocalDiagnosisRecord
+    await saveDiagnosisRecord(legacy)
 
-    expect(migrated.schemaVersion).toBe(LOCAL_DIAGNOSIS_SCHEMA_VERSION)
-    expect(migrated.state.materialTitle).toBe('材料一')
-    expect('currentAgentResponse' in migrated.state).toBe(false)
-    expect('error' in migrated.state).toBe(false)
-  })
+    const records = await listDiagnosisRecords()
 
-  it('迁移缺少 v3 字段的早期记录时补齐安全默认值', () => {
-    const migrated = migrateDiagnosisRecord({
-      id: 'legacy-minimal',
-      title: '',
-      createdAt: '2026-05-24T00:00:00.000Z',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      state: {
-        phase: 'done' as StoreExamState['phase'],
-        documentContent: '旧材料',
-        nodes: [],
-        currentNodeIndex: 0,
-        nodeConversations: [],
-        currentQuestion: '',
-        report: null,
-        error: '旧运行态错误',
-      },
-    })
-
-    expect(migrated.schemaVersion).toBe(LOCAL_DIAGNOSIS_SCHEMA_VERSION)
-    expect(migrated.title).toBe('当前诊断')
-    expect(migrated.state.phase).toBe('done')
-    expect(migrated.state.nodeLevelStates).toEqual({})
-    expect(migrated.state.nodePathStates).toEqual({})
-    expect(migrated.state.reportStatus).toBe('idle')
-    expect(restorePersistedDiagnosisState(migrated.state).phase).toBe('reviewing')
+    expect(records.map((record) => record.id)).toEqual(['current'])
+    await expect(getDiagnosisRecord('legacy')).resolves.toBeUndefined()
   })
 })

@@ -4,7 +4,6 @@ import type { Dispatch } from 'react'
 import type { Action, StoreExamState } from '@/store/examStore'
 import type { CognitiveLevel, KnowledgeNode, NodeLevelState } from '@/lib/types'
 import {
-  formatPathProgress,
   getLevelStatusClass,
   getLevelStatusLabel,
   levelLabels,
@@ -15,7 +14,6 @@ export function DiagnosticPanel({
   dispatch,
   currentNode,
   currentLevelStates,
-  currentPathState,
   hasActiveDiagnosis,
   currentScore,
   completedNodeCount,
@@ -27,7 +25,6 @@ export function DiagnosticPanel({
   dispatch: Dispatch<Action>
   currentNode: KnowledgeNode | undefined
   currentLevelStates: NodeLevelState[]
-  currentPathState: StoreExamState['nodePathStates'][string] | undefined
   hasActiveDiagnosis: boolean
   currentScore: number
   completedNodeCount: number
@@ -80,22 +77,8 @@ export function DiagnosticPanel({
           <p className="mt-2 text-sm leading-6 text-slate-700">
             {currentNode
               ? `围绕“${currentNode.name}”完成 ${levelLabels[state.currentLevel]} 层级判断。`
-              : '上传或粘贴材料后，系统会先抽取知识节点。'}
+              : '上传材料后，系统会先抽取知识节点。'}
           </p>
-        </section>
-
-        <section className="rounded-3xl bg-slate-50 p-4">
-          <p className="text-xs font-semibold text-slate-400">路径状态</p>
-          <div className="mt-3 space-y-2 text-sm text-slate-700">
-            <div className="flex justify-between">
-              <span>快速路径</span>
-              <span>{formatPathProgress(currentPathState?.quickPath)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>深入路径</span>
-              <span>{formatPathProgress(currentPathState?.deepPath)}</span>
-            </div>
-          </div>
         </section>
 
         <details className="rounded-3xl bg-slate-50 p-4">

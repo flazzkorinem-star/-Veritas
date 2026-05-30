@@ -52,9 +52,7 @@ export default function ExamPage() {
               hasActiveDiagnosis={workspace.hasActiveDiagnosis}
               isBusy={workspace.isBusy}
               actionDisabled={workspace.actionDisabled}
-              waitingForDeepDiveChoice={workspace.waitingForDeepDiveChoice}
               waitingForReportRetry={workspace.waitingForReportRetry}
-              answerChoicePending={workspace.answerChoicePending}
               retryQuestionRequest={workspace.retryQuestionRequest}
               retryReportConversations={workspace.retryReportConversations}
               analyzeWarning={workspace.analyzeWarning}
@@ -63,14 +61,9 @@ export default function ExamPage() {
               setTextAnswer={workspace.setTextAnswer}
               historyEndRef={workspace.historyEndRef}
               fileInputRef={workspace.fileInputRef}
-              nextSuitableLevel={workspace.nextSuitableLevel}
               onSubmit={workspace.handleSubmit}
               onHint={workspace.handleHint}
               onAnswer={workspace.handleAnswer}
-              onSimilarQuestion={workspace.handleSimilarQuestion}
-              onSkipLevel={workspace.handleSkipLevel}
-              onCompleteNode={workspace.handleCompleteNode}
-              onEnterDeepPath={workspace.handleEnterDeepPath}
               onRetryQuestion={workspace.handleRetryQuestion}
               onRetryReport={workspace.handleRetryReport}
               onMaterialFile={workspace.handleMaterialFile}
@@ -84,7 +77,6 @@ export default function ExamPage() {
           dispatch={workspace.dispatch}
           currentNode={workspace.currentNode}
           currentLevelStates={workspace.currentLevelStates}
-          currentPathState={workspace.currentPathState}
           hasActiveDiagnosis={workspace.hasActiveDiagnosis}
           currentScore={workspace.currentScore}
           completedNodeCount={workspace.completedNodeCount}

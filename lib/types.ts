@@ -1,13 +1,8 @@
-// Legacy mastery level retained for old score helper tests.
-export type MasteryLevel = 'mastered' | 'developing' | 'needs_work'
-
 export type CognitiveLevel =
   | 'memory'
   | 'understanding'
   | 'application'
   | 'analysis'
-  | 'evaluation'
-  | 'creation'
 
 export type LevelStatus =
   | 'not_started'
@@ -15,7 +10,6 @@ export type LevelStatus =
   | 'passed'
   | 'answer_assisted'
   | 'failed'
-  | 'not_applicable'
 
 export type SupportKind = 'hint' | 'answer' | 'analogy'
 
@@ -38,7 +32,6 @@ export interface NodeLevelState {
 export type QuestionNextAction =
   | 'continue_current_level'
   | 'advance_next_level'
-  | 'offer_deep_dive'
   | 'complete_node'
 
 // A knowledge concept extracted from the user's document
@@ -47,7 +40,6 @@ export interface KnowledgeNode {
   name: string
   context: string // one sentence: how this concept appears in the document
   sourceExcerpt: string // exact excerpt from the source material supporting this node
-  suitableLevels?: CognitiveLevel[]
   priorityReason?: string
   pinned?: boolean
 }
