@@ -1,7 +1,6 @@
 import OpenAI from 'openai'
 
 export const MODEL_FAST = process.env.LLM_MODEL_FAST || 'deepseek-v4-flash'
-export const MODEL_SMART = process.env.LLM_MODEL_SMART || 'deepseek-v4-pro'
 
 let client: OpenAI | null = null
 

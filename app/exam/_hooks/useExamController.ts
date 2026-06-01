@@ -123,7 +123,6 @@ export function useExamController() {
     isHydrated,
     textAnswer,
     setTextAnswer,
-    submitting,
     historyEndRef,
     fileInputRef,
     openMenu,

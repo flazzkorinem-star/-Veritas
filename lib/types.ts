@@ -59,8 +59,7 @@ export interface NodeConversation {
 
 // Agent 2 response
 export interface QuestionResponse {
-  question: string
-  reply?: string
+  reply: string
   currentLevel?: CognitiveLevel
   levelPassed?: boolean
   nextAction?: QuestionNextAction
@@ -104,7 +103,6 @@ export interface ExamState {
   nodes: KnowledgeNode[]
   currentNodeIndex: number
   nodeConversations: NodeConversation[]
-  currentQuestion: string
   report: ExamReport | null
   error: string | null
 }

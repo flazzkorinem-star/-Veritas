@@ -7,7 +7,6 @@ import { loadFromSession, saveToSession } from './examSession'
 
 export { initialState, type Action, type StoreExamState } from './examState'
 export { reducer } from './examReducer'
-export { getDialogueStatus } from './examStateHelpers'
 
 const ExamContext = createContext<{
   state: StoreExamState

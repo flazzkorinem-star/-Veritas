@@ -118,9 +118,6 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       }
     }
 
-    case 'SET_QUESTION':
-      return { ...state, currentQuestion: action.question }
-
     case 'ADD_TURN': {
       const updated = action.nodeId
         ? appendTurnToNodeConversationById(state.nodeConversations, action.nodeId, action.turn)
@@ -150,7 +147,6 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
         currentNodeIndex: nextIndex,
         currentNodeId: nextNodeId,
         currentLevel: 'memory',
-        currentQuestion: '',
         currentAgentResponse: null,
       }
     }
@@ -197,7 +193,6 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       let nextState: StoreExamState = {
         ...state,
         currentAgentResponse: isCurrentNode ? response : state.currentAgentResponse,
-        currentQuestion: isCurrentNode ? response.reply ?? response.question : state.currentQuestion,
         currentLevel: isCurrentNode ? response.currentLevel ?? state.currentLevel : state.currentLevel,
       }
       const nodeId = targetNodeId

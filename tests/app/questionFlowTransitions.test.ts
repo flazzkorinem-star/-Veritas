@@ -13,7 +13,6 @@ const requestNode: KnowledgeNode = {
 
 function makeResponse(overrides: Partial<StructuredQuestionResponse> = {}): StructuredQuestionResponse {
   return {
-    question: '什么是 RAG？',
     reply: '回答得不错。',
     currentLevel: 'memory',
     passedCurrentLevel: true,

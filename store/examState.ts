@@ -12,7 +12,6 @@ import type {
   SupportRecord,
 } from '@/lib/types'
 
-export type DialogueStatus = 'idle' | 'agent_replied' | 'node_complete'
 export type ReportStatus = 'idle' | 'generating' | 'ready' | 'stale' | 'failed'
 
 export type AgentResponseV3 = QuestionResponse & {
@@ -50,7 +49,6 @@ export const initialState: StoreExamState = {
   nodes: [],
   currentNodeIndex: 0,
   nodeConversations: [],
-  currentQuestion: '',
   report: null,
   error: null,
   currentNodeId: null,
@@ -75,7 +73,6 @@ export type Action =
   | { type: 'UPDATE_NODE_NAME'; nodeId: string; name: string }
   | { type: 'TOGGLE_NODE_PIN'; nodeId: string }
   | { type: 'DELETE_NODE'; nodeId: string }
-  | { type: 'SET_QUESTION'; question: string }
   | { type: 'ADD_TURN'; turn: ConversationTurn; nodeId?: string }
   | { type: 'NEXT_NODE'; fromNodeId?: string }
   | { type: 'SET_CURRENT_LEVEL'; level: CognitiveLevel; nodeId?: string }

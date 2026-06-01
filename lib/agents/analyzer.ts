@@ -69,7 +69,7 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
 
       const name = readString(n.name)
       const context = readString(n.context)
-      const sourceExcerpt = readString(n.sourceExcerpt) || readString(n.evidence)
+      const sourceExcerpt = readString(n.sourceExcerpt)
       const priorityReason = readString(n.priorityReason)
 
       if (!name || !context || !sourceExcerpt || !priorityReason) {

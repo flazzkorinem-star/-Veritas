@@ -1,6 +1,6 @@
 # Veritas 代码地图
 
-> 只做代码导航与模块边界。产品规格看 `docs/design-guide.md`，工作规则看 `AGENTS.md`，本文件不复述这两者；代码与规格的差距记在 `自检清单.md`，也不在这里。
+> 只做代码导航与模块边界。产品规格看 `docs/design-guide.md`，工作规则看 `AGENTS.md`，本文件不复述这两者。
 > 最后对照真实代码：2026-05-29
 
 ## 依赖方向（单向）
@@ -36,9 +36,9 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 
 ## lib/agents/（LLM 调用 + 输出清洗，唯一允许清洗的地方）
 
-- `analyzer.ts` — Agent 1 抽节点：最多 8 个、过滤非法字段、归一化层级。
+- `analyzer.ts` — Agent 1 抽节点：最多 8 个、过滤非法字段。
 - `questioner.ts` — Agent 2 分层对话：system prompt + LLM 输出解析 + 朴素 fallback。
-- `evaluator.ts` — Agent 3 报告：过滤伪造原话与流程控制文本，用本地分覆盖模型分。
+- `evaluator.ts` — Agent 3 报告：过滤伪造原话，用本地分覆盖模型分。
 
 ## app/api/（薄转发层，不做清洗）
 

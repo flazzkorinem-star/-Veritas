@@ -14,7 +14,6 @@ Required `.env.local` keys:
 DEEPSEEK_API_KEY=<secret>
 LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL_FAST=<confirmed fast model>
-LLM_MODEL_SMART=<confirmed smart model>
 ```
 
 Do not print, commit, or rewrite `.env.local`.

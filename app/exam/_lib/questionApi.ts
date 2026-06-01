@@ -11,7 +11,7 @@ function normalizeQuestionResponse(
   fallbackLevel: CognitiveLevel,
   conversationTurns: Turn[]
 ): StructuredQuestionResponse {
-  const reply = (data.reply ?? data.question)?.trim() ?? ''
+  const reply = data.reply?.trim() ?? ''
   const passedCurrentLevel = data.passedCurrentLevel ?? data.levelPassed
   if (!reply || !data.nextAction || typeof passedCurrentLevel !== 'boolean') {
     throw new Error('服务器返回的数据不完整，请稍后重试')
@@ -19,7 +19,6 @@ function normalizeQuestionResponse(
 
   const response: StructuredQuestionResponse = {
     ...data,
-    question: reply,
     reply,
     currentLevel: data.currentLevel ?? fallbackLevel,
     passedCurrentLevel,

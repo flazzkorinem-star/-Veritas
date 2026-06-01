@@ -19,9 +19,6 @@ const LEVELS: CognitiveLevel[] = [
 ]
 
 const SUPPORT_KINDS: SupportKind[] = ['hint', 'answer', 'analogy']
-const NON_DIAGNOSTIC_USER_MESSAGES = new Set([
-  '用户未能作答',
-])
 
 const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成器。
 你只根据材料证据、用户真实对话、层级状态和支持记录生成报告。
@@ -141,7 +138,7 @@ function getUserTurns(conversation?: NodeConversation): string[] {
   return conversation?.turns
     .filter((turn) => turn.role === 'user')
     .map((turn) => turn.content.trim())
-    .filter((turn) => Boolean(turn) && !NON_DIAGNOSTIC_USER_MESSAGES.has(turn)) ?? []
+    .filter((turn) => Boolean(turn)) ?? []
 }
 
 function getStateQuotes(states: NodeLevelState[]): string[] {

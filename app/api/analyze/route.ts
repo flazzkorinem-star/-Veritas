@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof FileContentError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
-    if (error instanceof Error && error.message.includes('no knowledge nodes')) {
+    if (error instanceof Error && error.message.includes('knowledge nodes')) {
       return NextResponse.json(
         { error: '内容不足以生成检验，请补充更多内容' },
         { status: 422 }

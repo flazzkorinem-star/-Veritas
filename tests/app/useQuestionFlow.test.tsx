@@ -35,7 +35,6 @@ function createDeferred<T>() {
 describe('useQuestionFlow', () => {
   it('先显示用户气泡，再请求 Agent 回复', async () => {
     const deferred = createDeferred({
-      question: '你说得接近了。',
       reply: '你说得接近了。',
       currentLevel: 'memory' as const,
       passedCurrentLevel: true,
@@ -108,7 +107,6 @@ describe('useQuestionFlow', () => {
     )
 
     deferred.resolve({
-      question: '你说得接近了。',
       reply: '你说得接近了。',
       currentLevel: 'memory',
       passedCurrentLevel: true,
@@ -124,7 +122,6 @@ describe('useQuestionFlow', () => {
     vi.mocked(requestQuestion)
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce({
-        question: '继续聊。',
         reply: '继续聊。',
         currentLevel: 'memory',
         passedCurrentLevel: false,
@@ -207,7 +204,6 @@ describe('useQuestionFlow', () => {
     ['handleAnswer', '给我答案', 'answer'],
   ] as const)('%s 会先显示用户气泡，再请求 Agent 回复', async (handlerName, userText, requestType) => {
     const deferred = createDeferred({
-      question: '继续聊。',
       reply: '继续聊。',
       currentLevel: 'memory' as const,
       passedCurrentLevel: false,
@@ -278,7 +274,6 @@ describe('useQuestionFlow', () => {
     )
 
     deferred.resolve({
-      question: '继续聊。',
       reply: '继续聊。',
       currentLevel: 'memory',
       passedCurrentLevel: false,
@@ -293,7 +288,6 @@ describe('useQuestionFlow', () => {
   it('非末层 answer：标记 answer_assisted、推进下一层并再请求一次开场问题', async () => {
     vi.mocked(requestQuestion)
       .mockResolvedValueOnce({
-        question: '答案：RAG 先检索再生成。',
         reply: '答案：RAG 先检索再生成。',
         currentLevel: 'memory',
         passedCurrentLevel: false,
@@ -304,7 +298,6 @@ describe('useQuestionFlow', () => {
         supportRecords: [{ kind: 'answer', level: 'memory', question: 'RAG 是什么？', content: 'RAG 先检索再生成。' }],
       })
       .mockResolvedValueOnce({
-        question: '用自己的话说说 RAG 解决了什么问题？',
         reply: '用自己的话说说 RAG 解决了什么问题？',
         currentLevel: 'understanding',
         passedCurrentLevel: false,
@@ -358,7 +351,6 @@ describe('useQuestionFlow', () => {
 
   it('末层 analysis answer：完成节点并用含 answer_assisted 的层级状态生成报告', async () => {
     vi.mocked(requestQuestion).mockResolvedValueOnce({
-      question: '答案：注意力按相关性分配权重。',
       reply: '答案：注意力按相关性分配权重。',
       currentLevel: 'analysis',
       passedCurrentLevel: false,

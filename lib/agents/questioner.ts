@@ -192,7 +192,6 @@ function normalizeQuestionerResponse(
       }))
 
   const response: DiagnosticQuestionResponse = {
-    question: reply,
     reply,
     currentLevel,
     passedCurrentLevel,
@@ -215,7 +214,6 @@ export function parseQuestionerResponse(raw: string): Partial<DiagnosticQuestion
 
   const obj = parsed as Record<string, unknown>
   return {
-    question: typeof obj.question === 'string' ? obj.question : undefined,
     reply: typeof obj.reply === 'string'
       ? obj.reply
       : typeof obj.question === 'string'

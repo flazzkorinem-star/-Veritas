@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { KnowledgeNode, SupportRecord } from '../../lib/types'
-import { getDialogueStatus, initialState, reducer } from '../../store/examStore'
+import { initialState, reducer } from '../../store/examStore'
 
 const nodes: KnowledgeNode[] = [
   {
@@ -32,7 +32,6 @@ describe('exam store v3 state', () => {
     expect(initialState.nodeLevelStates).toEqual({})
     expect(initialState.nodePathStates).toEqual({})
     expect(initialState.currentAgentResponse).toBeNull()
-    expect(getDialogueStatus(initialState.currentAgentResponse)).toBe('idle')
     expect(initialState.reportStatus).toBe('idle')
   })
 
@@ -139,12 +138,11 @@ describe('exam store v3 state', () => {
     expect(updated.nodeLevelStates['node-1'].find((item) => item.level === 'application')?.supportRecords).toEqual([records[2]])
   })
 
-  it('stores structured Agent 2 response and keeps currentQuestion bridged', () => {
+  it('stores structured Agent 2 response', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
     const updated = reducer(withNodes, {
       type: 'SET_AGENT_RESPONSE',
       response: {
-        question: 'RAG 的应用边界是什么？',
         reply: '这个回答已经到应用层了，我们接着看边界。',
         currentLevel: 'application',
         levelPassed: true,
@@ -153,9 +151,7 @@ describe('exam store v3 state', () => {
       },
     })
 
-    expect(updated.currentQuestion).toBe('这个回答已经到应用层了，我们接着看边界。')
     expect(updated.currentAgentResponse?.nextAction).toBe('advance_next_level')
-    expect(getDialogueStatus(updated.currentAgentResponse)).toBe('agent_replied')
     expect(updated.currentAgentResponse?.levelPassed).toBe(true)
     expect(updated.currentAgentResponse?.blindSpotSummary).toBe('还需要区分适用和不适用场景。')
     expect(updated.nodeLevelStates['node-1']).toContainEqual({
@@ -177,7 +173,6 @@ describe('exam store v3 state', () => {
       type: 'SET_AGENT_RESPONSE',
       nodeId: 'node-1',
       response: {
-        question: 'RAG 是什么？',
         reply: '先确认 RAG 的基本定义。',
         currentLevel: 'memory',
         levelPassed: false,

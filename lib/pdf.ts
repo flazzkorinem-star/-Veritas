@@ -1,15 +1,16 @@
 
+import {
+  EXPECTED_MIME,
+  getFileExtension,
+  isTextMime,
+  MAX_FILE_BYTES,
+  SUPPORTED_EXTENSIONS,
+  TEXT_EXTENSIONS,
+} from './fileRules'
+
 export const MAX_CONTENT_CHARS = 10_000
-export const MAX_FILE_BYTES = 10 * 1024 * 1024
 export const MIN_TEXT_CHARS = 100
 export const CONTENT_LENGTH_WARNING = '文件内容较长，当前版本可能无法覆盖全文重点'
-
-const SUPPORTED_EXTENSIONS = ['pdf', 'docx', 'pptx', 'txt', 'md', 'markdown']
-const EXPECTED_MIME: Record<string, string[]> = {
-  pdf: ['application/pdf'],
-  docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-  pptx: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
-}
 
 export class FileContentError extends Error {
   constructor(message: string, public status = 400) {
@@ -86,7 +87,7 @@ function validateUploadedFile(file: UploadedFileLike): string {
     throw new FileContentError('文件过大，请压缩后重新上传')
   }
 
-  const extension = getExtension(file.name)
+  const extension = getFileExtension(file.name)
   if (!SUPPORTED_EXTENSIONS.includes(extension)) {
     throw new FileContentError('文件读取失败，请检查文件格式是否正确')
   }
@@ -95,23 +96,11 @@ function validateUploadedFile(file: UploadedFileLike): string {
   if (EXPECTED_MIME[extension] && mime && !EXPECTED_MIME[extension].includes(mime)) {
     throw new FileContentError('文件读取失败，请检查文件格式是否正确')
   }
-  if (['txt', 'md', 'markdown'].includes(extension) && mime && !isTextMime(mime)) {
+  if (TEXT_EXTENSIONS.includes(extension) && mime && !isTextMime(mime)) {
     throw new FileContentError('文件读取失败，请检查文件格式是否正确')
   }
 
   return extension
-}
-
-function getExtension(fileName: string): string {
-  const parts = fileName.toLowerCase().split('.')
-  return parts.length > 1 ? parts[parts.length - 1] : ''
-}
-
-function isTextMime(mime: string): boolean {
-  return mime.startsWith('text/')
-    || mime === 'application/octet-stream'
-    || mime === 'application/markdown'
-    || mime === 'application/x-markdown'
 }
 
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {

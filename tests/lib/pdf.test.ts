@@ -23,8 +23,8 @@ function makeFileFromBuffer(name: string, buffer: Buffer, type: string) {
     name,
     type,
     size: buffer.length,
-    async arrayBuffer() {
-      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+    async arrayBuffer(): Promise<ArrayBuffer> {
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
     },
   }
 }

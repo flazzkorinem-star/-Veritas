@@ -2,7 +2,6 @@ import {
   CognitiveLevel,
   ConversationTurn,
   ExamPhase,
-  LevelStatus,
   NodeConversation,
   NodeLevelState,
   QuestionNextAction,
@@ -45,21 +44,11 @@ export function appendTurnToNodeConversationById(
   })
 }
 
-export function buildNodeTransition(currentNodeName: string, nextNodeName: string): string {
-  return `好，关于 ${currentNodeName} 我们先聊到这里。我们来看下一个：${nextNodeName}……`
-}
-
 export function buildNodeCompletion(currentNodeName: string, nextNodeName?: string): string {
   if (nextNodeName) {
     return `「${currentNodeName}」这个知识点已完成。我们来看下一个：${nextNodeName}。`
   }
   return `「${currentNodeName}」这个知识点已完成。所有目标知识点都完成了，我来生成诊断报告。`
-}
-
-export function appendTranscript(current: string, transcript: string): string {
-  const next = transcript.trim()
-  if (!next) return current
-  return current ? `${current}${next}` : next
 }
 
 export function shouldRequestInitialQuestion({
@@ -141,14 +130,4 @@ export function createSupportRecord({
     content,
     ...(createdAt ? { createdAt } : {}),
   }
-}
-
-export function updateLevelStatus(
-  states: NodeLevelState[],
-  level: CognitiveLevel,
-  status: LevelStatus
-): NodeLevelState[] {
-  return states.map((state) => (
-    state.level === level ? { ...state, status } : state
-  ))
 }

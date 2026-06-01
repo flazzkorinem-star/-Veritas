@@ -1,10 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import {
-  appendTranscript,
   appendTurnToNodeConversations,
   appendTurnToNodeConversationById,
-  buildNodeTransition,
   buildNodeCompletion,
   createSupportRecord,
   createInitialLevelStates,
@@ -44,23 +42,7 @@ describe('appendTurnToNodeConversations', () => {
   })
 })
 
-describe('appendTranscript', () => {
-  it('appends a new voice transcript instead of replacing the existing answer', () => {
-    expect(appendTranscript('我不知道', '我再补充一点')).toBe('我不知道我再补充一点')
-  })
-
-  it('uses the transcript directly when the answer is empty', () => {
-    expect(appendTranscript('', '第一段回答')).toBe('第一段回答')
-  })
-})
-
-describe('buildNodeTransition', () => {
-  it('builds the fixed neutral transition text between nodes', () => {
-    expect(buildNodeTransition('注意力机制', '残差连接')).toBe(
-      '好，关于 注意力机制 我们先聊到这里。我们来看下一个：残差连接……'
-    )
-  })
-
+describe('node transition helpers', () => {
   it('can append a turn by node id even when the selected index changes', () => {
     const conversations: NodeConversation[] = [
       {

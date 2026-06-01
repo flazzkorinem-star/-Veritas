@@ -33,7 +33,7 @@ AI 编码代理在本仓库的作业契约。所有输出使用中文。本文�
 - **删除**：禁止批量删除。不用 `del /s`、`rd /s`、`rmdir /s`、`Remove-Item -Recurse`、`rm -rf`。一次只删一个明确路径：`Remove-Item "C:\path\to\file.txt"`。要批量删就停下，让用户手动做。
 - **密钥**：不修改 `.env.local`，不打印密钥真实值。
 - **依赖**：保留 `@napi-rs/canvas`（`pdf-parse` 在 Vercel Serverless 需要它）。
-- **环境变量**：`DEEPSEEK_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL_FAST`、`LLM_MODEL_SMART`。
+- **环境变量**：`DEEPSEEK_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL_FAST`。
 
 ## 验证（声称完成前必须跑）
 

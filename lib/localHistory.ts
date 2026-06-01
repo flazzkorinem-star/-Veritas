@@ -16,7 +16,6 @@ export interface PersistedDiagnosisState {
   nodes: StoreExamState['nodes']
   currentNodeIndex: StoreExamState['currentNodeIndex']
   nodeConversations: StoreExamState['nodeConversations']
-  currentQuestion: StoreExamState['currentQuestion']
   report: StoreExamState['report']
   currentNodeId: StoreExamState['currentNodeId']
   currentLevel: StoreExamState['currentLevel']
@@ -49,7 +48,6 @@ export function toPersistedDiagnosisState(state: Partial<StoreExamState>): Persi
     nodes: state.nodes ?? [],
     currentNodeIndex: state.currentNodeIndex ?? 0,
     nodeConversations: state.nodeConversations ?? [],
-    currentQuestion: state.currentQuestion ?? '',
     report: state.report ?? null,
     currentNodeId: state.currentNodeId ?? state.nodes?.[state.currentNodeIndex ?? 0]?.id ?? null,
     currentLevel: state.currentLevel ?? 'memory',

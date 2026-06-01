@@ -5,17 +5,10 @@ import type {
   LevelStatus,
   NodeConversation,
   NodeLevelState,
-  QuestionResponse,
   SupportRecord,
 } from '@/lib/types'
 import { createInitialLevelStates } from '@/lib/examFlow'
-import { initialState, type NodePathState, type StoreExamState, type DialogueStatus } from './examState'
-
-export function getDialogueStatus(response: QuestionResponse | null): DialogueStatus {
-  if (!response) return 'idle'
-  if (response.nextAction === 'complete_node') return 'node_complete'
-  return 'agent_replied'
-}
+import { initialState, type NodePathState, type StoreExamState } from './examState'
 
 export function getCurrentNodeId(state: StoreExamState): string | null {
   return state.currentNodeId ?? state.nodes[state.currentNodeIndex]?.id ?? null

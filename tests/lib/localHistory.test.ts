@@ -86,7 +86,6 @@ function makeState(overrides: Partial<StoreExamState> = {}): StoreExamState {
     createdAt: '2026-05-24T00:00:00.000Z',
     updatedAt: '2026-05-24T00:00:00.000Z',
     currentAgentResponse: {
-      question: '运行态问题',
       reply: '运行态回复',
     },
     error: '运行态错误',
