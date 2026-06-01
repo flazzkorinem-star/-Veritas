@@ -22,9 +22,8 @@ export function ReportModal({
       <div className="max-h-full w-full max-w-4xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
         <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
           <div>
-            <p className="text-xs font-semibold text-slate-400">诊断报告</p>
-            <h2 className="mt-1 text-2xl font-bold text-slate-900">{report.overallScore} / 100</h2>
-            <p className="mt-2 text-sm text-slate-500">{report.summary}</p>
+            <p className="text-xs font-semibold text-slate-400">诊断报告 · 主要盲点</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-900">{report.summary}</h2>
             {reportStatus === 'stale' && (
               <p className="mt-2 text-xs font-semibold text-amber-600">有新对话，报告可以更新。</p>
             )}

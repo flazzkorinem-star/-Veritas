@@ -8,7 +8,7 @@ import {
   NodeLevelState,
   SupportKind,
 } from '../types'
-import { calculateOverallScore, calculateNodeScore } from '../score'
+import { calculateNodeScore } from '../score'
 import { extractJSON } from '../parseJSON'
 
 const LEVELS: CognitiveLevel[] = [
@@ -18,7 +18,7 @@ const LEVELS: CognitiveLevel[] = [
   'analysis',
 ]
 
-const SUPPORT_KINDS: SupportKind[] = ['hint', 'answer', 'analogy']
+const SUPPORT_KINDS: SupportKind[] = ['hint', 'answer']
 
 const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成器。
 你只根据材料证据、用户真实对话、层级状态和支持记录生成报告。
@@ -27,7 +27,7 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成�
 - 说明每个知识节点的层级通过情况。
 - 引用用户真实原话作为 evidenceQuotes；不能编造用户没说过的话。
 - 指出具体盲点，不写泛泛学习鸡汤。
-- 说明是否使用提示、答案、主动类比。
+- 说明是否使用提示、答案。
 - 给出正确理解和下一步怎么补。
 - 不把分数当作核心结论；即使你输出 score，也会被本地代码覆盖。
 - 不主动扩展材料外的新知识点作为诊断对象。
@@ -48,13 +48,12 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 3：个人化诊断报告生成�
       },
       "evidenceQuotes": ["用户说过的原话"],
       "blindSpot": "具体盲点",
-      "supportUsed": { "hint": false, "answer": false, "analogy": false },
+      "supportUsed": { "hint": false, "answer": false },
       "correctUnderstanding": "正确理解",
       "nextStep": "下一步怎么补",
       "score": 0
     }
-  ],
-  "overallScore": 0
+  ]
 }`
 
 export interface EvaluationInput {
@@ -73,7 +72,7 @@ function isLevelStatus(value: unknown): value is LevelStatus {
 }
 
 function emptySupportUsed(): Record<SupportKind, boolean> {
-  return { hint: false, answer: false, analogy: false }
+  return { hint: false, answer: false }
 }
 
 function getLevelStates(
@@ -240,7 +239,6 @@ export function parseEvaluatorResponse(
 
   return {
     nodes,
-    overallScore: calculateOverallScore(nodes),
     summary: typeof obj.summary === 'string' && obj.summary.trim()
       ? obj.summary.trim()
       : buildFallbackSummary(nodes),
@@ -272,7 +270,6 @@ function buildFallbackReport(input: EvaluationInput): ExamReport {
 
   return {
     nodes,
-    overallScore: calculateOverallScore(nodes),
     summary: buildFallbackSummary(nodes),
   }
 }

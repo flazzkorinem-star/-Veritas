@@ -70,7 +70,6 @@ const input = {
 function validRawReport(score = 999) {
   return JSON.stringify({
     summary: '主要盲点是能说出流程，但应用层需要答案辅助。',
-    overallScore: score,
     nodes: [
       {
         nodeId: 'rag',
@@ -87,7 +86,7 @@ function validRawReport(score = 999) {
           '这句话不是用户说的',
         ],
         blindSpot: '应用层需要答案辅助，不能独立说明怎么落地。',
-        supportUsed: { hint: false, answer: false, analogy: false },
+        supportUsed: { hint: false, answer: false },
         correctUnderstanding: 'RAG 是检索材料后，把材料作为上下文交给模型生成。',
         nextStep: '重新用客服场景说清检索、引用材料和生成回答三步。',
         score,
@@ -130,10 +129,9 @@ describe('parseEvaluatorResponse', () => {
     const report = parseEvaluatorResponse(validRawReport(999), input)
 
     expect(report.nodes[0].score).toBe(75)
-    expect(report.overallScore).toBe(75)
   })
 
-  it('提示、答案、主动类比记录会进入报告', () => {
+  it('提示、答案记录会进入报告', () => {
     const report = parseEvaluatorResponse(validRawReport(), {
       nodeConversations: conversations,
       nodeLevelStates: {
@@ -144,7 +142,6 @@ describe('parseEvaluatorResponse', () => {
             supportRecords: [
               { kind: 'hint', level: 'memory', question: 'q1', content: 'h' },
               { kind: 'answer', level: 'memory', question: 'q2', content: 'a' },
-              { kind: 'analogy', level: 'memory', question: 'q3', content: 'x' },
             ],
           },
         ],
@@ -154,7 +151,6 @@ describe('parseEvaluatorResponse', () => {
     expect(report.nodes[0].supportUsed).toEqual({
       hint: true,
       answer: true,
-      analogy: true,
     })
   })
 
@@ -171,7 +167,6 @@ describe('parseEvaluatorResponse', () => {
   it('模型缺字段时不编造盲点、正确理解或下一步', () => {
     const report = parseEvaluatorResponse(JSON.stringify({
       nodes: [{ nodeId: 'rag', nodeName: 'RAG', score: 999 }],
-      overallScore: 999,
       summary: '',
     }), {
       nodeConversations: conversations,
@@ -213,6 +208,5 @@ describe('evaluateConversations', () => {
     expect(chat).toHaveBeenCalledTimes(2)
     expect(report.nodes[0].nodeId).toBe('rag')
     expect(report.nodes[0].evidenceQuotes).toEqual([])
-    expect(report.overallScore).toBe(75)
   })
 })

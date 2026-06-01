@@ -16,7 +16,7 @@ function makeEvaluation(overrides: Partial<NodeEvaluation> = {}): NodeEvaluation
     },
     evidenceQuotes: [],
     blindSpot: '',
-    supportUsed: { hint: false, answer: false, analogy: false },
+    supportUsed: { hint: false, answer: false },
     correctUnderstanding: '',
     nextStep: '',
     score: 66,
@@ -25,6 +25,12 @@ function makeEvaluation(overrides: Partial<NodeEvaluation> = {}): NodeEvaluation
 }
 
 describe('ReportCard', () => {
+  it('shows the node score out of 100', () => {
+    render(<ReportCard evaluation={makeEvaluation({ score: 75 })} />)
+
+    expect(screen.getByText('75 / 100')).toBeInTheDocument()
+  })
+
   it('shows the source excerpt when evaluation includes material evidence', () => {
     render(<ReportCard evaluation={makeEvaluation()} />)
 
@@ -38,7 +44,7 @@ describe('ReportCard', () => {
         evaluation={makeEvaluation({
           evidenceQuotes: ['RAG 是先找资料，再结合资料回答。'],
           blindSpot: '应用层还需要把流程放进具体场景。',
-          supportUsed: { hint: true, answer: false, analogy: true },
+          supportUsed: { hint: true, answer: false },
           correctUnderstanding: 'RAG 是检索材料后，把材料作为上下文交给模型生成。',
           nextStep: '用客服场景重新说明检索、引用材料和生成回答三步。',
         })}
@@ -48,7 +54,7 @@ describe('ReportCard', () => {
     expect(screen.getByText(/记忆：通过/)).toBeInTheDocument()
     expect(screen.getByText('应用层还需要把流程放进具体场景。')).toBeInTheDocument()
     expect(screen.getByText(/RAG 是先找资料/)).toBeInTheDocument()
-    expect(screen.getByText('提示 / 主动类比')).toBeInTheDocument()
+    expect(screen.getByText('提示')).toBeInTheDocument()
     expect(screen.getByText(/检索材料后/)).toBeInTheDocument()
     expect(screen.getByText(/客服场景/)).toBeInTheDocument()
   })

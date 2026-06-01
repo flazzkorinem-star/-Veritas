@@ -106,7 +106,7 @@ describe('exam store v3 state', () => {
     })
   })
 
-  it('records hint, answer, and analogy support events', () => {
+  it('records hint and answer support events', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
     const records: SupportRecord[] = [
       {
@@ -121,12 +121,6 @@ describe('exam store v3 state', () => {
         question: '为什么需要 RAG？',
         content: 'RAG 用检索片段补充上下文。',
       },
-      {
-        kind: 'analogy',
-        level: 'application',
-        question: '什么时候使用 RAG？',
-        content: '可以类比开卷查资料。',
-      },
     ]
     const updated = records.reduce(
       (state, record) => reducer(state, { type: 'RECORD_SUPPORT', record }),
@@ -135,7 +129,6 @@ describe('exam store v3 state', () => {
 
     expect(updated.nodeLevelStates['node-1'].find((item) => item.level === 'memory')?.supportRecords).toEqual([records[0]])
     expect(updated.nodeLevelStates['node-1'].find((item) => item.level === 'understanding')?.supportRecords).toEqual([records[1]])
-    expect(updated.nodeLevelStates['node-1'].find((item) => item.level === 'application')?.supportRecords).toEqual([records[2]])
   })
 
   it('stores structured Agent 2 response', () => {
@@ -246,7 +239,6 @@ describe('exam store v3 state', () => {
     const withReport = reducer(withNodes, {
       type: 'SET_REPORT',
       report: {
-        overallScore: 80,
         summary: '诊断报告',
         nodes: [],
       },

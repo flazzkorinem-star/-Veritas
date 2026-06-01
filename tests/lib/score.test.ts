@@ -1,22 +1,10 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import {
-  calculateOverallScore,
   calculateNodeScore,
   isScoredLevelPass,
 } from '../../lib/score'
-import { NodeEvaluation, NodeLevelState } from '../../lib/types'
-
-describe('calculateOverallScore', () => {
-  it('averages node scores', () => {
-    const nodes = [
-      { score: 100 } as NodeEvaluation,
-      { score: 60 } as NodeEvaluation,
-      { score: 40 } as NodeEvaluation,
-    ]
-    expect(calculateOverallScore(nodes)).toBe(67)
-  })
-})
+import { NodeLevelState } from '../../lib/types'
 
 describe('calculateNodeScore', () => {
   it('scores each of the four levels as 25, summing to 100 when all pass', () => {
@@ -63,7 +51,7 @@ describe('calculateNodeScore', () => {
     expect(calculateNodeScore(states)).toBe(75)
   })
 
-  it('keeps score for hint-assisted and analogy-assisted passes', () => {
+  it('keeps score for hint-assisted passes', () => {
     expect(calculateNodeScore([
       {
         level: 'memory',
@@ -82,10 +70,10 @@ describe('calculateNodeScore', () => {
         status: 'passed',
         supportRecords: [
           {
-            kind: 'analogy',
+            kind: 'hint',
             level: 'understanding',
             question: '为什么需要 RAG？',
-            content: '可以类比开卷查资料。',
+            content: '先想检索和生成的分工。',
           },
         ],
       },

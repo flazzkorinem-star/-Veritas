@@ -11,7 +11,7 @@ export type LevelStatus =
   | 'answer_assisted'
   | 'failed'
 
-export type SupportKind = 'hint' | 'answer' | 'analogy'
+export type SupportKind = 'hint' | 'answer'
 
 export interface SupportRecord {
   kind: SupportKind
@@ -83,7 +83,6 @@ export interface NodeEvaluation {
 
 // Full evaluation report from Agent 3
 export interface ExamReport {
-  overallScore: number
   nodes: NodeEvaluation[]
   summary: string
 }

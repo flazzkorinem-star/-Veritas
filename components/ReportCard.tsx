@@ -52,7 +52,6 @@ function formatSupportUsed(supportUsed: NodeEvaluation['supportUsed']): string {
   const used = [
     supportUsed.hint ? '提示' : '',
     supportUsed.answer ? '答案' : '',
-    supportUsed.analogy ? '主动类比' : '',
   ].filter(Boolean)
 
   return used.length > 0 ? used.join(' / ') : '未使用'
@@ -72,6 +71,11 @@ export default function ReportCard({ evaluation }: ReportCardProps) {
           <span className={`w-2 h-2 rounded-full ${dot}`} />
           {label}
         </span>
+      </div>
+
+      <div className="bg-white/70 rounded-xl p-3">
+        <p className="text-xs font-medium text-gray-500 mb-1">节点得分</p>
+        <p className="text-sm text-gray-800">{evaluation.score} / 100</p>
       </div>
 
       <div className="bg-white/70 rounded-xl p-3">
