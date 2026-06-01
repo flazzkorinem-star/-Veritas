@@ -27,12 +27,12 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一�
 - 只围绕材料中出现或明确暗示的概念
 - 不生成对话问题，不评价用户，不扩展成课程大纲
 - 材料很大时也只保留最值得诊断的重点，不超过 8 个；材料不足以支撑高价值节点时可以少于 8 个，哪怕只有 1 个
+- 按诊断价值从高到低排列输出：最值得优先诊断的节点放在最前面
 
 用JSON格式回复：
 {
   "nodes": [
     {
-      "id": "唯一id",
       "name": "节点名称",
       "context": "一句话说明这个节点为什么值得诊断",
       "sourceExcerpt": "材料中能证明该节点的证据片段，直接引用1-3句话",
@@ -62,7 +62,7 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
 
   const nodes = obj.nodes
     .slice(0, 8)
-    .map((n) => {
+    .map((n): AnalyzerKnowledgeNode | null => {
       if (!isRecord(n)) {
         return null
       }
@@ -77,7 +77,9 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
       }
 
       return {
-        id: readString(n.id) || randomUUID(),
+        // id 是确定性标识，唯一性归代码：不读 LLM 的 id，始终生成，杜绝重复 id 导致
+        // nodeLevelStates 覆盖、按 id 写回对话串位。
+        id: randomUUID(),
         name,
         context,
         sourceExcerpt,

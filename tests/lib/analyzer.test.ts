@@ -55,7 +55,9 @@ describe('parseAnalyzerResponse', () => {
     const nodes = parseAnalyzerResponse(raw)
 
     expect(nodes).toHaveLength(8)
-    expect(nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8'])
+    expect(nodes.map((node) => node.name)).toEqual(
+      ['1', '2', '3', '4', '5', '6', '7', '8'].map((n) => `节点${n}`)
+    )
   })
 
   it('allows fewer nodes when the material only supports one high-value node', () => {
@@ -84,7 +86,7 @@ describe('parseAnalyzerResponse', () => {
     }))
 
     expect(nodes).toHaveLength(1)
-    expect(nodes[0].id).toBe('3')
+    expect(nodes[0].name).toBe('节点3')
   })
 
   it('keeps priorityReason from the analyzer response', () => {
@@ -97,6 +99,22 @@ describe('parseAnalyzerResponse', () => {
     }))
 
     expect(nodes[0].priorityReason).toBe('它连接定义、应用场景和常见误区，诊断价值高。')
+  })
+
+  it('id 始终由代码生成：忽略 LLM 给的 id 并保证唯一', () => {
+    const nodes = parseAnalyzerResponse(JSON.stringify({
+      nodes: [
+        validNode('dup', { name: 'A' }),
+        validNode('dup', { name: 'B' }),
+      ],
+    }))
+
+    expect(nodes).toHaveLength(2)
+    // 不保留 LLM 给的 id 字符串
+    expect(nodes.map((node) => node.id)).not.toContain('dup')
+    // 即便 LLM 给了重复 id，代码生成的 id 也互不相同
+    expect(nodes[0].id).not.toBe(nodes[1].id)
+    expect(nodes[0].id).toBeTruthy()
   })
 
   it('throws on invalid JSON', () => {

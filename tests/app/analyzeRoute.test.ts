@@ -69,4 +69,23 @@ describe('POST /api/analyze', () => {
     expect(data.nodes[0].sourceExcerpt).toBe('知识点的原文片段')
     expect(data.nodes[0].priorityReason).toBe('这个节点适合优先诊断')
   })
+
+  it('maps "no knowledge nodes" failures to 422 with a supplement-material prompt', async () => {
+    vi.mocked(extractUploadedFileText).mockResolvedValueOnce({
+      text: '内容太薄',
+      wasTrimmed: false,
+    })
+    vi.mocked(analyzeContent).mockRejectedValueOnce(
+      new Error('Analyzer response returned no usable knowledge nodes')
+    )
+
+    const formData = new FormData()
+    formData.append('file', new File(['内容太薄'], 'thin.md', { type: 'text/markdown' }))
+
+    const response = await POST(makeRequest(formData))
+    const data = await response.json()
+
+    expect(response.status).toBe(422)
+    expect(data.error).toBe('内容不足以生成检验，请补充更多内容')
+  })
 })

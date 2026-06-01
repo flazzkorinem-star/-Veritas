@@ -169,7 +169,8 @@ export function useQuestionFlow({
         await runFetch({
           userAnswer: '',
           requestType: 'normal',
-          levelOverride: response.nextLevel ?? getNextSuitableLevel(response.currentLevel) ?? response.currentLevel,
+          // 看答案后顺序进入下一层；层级只认顺序推进，不接受响应里的目标层级。
+          levelOverride: getNextSuitableLevel(response.currentLevel) ?? response.currentLevel,
           baseConversations: nextNodeConversationsWithAssistant,
         })
         return

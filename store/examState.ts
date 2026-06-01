@@ -17,7 +17,6 @@ export type ReportStatus = 'idle' | 'generating' | 'ready' | 'stale' | 'failed'
 export type AgentResponseV3 = QuestionResponse & {
   passedCurrentLevel?: boolean
   supportUsed?: SupportKind | 'none'
-  nextLevel?: CognitiveLevel
 }
 
 export interface NodePathState {

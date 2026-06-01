@@ -22,7 +22,8 @@ export function buildQuestionResponseActions({
     actions.push({
       type: 'SET_CURRENT_LEVEL',
       nodeId: requestNodeId,
-      level: response.nextLevel ?? getLevelAfterNextAction({
+      // 层级推进只认顺序：固定四层逐层前进，不接受响应里的目标层级，杜绝跳级。
+      level: getLevelAfterNextAction({
         currentLevel: response.currentLevel,
         nextAction: response.nextAction,
       }),

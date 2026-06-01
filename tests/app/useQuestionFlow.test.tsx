@@ -292,7 +292,6 @@ describe('useQuestionFlow', () => {
         currentLevel: 'memory',
         passedCurrentLevel: false,
         nextAction: 'advance_next_level',
-        nextLevel: 'understanding',
         blindSpotSummary: '没说清检索与生成的分工',
         supportUsed: 'answer',
         supportRecords: [{ kind: 'answer', level: 'memory', question: 'RAG 是什么？', content: 'RAG 先检索再生成。' }],

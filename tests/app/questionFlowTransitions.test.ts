@@ -43,24 +43,10 @@ describe('buildQuestionResponseActions', () => {
     expect(actions).toHaveLength(2)
   })
 
-  it('advance_next_level 用 response.nextLevel 推进层级', () => {
+  it('advance_next_level 只按固定四层顺序推进，不跳级', () => {
     const { actions } = build(makeResponse({
       nextAction: 'advance_next_level',
       currentLevel: 'memory',
-      nextLevel: 'application',
-    }))
-    expect(actions).toContainEqual({
-      type: 'SET_CURRENT_LEVEL',
-      nodeId: 'node-1',
-      level: 'application',
-    })
-  })
-
-  it('advance_next_level 缺 nextLevel 时回退到下一层', () => {
-    const { actions } = build(makeResponse({
-      nextAction: 'advance_next_level',
-      currentLevel: 'memory',
-      nextLevel: undefined,
     }))
     expect(actions).toContainEqual({
       type: 'SET_CURRENT_LEVEL',

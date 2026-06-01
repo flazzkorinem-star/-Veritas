@@ -34,7 +34,6 @@ export type DiagnosticQuestionResponse = Omit<QuestionResponse, 'levelPassed'> &
   nextAction: QuestionNextAction
   blindSpotSummary: string
   supportUsed: SupportUsed
-  nextLevel?: CognitiveLevel
 }
 
 const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：一个带着知识检验目标的家教。
@@ -66,13 +65,10 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 2：一个带着知识检验目�
   "reply": "展示给用户的自然语言回复",
   "currentLevel": "memory|understanding|application|analysis",
   "passedCurrentLevel": false,
-  "blindSpotSummary": "当前暴露出的盲点摘要，没有则写空字符串",
-  "supportUsed": "none|hint|answer|analogy",
-  "nextLevel": "可选，下一层级"
+  "blindSpotSummary": "当前暴露出的盲点摘要，没有则写空字符串"
 }`
 
 const MAX_LLM_ATTEMPTS = 2
-const VALID_SUPPORT_USED: SupportUsed[] = ['none', 'hint', 'answer', 'analogy']
 const FLOW_CONTROL_MESSAGES = new Set([
   '给我提示',
   '给我答案',
@@ -82,23 +78,9 @@ function isCognitiveLevel(value: unknown): value is CognitiveLevel {
   return typeof value === 'string' && COGNITIVE_LEVELS.includes(value as CognitiveLevel)
 }
 
-function isSupportUsed(value: unknown): value is SupportUsed {
-  return typeof value === 'string' && VALID_SUPPORT_USED.includes(value as SupportUsed)
-}
-
 function getEffectiveLevel(requestedLevel: CognitiveLevel | undefined): CognitiveLevel {
   if (requestedLevel && COGNITIVE_LEVELS.includes(requestedLevel)) return requestedLevel
   return 'memory'
-}
-
-function getDerivedNextLevel(
-  currentLevel: CognitiveLevel,
-  nextAction: QuestionNextAction
-): CognitiveLevel | undefined {
-  if (nextAction === 'advance_next_level') {
-    return getNextSuitableLevel(currentLevel) ?? undefined
-  }
-  return undefined
 }
 
 function getLastAssistantQuestion(conversationHistory: ConversationTurn[]): string {
@@ -163,13 +145,13 @@ function normalizeQuestionerResponse(
 ): DiagnosticQuestionResponse {
   const requestType = input.requestType ?? 'normal'
   const currentLevel = getEffectiveLevel(input.currentLevel ?? parsed.currentLevel)
-  const supportUsed = requestType === 'hint'
+  // 支持记录只来自「给我提示 / 给我答案」按钮点击；普通回合永远 none，
+  // 不接受 LLM 自报，避免对话中主动给的类比/思路被算成提示使用。
+  const supportUsed: SupportUsed = requestType === 'hint'
     ? 'hint'
     : requestType === 'answer'
       ? 'answer'
-      : isSupportUsed(parsed.supportUsed)
-        ? parsed.supportUsed
-        : 'none'
+      : 'none'
   const passedCurrentLevel = requestType === 'normal'
     && hasRecentDiagnosticUserAnswer(input.conversationHistory)
     && parsed.passedCurrentLevel === true
@@ -182,7 +164,6 @@ function normalizeQuestionerResponse(
       // 看答案不算独立通过，但确定性推进到下一层；末层则完成节点。
       ? (getNextSuitableLevel(currentLevel) ? 'advance_next_level' : 'complete_node')
       : 'continue_current_level'
-  const nextLevel = getDerivedNextLevel(currentLevel, nextAction)
   const reply = cleanReply(typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
     : buildFallbackReply({
@@ -200,7 +181,6 @@ function normalizeQuestionerResponse(
       ? parsed.blindSpotSummary.trim()
       : '',
     supportUsed,
-    ...(nextLevel ? { nextLevel } : {}),
   }
   const supportRecord = toSupportRecord(supportUsed, response, input.conversationHistory)
   return supportRecord ? { ...response, supportRecords: [supportRecord] } : response
@@ -224,8 +204,6 @@ export function parseQuestionerResponse(raw: string): Partial<DiagnosticQuestion
       ? obj.passedCurrentLevel
       : undefined,
     blindSpotSummary: typeof obj.blindSpotSummary === 'string' ? obj.blindSpotSummary : undefined,
-    supportUsed: isSupportUsed(obj.supportUsed) ? obj.supportUsed : undefined,
-    nextLevel: isCognitiveLevel(obj.nextLevel) ? obj.nextLevel : undefined,
   }
 }
 

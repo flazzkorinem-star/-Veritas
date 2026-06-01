@@ -35,8 +35,6 @@ describe('parseQuestionerResponse', () => {
       currentLevel: 'understanding',
       passedCurrentLevel: true,
       blindSpotSummary: '',
-      supportUsed: 'none',
-      nextLevel: 'application',
     })
 
     const result = parseQuestionerResponse(raw)
@@ -44,7 +42,6 @@ describe('parseQuestionerResponse', () => {
     expect(result.reply).toBe('这个理解基本对。接下来换到应用层。')
     expect(result.currentLevel).toBe('understanding')
     expect(result.passedCurrentLevel).toBe(true)
-    expect(result.supportUsed).toBe('none')
   })
 
   it('拒绝非对象输出，让调用方走稳定 fallback', () => {
@@ -77,7 +74,34 @@ describe('getNextQuestion', () => {
     expect(result.currentLevel).toBe('understanding')
     expect(result.passedCurrentLevel).toBe(true)
     expect(result.nextAction).toBe('advance_next_level')
-    expect(result.nextLevel).toBe('application')
+  })
+
+  it('普通回合忽略 LLM 自报的 supportUsed/nextLevel，不混进支持记录', async () => {
+    vi.mocked(chat).mockResolvedValueOnce(JSON.stringify({
+      reply: '我给你打个比方就懂了。',
+      currentLevel: 'understanding',
+      passedCurrentLevel: true,
+      blindSpotSummary: '',
+      // LLM 越权自报：支持记录与跳级都必须被忽略。
+      supportUsed: 'analogy',
+      nextLevel: 'analysis',
+    }))
+
+    const result = await getNextQuestion({
+      node,
+      currentLevel: 'understanding',
+      levelStates,
+      requestType: 'normal',
+      conversationHistory: [
+        { role: 'assistant', content: '你能用自己的话解释 RAG 吗？' },
+        { role: 'user', content: '它先检索资料，再让模型结合资料回答。' },
+      ],
+    })
+
+    expect(result.supportUsed).toBe('none')
+    expect(result.supportRecords).toBeUndefined()
+    // 推进只认代码：understanding 顺序下一层是 application，不被自报的 analysis 跳级。
+    expect(result.nextAction).toBe('advance_next_level')
   })
 
   it('在 Agent 2 parse 层清理回复里的破折号', async () => {
@@ -151,7 +175,6 @@ describe('getNextQuestion', () => {
 
     expect(result.passedCurrentLevel).toBe(false)
     expect(result.nextAction).toBe('advance_next_level')
-    expect(result.nextLevel).toBe('understanding')
     expect(result.supportUsed).toBe('answer')
     expect(result.supportRecords?.[0]).toMatchObject({
       kind: 'answer',
@@ -230,8 +253,6 @@ describe('getNextQuestion', () => {
       currentLevel: 'creation',
       passedCurrentLevel: true,
       blindSpotSummary: '',
-      supportUsed: 'none',
-      nextLevel: 'creation',
     }))
 
     const result = await getNextQuestion({
@@ -244,7 +265,6 @@ describe('getNextQuestion', () => {
     })
 
     expect(result.currentLevel).toBe('memory')
-    expect(result.nextLevel).toBe('understanding')
   })
 
   it('malformed LLM 输出会 retry 一次，然后返回本地 fallback', async () => {

@@ -19,7 +19,6 @@ export type StructuredQuestionResponse = QuestionResponse & {
   blindSpotSummary: string
   supportUsed?: SupportKind | 'none'
   supportRecords?: SupportRecord[]
-  nextLevel?: CognitiveLevel
 }
 
 export type QuestionApiResponse = Partial<StructuredQuestionResponse> & {
