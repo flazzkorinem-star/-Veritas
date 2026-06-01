@@ -1,8 +1,21 @@
 'use client'
 
-import type { ExamReport } from '@/lib/types'
+import type { CognitiveLevel, ExamReport, LevelStatus } from '@/lib/types'
 import ReportCard from '@/components/ReportCard'
 import { needsReportAttention } from '../_lib/examPageHelpers'
+
+const LEVEL_DOTS: { level: CognitiveLevel; label: string }[] = [
+  { level: 'memory', label: '记' },
+  { level: 'understanding', label: '理' },
+  { level: 'application', label: '应' },
+  { level: 'analysis', label: '分' },
+]
+
+function levelDotClass(status: LevelStatus): string {
+  if (status === 'passed') return 'bg-[#58CC02]'
+  if (status === 'answer_assisted') return 'bg-[#FFA726]'
+  return 'bg-slate-300'
+}
 
 export function ReportModal({
   report,
@@ -65,12 +78,23 @@ export function ReportModal({
                       {evaluation.blindSpot || evaluation.nextStep || '这一项暂无明显盲点'}
                     </span>
                   </span>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    needsReportAttention(evaluation)
-                      ? 'bg-[#FFA726]/10 text-amber-700'
-                      : 'bg-[#58CC02]/10 text-green-700'
-                  }`}>
-                    {needsReportAttention(evaluation) ? '需关注' : '已通过'}
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="flex items-center gap-1.5">
+                      {LEVEL_DOTS.map(({ level, label }) => (
+                        <span key={level} className="flex items-center gap-0.5 text-xs text-slate-500">
+                          {label}
+                          <span className={`h-2 w-2 rounded-full ${levelDotClass(evaluation.levelStatus[level])}`} />
+                        </span>
+                      ))}
+                    </span>
+                    <span className="text-sm font-bold text-slate-900">{evaluation.score}/100</span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      needsReportAttention(evaluation)
+                        ? 'bg-[#FFA726]/10 text-amber-700'
+                        : 'bg-[#58CC02]/10 text-green-700'
+                    }`}>
+                      {needsReportAttention(evaluation) ? '需关注' : '已通过'}
+                    </span>
                   </span>
                 </summary>
                 <div className="border-t border-slate-100 p-4">
