@@ -46,4 +46,16 @@ describe('chat', () => {
 
     expect(createMock.mock.calls[0][1]).toEqual({ timeout: 22_000 })
   })
+
+  it('disables thinking mode in the request body', async () => {
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: 'ok' } }],
+    })
+
+    const { chat } = await import('../../lib/llm')
+
+    await chat([{ role: 'user', content: 'hello' }])
+
+    expect(createMock.mock.calls[0][0]).toMatchObject({ thinking: { type: 'disabled' } })
+  })
 })

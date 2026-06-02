@@ -38,16 +38,19 @@ export async function chat(messages: Message[], options: ChatOptions = {}): Prom
     ? { timeout: options.timeoutMs }
     : undefined
 
-  const response = await getClient().chat.completions.create(
-    {
-      model: options.model ?? MODEL_FAST,
-      messages,
-      temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens,
-      response_format: options.jsonMode ? { type: 'json_object' } : undefined,
-    },
-    requestOptions
-  )
+  const body = {
+    model: options.model ?? MODEL_FAST,
+    messages,
+    temperature: options.temperature ?? 0.7,
+    max_tokens: options.maxTokens,
+    response_format: options.jsonMode ? { type: 'json_object' } : undefined,
+    // deepseek-v4-flash 默认开启思考模式：答案会漏进 reasoning_content，content 可能为空白。
+    // 本产品不需要推理能力，全局关闭思考，确保回复直接落在 content。
+    thinking: { type: 'disabled' },
+  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+    thinking: { type: 'disabled' }
+  }
+  const response = await getClient().chat.completions.create(body, requestOptions)
 
   const content = response.choices[0]?.message?.content
   if (!content) throw new Error('LLM returned empty response')

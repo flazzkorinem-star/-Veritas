@@ -32,12 +32,12 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 - `localHistory.ts` — IndexedDB 本地历史；`PersistedDiagnosisState` 持久化 schema（`LOCAL_DIAGNOSIS_SCHEMA_VERSION`），读取时丢弃版本不符的旧记录；只存跨会话需恢复的诊断态。
 - `apiResponse.ts` / `parseJSON.ts` — 防御性响应解析 / JSON 抽取。
 - `pdf.ts` — 上传文件抽文本（PDF/DOCX/PPTX/TXT/MD）。
-- `llm.ts` — DeepSeek 客户端封装；未经确认不改 provider / 模型名。
+- `llm.ts` — DeepSeek 客户端封装；全局关闭思考模式（`thinking:disabled`，防答案漏进 reasoning_content 致 content 空白）；未经确认不改 provider / 模型名。
 
 ## lib/agents/（LLM 调用 + 输出清洗，唯一允许清洗的地方）
 
 - `analyzer.ts` — Agent 1 抽节点：最多 8 个、过滤非法字段。
-- `questioner.ts` — Agent 2 分层对话：system prompt + LLM 输出解析 + 朴素 fallback。
+- `questioner.ts` — Agent 2 分层对话：判官调用(判定通过/盲点，JSON) + 对话调用(自然语言，不套 JSON) + 场景 fallback；层级推进等确定性状态归代码。
 - `evaluator.ts` — Agent 3 报告：过滤伪造原话，用本地分覆盖模型分。
 
 ## app/api/（薄转发层，不做清洗）
