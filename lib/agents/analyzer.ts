@@ -20,14 +20,15 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一�
 每个节点都会被统一按四层诊断：记忆→理解→应用→分析。所以只选能完整支撑这四层追问的概念。
 
 选择标准：
-- 单次最多 8 个节点，宁少勿滥；材料少就少抽，不为了凑数降低质量
+- 单次提取 1–15 个节点，15 是上限而不是目标；宁少勿滥，材料少就少抽，不为了凑数降低质量
 - 每个节点必须能撑起记忆、理解、应用、分析四层追问；撑不满四层的内容不要选
 - 优先选择核心概念和定义、容易混淆的对比点、能迁移到场景应用的问题、容易暴露推理断点的机制/因果链/决策点
 - 避免纯背景描述、孤立事实、过细或诊断价值低的内容
 - 只围绕材料中出现或明确暗示的概念
 - 不生成对话问题，不评价用户，不扩展成课程大纲
-- 材料很大时也只保留最值得诊断的重点，不超过 8 个；材料不足以支撑高价值节点时可以少于 8 个，哪怕只有 1 个
-- 按诊断价值从高到低排列输出：最值得优先诊断的节点放在最前面
+- 材料很大时也只保留最值得诊断的重点，不超过 15 个；材料不足以支撑高价值节点时可以少于 15 个，哪怕只有 1 个
+- 为每个入选节点分配 importance：只能是数值 1、2、3，数值越小越优先；它只表达入选节点之间的三档相对高低，不使用中文等级值
+- 先按 importance 从 1 到 3 排列，同档内按诊断价值从高到低排列
 
 用JSON格式回复：
 {
@@ -36,6 +37,7 @@ const SYSTEM_PROMPT = `你是 Veritas 的 Agent 1：节点分析师。给定一�
       "name": "节点名称",
       "context": "一句话说明这个节点为什么值得诊断",
       "sourceExcerpt": "材料中能证明该节点的证据片段，直接引用1-3句话",
+      "importance": 1,
       "priorityReason": "为什么优先诊断这个节点"
     }
   ]
@@ -61,7 +63,7 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
   }
 
   const nodes = obj.nodes
-    .slice(0, 8)
+    .slice(0, 15)
     .map((n): AnalyzerKnowledgeNode | null => {
       if (!isRecord(n)) {
         return null
@@ -71,8 +73,9 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
       const context = readString(n.context)
       const sourceExcerpt = readString(n.sourceExcerpt)
       const priorityReason = readString(n.priorityReason)
+      const importance = n.importance
 
-      if (!name || !context || !sourceExcerpt || !priorityReason) {
+      if (!name || !context || !sourceExcerpt || !priorityReason || (importance !== 1 && importance !== 2 && importance !== 3)) {
         return null
       }
 
@@ -83,6 +86,7 @@ export function parseAnalyzerResponse(raw: string): AnalyzerKnowledgeNode[] {
         name,
         context,
         sourceExcerpt,
+        importance,
         priorityReason,
       }
     })

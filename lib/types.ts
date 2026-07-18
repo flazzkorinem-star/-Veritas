@@ -40,6 +40,7 @@ export interface KnowledgeNode {
   name: string
   context: string // one sentence: how this concept appears in the document
   sourceExcerpt: string // exact excerpt from the source material supporting this node
+  importance: 1 | 2 | 3
   priorityReason?: string
   pinned?: boolean
 }

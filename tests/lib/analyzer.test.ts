@@ -14,6 +14,7 @@ function validNode(id: string, overrides: Record<string, unknown> = {}) {
     name: `节点${id}`,
     context: `节点${id}能暴露理解和应用断点。`,
     sourceExcerpt: `材料证据${id}`,
+    importance: 1,
     priorityReason: `优先理由${id}`,
     ...overrides,
   }
@@ -28,6 +29,7 @@ describe('parseAnalyzerResponse', () => {
           name: 'RAG',
           context: 'Mentioned as solution to hallucination',
           sourceExcerpt: 'RAG retrieves relevant passages before generation.',
+          importance: 1,
           priorityReason: 'RAG 容易被误解为普通搜索，适合诊断流程理解。',
         },
         {
@@ -35,6 +37,7 @@ describe('parseAnalyzerResponse', () => {
           name: 'Embedding',
           context: 'Used to convert text to vectors',
           sourceExcerpt: 'Embeddings convert text into vectors for retrieval.',
+          importance: 2,
           priorityReason: 'Embedding 是检索链路的基础概念。',
         },
       ]
@@ -44,20 +47,36 @@ describe('parseAnalyzerResponse', () => {
     expect(nodes[0].name).toBe('RAG')
     expect(nodes[0].context).toBe('Mentioned as solution to hallucination')
     expect(nodes[0].sourceExcerpt).toBe('RAG retrieves relevant passages before generation.')
+    expect(nodes[0].importance).toBe(1)
     expect(nodes[0].priorityReason).toBe('RAG 容易被误解为普通搜索，适合诊断流程理解。')
   })
 
-  it('keeps at most the first eight returned nodes', () => {
+  it('keeps at most the first fifteen returned nodes', () => {
     const raw = JSON.stringify({
-      nodes: Array.from({ length: 10 }, (_, index) => validNode(String(index + 1))),
+      nodes: Array.from({ length: 16 }, (_, index) => validNode(String(index + 1))),
     })
 
     const nodes = parseAnalyzerResponse(raw)
 
-    expect(nodes).toHaveLength(8)
+    expect(nodes).toHaveLength(15)
     expect(nodes.map((node) => node.name)).toEqual(
-      ['1', '2', '3', '4', '5', '6', '7', '8'].map((n) => `节点${n}`)
+      Array.from({ length: 15 }, (_, index) => `节点${index + 1}`)
     )
+  })
+
+  it('drops nodes whose importance is not a numeric tier from 1 to 3', () => {
+    const nodes = parseAnalyzerResponse(JSON.stringify({
+      nodes: [
+        validNode('0', { importance: undefined }),
+        validNode('1', { importance: 0 }),
+        validNode('2', { importance: '1' }),
+        validNode('3', { importance: 3 }),
+      ],
+    }))
+
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0].name).toBe('节点3')
+    expect(nodes[0].importance).toBe(3)
   })
 
   it('allows fewer nodes when the material only supports one high-value node', () => {
@@ -157,6 +176,7 @@ describe('analyzeContent', () => {
             name: '注意力机制',
             context: '材料解释了注意力机制如何分配权重。',
             sourceExcerpt: '注意力机制会根据查询和键的相关性分配权重。',
+            importance: 1,
             priorityReason: '注意力机制容易暴露用户对权重分配机制的理解断点。',
           },
         ],

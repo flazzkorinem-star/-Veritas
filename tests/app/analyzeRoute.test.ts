@@ -52,6 +52,7 @@ describe('POST /api/analyze', () => {
         name: '知识点',
         context: '材料中的核心概念',
         sourceExcerpt: '知识点的原文片段',
+        importance: 1,
         priorityReason: '这个节点适合优先诊断',
       },
     ])
@@ -67,6 +68,7 @@ describe('POST /api/analyze', () => {
     expect(analyzeContent).toHaveBeenCalledWith('知识点'.repeat(50))
     expect(data.documentContent).toBe('知识点'.repeat(50))
     expect(data.nodes[0].sourceExcerpt).toBe('知识点的原文片段')
+    expect(data.nodes[0].importance).toBe(1)
     expect(data.nodes[0].priorityReason).toBe('这个节点适合优先诊断')
   })
 

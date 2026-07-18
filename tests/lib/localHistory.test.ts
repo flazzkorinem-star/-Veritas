@@ -143,7 +143,7 @@ describe('localHistory', () => {
     await saveDiagnosisRecord(makeRecord('current', makeState(), '2026-05-24T01:00:00.000Z'))
     const legacy = {
       ...makeRecord('legacy', makeState({ materialTitle: '旧记录' }), '2026-05-24T02:00:00.000Z'),
-      schemaVersion: 2,
+      schemaVersion: 3,
     } as unknown as LocalDiagnosisRecord
     await saveDiagnosisRecord(legacy)
 

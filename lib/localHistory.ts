@@ -3,7 +3,7 @@ import type { StoreExamState } from '@/store/examStore'
 const DB_NAME = 'veritas-local-history'
 const DB_VERSION = 1
 const STORE_NAME = 'diagnoses'
-export const LOCAL_DIAGNOSIS_SCHEMA_VERSION = 3
+export const LOCAL_DIAGNOSIS_SCHEMA_VERSION = 4
 
 export interface PersistedDiagnosisState {
   phase: StoreExamState['phase']
