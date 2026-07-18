@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 export interface ActionMenuItem {
-  icon: 'pin' | 'rename' | 'share' | 'delete'
+  icon: 'importance' | 'pin' | 'rename' | 'share' | 'delete'
   label: string
   onClick?: () => void
   disabled?: boolean
@@ -24,6 +24,13 @@ export function getActionMenuAnchor(element: HTMLElement): ActionMenuAnchor {
 }
 
 function MenuIcon({ icon }: { icon: ActionMenuItem['icon'] }) {
+  if (icon === 'importance') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+        <path d="m5 3 3 3-3 3-3-3 3-3Zm7 4 3 3-3 3-3-3 3-3Zm7 4 3 3-3 3-3-3 3-3Z" />
+      </svg>
+    )
+  }
   if (icon === 'rename') {
     return (
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -71,7 +78,7 @@ export function ActionMenu({
   const [menuHeight, setMenuHeight] = useState(0)
   const position = useMemo(() => {
     if (typeof window === 'undefined') return { left: anchor.right, top: anchor.bottom }
-    const width = 124
+    const width = 136
     const margin = 8
     return {
       left: Math.max(margin, Math.min(anchor.right - width, window.innerWidth - width - margin)),
@@ -108,7 +115,7 @@ export function ActionMenu({
       onClick={(event) => event.stopPropagation()}
       role="menu"
       style={position}
-      className="fixed z-50 w-[124px] rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-[0_12px_30px_rgba(15,23,42,0.16)]"
+      className="fixed z-50 w-[136px] rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-[0_12px_30px_rgba(15,23,42,0.16)]"
     >
       {items.map((item) => (
         <button

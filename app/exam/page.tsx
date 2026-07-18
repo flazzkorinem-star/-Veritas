@@ -2,7 +2,7 @@
 
 import { ConversationPanel } from './_components/ConversationPanel'
 import { DiagnosticPanel } from './_components/DiagnosticPanel'
-import { KnowledgeNodeRail } from './_components/KnowledgeNodeRail'
+import { KnowledgeMap } from './_components/KnowledgeMap'
 import { ReportModal } from './_components/ReportModal'
 import { WorkspaceSidebar } from './_components/WorkspaceSidebar'
 import { useExamController } from './_hooks/useExamController'
@@ -31,13 +31,15 @@ export default function ExamPage() {
 
         <section className="min-h-0 bg-[#F8F9FA]">
           <div className="grid h-full grid-cols-[260px_minmax(0,1fr)]">
-            <KnowledgeNodeRail
+            <KnowledgeMap
+              key={workspace.state.recordId ?? 'new-diagnosis'}
               state={workspace.state}
               displayedTitle={workspace.displayedTitle}
               hasActiveDiagnosis={workspace.hasActiveDiagnosis}
               openMenu={workspace.openMenu}
               setOpenMenu={workspace.setOpenMenu}
               dispatch={workspace.dispatch}
+              onNodeImportance={workspace.handleNodeImportance}
               onNodePin={workspace.handleNodePin}
               onNodeRename={workspace.handleNodeRename}
               onNodeDelete={workspace.handleNodeDelete}

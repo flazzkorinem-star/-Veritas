@@ -89,6 +89,11 @@ export function useExamController() {
     setOpenMenu(null)
   }
 
+  function handleNodeImportance(nodeId: string) {
+    dispatch({ type: 'CYCLE_NODE_IMPORTANCE', nodeId })
+    setOpenMenu(null)
+  }
+
   function handleNodePin(nodeId: string) {
     dispatch({ type: 'TOGGLE_NODE_PIN', nodeId })
     setOpenMenu(null)
@@ -140,6 +145,7 @@ export function useExamController() {
     waitingForReportRetry,
     levelLabels,
     handleBackHome,
+    handleNodeImportance,
     handleNodePin,
     handleNodeRename,
     handleNodeDelete,

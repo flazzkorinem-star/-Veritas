@@ -58,7 +58,7 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 - `_lib/materialFile.ts` — 文件类型/大小校验。
 - `_lib/questionFlowTransitions.ts` — Agent 2 响应后的状态推进动作构建（纯函数，hook 负责 dispatch）。
 - `_lib/questionApi.ts` / `reportApi.ts` — fetch 薄封装 + 前端响应归一化。
-- `_components/` — `WorkspaceSidebar`（左工作区）、`KnowledgeNodeRail`（中左节点栏）、`ConversationPanel`（对话+输入，含语音 mock 按钮）、`DiagnosticPanel`（右诊断旁注）、`ReportModal`（报告弹层）、`ActionMenu`（三点菜单）。
+- `_components/` — `WorkspaceSidebar`（左工作区）、`KnowledgeMap`（中左知识地图）、`ConversationPanel`（对话+输入，含语音 mock 按钮）、`DiagnosticPanel`（右诊断旁注）、`ReportModal`（报告弹层）、`ActionMenu`（三点菜单）。
 
 ## 其他
 

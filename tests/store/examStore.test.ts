@@ -9,6 +9,7 @@ const nodes: KnowledgeNode[] = [
     name: 'RAG',
     context: '检索增强生成用于降低幻觉。',
     sourceExcerpt: 'RAG 会先检索相关文档片段，再交给模型生成回答。',
+    importance: 1,
     priorityReason: '能同时考察定义、机制和应用边界。',
   },
   {
@@ -16,6 +17,7 @@ const nodes: KnowledgeNode[] = [
     name: '提示词约束',
     context: '提示词用于约束模型输出。',
     sourceExcerpt: '提示词需要明确任务、边界和输出格式。',
+    importance: 2,
     priorityReason: '容易暴露只会复述、不知道如何应用的问题。',
   },
 ]
@@ -232,6 +234,18 @@ describe('exam store v3 state', () => {
     expect(pinned.nodes[0].pinned).toBe(true)
     expect(deleted.nodes.map((node) => node.id)).toEqual(['node-1'])
     expect(deleted.nodeLevelStates['node-2']).toBeUndefined()
+  })
+
+  it('cycles node importance and keeps the conversation node in sync', () => {
+    const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
+    const secondTier = reducer(withNodes, { type: 'CYCLE_NODE_IMPORTANCE', nodeId: 'node-1' })
+    const thirdTier = reducer(secondTier, { type: 'CYCLE_NODE_IMPORTANCE', nodeId: 'node-1' })
+    const firstTier = reducer(thirdTier, { type: 'CYCLE_NODE_IMPORTANCE', nodeId: 'node-1' })
+
+    expect(secondTier.nodes[0].importance).toBe(2)
+    expect(secondTier.nodeConversations[0].node.importance).toBe(2)
+    expect(thirdTier.nodes[0].importance).toBe(3)
+    expect(firstTier.nodes[0].importance).toBe(1)
   })
 
   it('keeps dialogue open after report generation and marks report stale after new turns', () => {
