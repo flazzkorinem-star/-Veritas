@@ -57,7 +57,7 @@ export function KnowledgeMap({
   dispatch: Dispatch<Action>
   onNodeImportance: (nodeId: string, importance: KnowledgeNode['importance']) => void
   onNodePin: (nodeId: string) => void
-  onNodeRename: (nodeId: string, currentName: string) => void
+  onNodeRename: (nodeId: string, name: string) => void
   onNodeDelete: (nodeId: string, nodeName: string) => void
 }) {
   const defaultExpandedGroup = importanceLevels.find((importance) => (

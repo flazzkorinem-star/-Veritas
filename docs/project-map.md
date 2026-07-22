@@ -73,6 +73,8 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 
 - `app/layout.tsx` — 全局布局 + `ExamProvider`。
 - `components/ActionMenu.tsx` — 书架卡片、材料列表和知识节点共用的三点菜单。
+- `components/RenameDialog.tsx` — 书架 / 工作台 / 知识点共用的页面内重命名弹窗。
+- `components/ImportanceDialog.tsx` — 知识点重要度三档直选弹窗。
 - `components/ReportCard.tsx` — 报告卡片，被 `ReportModal` 使用。
 
 ## 数据流
