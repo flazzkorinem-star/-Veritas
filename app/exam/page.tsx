@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ConversationPanel } from './_components/ConversationPanel'
 import { DiagnosticPanel } from './_components/DiagnosticPanel'
 import { KnowledgeMap } from './_components/KnowledgeMap'
@@ -8,19 +10,30 @@ import { WorkspaceSidebar } from './_components/WorkspaceSidebar'
 import { useExamController } from './_hooks/useExamController'
 
 export default function ExamPage() {
+  const router = useRouter()
   const workspace = useExamController()
 
-  if (!workspace.isHydrated) return null
+  useEffect(() => {
+    if (workspace.isHydrated && workspace.state.phase === 'idle') router.replace('/')
+  }, [router, workspace.isHydrated, workspace.state.phase])
+
+  if (!workspace.isHydrated || workspace.state.phase === 'idle') return null
+
+  async function handleBackShelf() {
+    await workspace.saveCurrentRecord()
+    router.push('/')
+  }
 
   return (
     <main className="h-screen overflow-hidden bg-[#F8F9FA] text-slate-900">
       <div className="grid h-full grid-cols-[280px_minmax(0,1fr)_330px]">
         <WorkspaceSidebar
-          historyRecords={workspace.historyRecords}
+          materialRecords={workspace.materialRecords}
           selectedRecordId={workspace.state.recordId}
           report={workspace.state.report}
           openMenu={workspace.openMenu}
           setOpenMenu={workspace.setOpenMenu}
+          onBackShelf={handleBackShelf}
           onNewDiagnosis={workspace.handleBackHome}
           onOpenReport={() => workspace.state.report && workspace.setReportOpen(true)}
           onLoadRecord={workspace.handleLoadRecord}

@@ -11,6 +11,8 @@ import {
   type LocalDiagnosisRecord,
   saveDiagnosisRecord,
   toPersistedDiagnosisState,
+  updateDiagnosisRecordPin,
+  updateDiagnosisRecordTitle,
 } from '@/lib/localHistory'
 import type { MenuTarget } from '../_lib/examPageTypes'
 
@@ -31,34 +33,38 @@ export function useLocalDiagnosisHistory({
   setReportOpen: (open: boolean) => void
   setOpenMenu: (target: MenuTarget | null) => void
 }) {
-  const [historyRecords, setHistoryRecords] = useState<LocalDiagnosisRecord[]>([])
+  const [materialRecords, setMaterialRecords] = useState<LocalDiagnosisRecord[]>([])
   const saveTimerRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     if (!isHydrated) return
     listDiagnosisRecords()
-      .then(setHistoryRecords)
-      .catch(() => setHistoryRecords([]))
+      .then(setMaterialRecords)
+      .catch(() => setMaterialRecords([]))
   }, [isHydrated])
+
+  async function persistCurrentState() {
+    if (!state.recordId || state.phase === 'idle' || state.phase === 'analyzing') return
+    const updatedAt = new Date().toISOString()
+    await saveDiagnosisRecord({
+      schemaVersion: LOCAL_DIAGNOSIS_SCHEMA_VERSION,
+      id: state.recordId,
+      title: state.materialTitle,
+      createdAt: state.createdAt ?? updatedAt,
+      updatedAt,
+      pinned: state.recordPinned,
+      state: toPersistedDiagnosisState({ ...state, updatedAt }),
+    })
+  }
 
   useEffect(() => {
     if (!isHydrated || !state.recordId || state.phase === 'idle' || state.phase === 'analyzing') return
 
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
     saveTimerRef.current = window.setTimeout(() => {
-      const updatedAt = new Date().toISOString()
-      const stateToPersist = { ...state, updatedAt }
-      saveDiagnosisRecord({
-        schemaVersion: LOCAL_DIAGNOSIS_SCHEMA_VERSION,
-        id: state.recordId ?? updatedAt,
-        title: state.materialTitle,
-        createdAt: state.createdAt ?? updatedAt,
-        updatedAt,
-        pinned: state.recordPinned,
-        state: toPersistedDiagnosisState(stateToPersist),
-      })
+      persistCurrentState()
         .then(() => listDiagnosisRecords())
-        .then(setHistoryRecords)
+        .then(setMaterialRecords)
         .catch(() => undefined)
     }, 400)
 
@@ -67,15 +73,16 @@ export function useLocalDiagnosisHistory({
     }
   }, [state, isHydrated])
 
-  async function refreshHistoryRecords() {
-    setHistoryRecords(await listDiagnosisRecords())
+  async function refreshMaterialRecords() {
+    setMaterialRecords(await listDiagnosisRecords())
   }
 
   async function handleLoadRecord(recordId: string) {
     if (isBusy) return
+    await persistCurrentState()
     const record = await getDiagnosisRecord(recordId)
     if (!record) {
-      dispatch({ type: 'SET_ERROR', error: '没有找到这条本地记录' })
+      dispatch({ type: 'SET_ERROR', error: '没有找到这份材料' })
       return
     }
     dispatch({ type: 'RESTORE', state: restorePersistedDiagnosisState(record.state) })
@@ -86,12 +93,11 @@ export function useLocalDiagnosisHistory({
 
   async function handleRecordPin(record: LocalDiagnosisRecord) {
     const pinned = !record.pinned
-    const nextState = { ...record.state, recordPinned: pinned }
-    await saveDiagnosisRecord({ ...record, pinned, state: nextState })
+    await saveDiagnosisRecord(updateDiagnosisRecordPin(record, pinned))
     if (record.id === state.recordId) {
       dispatch({ type: 'SET_RECORD_META', recordPinned: pinned })
     }
-    await refreshHistoryRecords()
+    await refreshMaterialRecords()
     setOpenMenu(null)
   }
 
@@ -101,29 +107,29 @@ export function useLocalDiagnosisHistory({
       setOpenMenu(null)
       return
     }
-    const nextState = { ...record.state, materialTitle: title }
-    await saveDiagnosisRecord({ ...record, title, state: nextState })
+    await saveDiagnosisRecord(updateDiagnosisRecordTitle(record, title))
     if (record.id === state.recordId) {
       dispatch({ type: 'SET_RECORD_META', materialTitle: title })
     }
-    await refreshHistoryRecords()
+    await refreshMaterialRecords()
     setOpenMenu(null)
   }
 
   async function handleRecordDelete(record: LocalDiagnosisRecord) {
-    if (!window.confirm(`删除「${record.title}」吗？这会移除这条本地诊断记录。`)) return
+    if (!window.confirm(`删除「${record.title}」吗？这会从书架移除该材料及其诊断进度。`)) return
     await deleteDiagnosisRecord(record.id)
     if (record.id === state.recordId) {
       dispatch({ type: 'RESET' })
       setTextAnswer('')
       setReportOpen(false)
     }
-    await refreshHistoryRecords()
+    await refreshMaterialRecords()
     setOpenMenu(null)
   }
 
   return {
-    historyRecords,
+    materialRecords,
+    saveCurrentRecord: persistCurrentState,
     handleLoadRecord,
     handleRecordPin,
     handleRecordRename,

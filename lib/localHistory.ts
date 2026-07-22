@@ -34,6 +34,28 @@ export interface LocalDiagnosisRecord {
   state: PersistedDiagnosisState
 }
 
+export function updateDiagnosisRecordPin(
+  record: LocalDiagnosisRecord,
+  pinned: boolean
+): LocalDiagnosisRecord {
+  return {
+    ...record,
+    pinned,
+    state: { ...record.state, recordPinned: pinned },
+  }
+}
+
+export function updateDiagnosisRecordTitle(
+  record: LocalDiagnosisRecord,
+  title: string
+): LocalDiagnosisRecord {
+  return {
+    ...record,
+    title,
+    state: { ...record.state, materialTitle: title },
+  }
+}
+
 export function toPersistedDiagnosisState(state: Partial<StoreExamState>): PersistedDiagnosisState {
   return {
     phase: state.phase === 'analyzing' || state.phase === 'reporting'

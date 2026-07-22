@@ -3,7 +3,7 @@
 import type { RefObject } from 'react'
 import type { StoreExamState } from '@/store/examStore'
 import type { KnowledgeNode, NodeConversation } from '@/lib/types'
-import { MATERIAL_FILE_ACCEPT } from '../_lib/materialFile'
+import { MATERIAL_FILE_ACCEPT } from '../../_lib/materialFile'
 import type { RetryQuestionRequest } from '../_lib/examPageTypes'
 
 export function ConversationPanel({

@@ -5,7 +5,7 @@ import type { KnowledgeNode } from '@/lib/types'
 import type { Action, StoreExamState } from '@/store/examStore'
 import type { MenuTarget } from '../_lib/examPageTypes'
 import { getNodeStageText, nodeBookColors } from '../_lib/examPageHelpers'
-import { ActionMenu, getActionMenuAnchor } from './ActionMenu'
+import { ActionMenu, getActionMenuAnchor } from '@/components/ActionMenu'
 
 const importanceLevels: KnowledgeNode['importance'][] = [1, 2, 3]
 

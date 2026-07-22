@@ -7,6 +7,8 @@ import {
   saveDiagnosisRecord,
   deleteDiagnosisRecord,
   toPersistedDiagnosisState,
+  updateDiagnosisRecordPin,
+  updateDiagnosisRecordTitle,
   type LocalDiagnosisRecord,
 } from '@/lib/localHistory'
 import { initialState, type StoreExamState } from '@/store/examStore'
@@ -127,6 +129,18 @@ describe('localHistory', () => {
 
     await deleteDiagnosisRecord('record-1')
     await expect(getDiagnosisRecord('record-1')).resolves.toBeUndefined()
+  })
+
+  it('同步更新材料卡片元数据与持久化诊断状态', () => {
+    const record = makeRecord('record-1', makeState(), '2026-05-24T01:00:00.000Z')
+
+    const pinned = updateDiagnosisRecordPin(record, true)
+    const renamed = updateDiagnosisRecordTitle(pinned, '新材料名')
+
+    expect(renamed.pinned).toBe(true)
+    expect(renamed.state.recordPinned).toBe(true)
+    expect(renamed.title).toBe('新材料名')
+    expect(renamed.state.materialTitle).toBe('新材料名')
   })
 
   it('列表按置顶优先，再按更新时间倒序排列', async () => {

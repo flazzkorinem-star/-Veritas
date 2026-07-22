@@ -53,7 +53,7 @@ export function useExamController() {
     runEvaluate: report.runEvaluate,
   })
 
-  const history = useLocalDiagnosisHistory({
+  const materials = useLocalDiagnosisHistory({
     state,
     dispatch,
     isHydrated,
@@ -79,10 +79,11 @@ export function useExamController() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [canContinueDialogue])
 
-  function handleBackHome() {
-    if (hasActiveDiagnosis && !window.confirm('当前诊断会自动保存在本地历史。确定新建诊断吗？')) {
+  async function handleBackHome() {
+    if (hasActiveDiagnosis && !window.confirm('当前诊断会保存在书架。确定新建诊断吗？')) {
       return
     }
+    await materials.saveCurrentRecord()
     dispatch({ type: 'RESET' })
     setTextAnswer('')
     report.setReportOpen(false)
@@ -162,10 +163,11 @@ export function useExamController() {
     handleHint: question.handleHint,
     handleAnswer: question.handleAnswer,
     handleRetryQuestion: question.handleRetryQuestion,
-    historyRecords: history.historyRecords,
-    handleLoadRecord: history.handleLoadRecord,
-    handleRecordPin: history.handleRecordPin,
-    handleRecordRename: history.handleRecordRename,
-    handleRecordDelete: history.handleRecordDelete,
+    materialRecords: materials.materialRecords,
+    saveCurrentRecord: materials.saveCurrentRecord,
+    handleLoadRecord: materials.handleLoadRecord,
+    handleRecordPin: materials.handleRecordPin,
+    handleRecordRename: materials.handleRecordRename,
+    handleRecordDelete: materials.handleRecordDelete,
   }
 }

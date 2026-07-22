@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, type Dispatch } from 'react'
+import { validateMaterialFile } from '@/app/_lib/materialFile'
+import { buildDiagnosisPlan, createRecordId, createRecordTitle } from '@/app/_lib/materialRecord'
 import type { Action } from '@/store/examStore'
-import { readApiJson } from '@/lib/apiResponse'
-import { buildDiagnosisPlan, createRecordId, createRecordTitle } from '../_lib/examPageHelpers'
-import { validateMaterialFile } from '../_lib/materialFile'
-import type { AnalyzeResponse } from '../_lib/examPageTypes'
+import { analyzeMaterialFile } from '@/app/_lib/materialApi'
 
 export function useMaterialAnalysis({
   dispatch,
@@ -24,21 +23,13 @@ export function useMaterialAnalysis({
     let analyzeMessageTimer: number | undefined
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
       analyzeMessageTimer = window.setTimeout(() => {
         setAnalyzeMessage('正在抽取高价值知识节点...')
       }, 600)
 
-      const res = await fetch('/api/analyze', { method: 'POST', body: formData })
+      const data = await analyzeMaterialFile(file)
       window.clearTimeout(analyzeMessageTimer)
       analyzeMessageTimer = undefined
-      const data = await readApiJson<AnalyzeResponse>(res)
-
-      if (!res.ok) throw new Error(data.error || '分析失败')
-      if (!data.documentContent || !Array.isArray(data.nodes)) {
-        throw new Error('服务器返回的数据不完整，请稍后重试')
-      }
 
       const now = new Date().toISOString()
       const materialTitle = createRecordTitle(file.name)

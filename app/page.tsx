@@ -1,5 +1,23 @@
-import { redirect } from 'next/navigation'
+'use client'
+
+import { MaterialLibrary } from './_components/MaterialLibrary'
+import { useMaterialLibrary } from './_hooks/useMaterialLibrary'
 
 export default function Home() {
-  redirect('/exam')
+  const library = useMaterialLibrary()
+
+  return (
+    <MaterialLibrary
+      records={library.records}
+      loading={library.loading}
+      uploading={library.uploading}
+      uploadMessage={library.uploadMessage}
+      error={library.error}
+      onFiles={library.handleFiles}
+      onOpenRecord={library.handleOpenRecord}
+      onPin={library.handlePin}
+      onRename={library.handleRename}
+      onDelete={library.handleDelete}
+    />
+  )
 }
