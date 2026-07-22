@@ -1,6 +1,6 @@
 # Veritas Operator Runbook
 
-Last synchronized: 2026-05-29
+Last synchronized: 2026-07-22
 
 ## Purpose
 
@@ -82,20 +82,22 @@ https://veritas-red.vercel.app
 
 ## Smoke Test
 
-Use for v3.0 regression checks.
+Use for v3.3 regression checks.
 
 1. Start the dev server.
-2. Open `/exam` on the active dev-server origin, for example `http://localhost:3000/exam` or `http://127.0.0.1:3127/exam`.
-3. Upload a small readable TXT or Markdown file first.
-4. Confirm Agent 1 returns a concise knowledge-node list.
-5. Confirm Agent 2 advances by cognitive level, not fixed answer count.
-6. Confirm the hint and answer actions work.
-7. Confirm the report cites user wording and shows level status.
-8. Repeat with small PDF, DOCX, and PPTX files.
+2. Open the bookshelf at `/` on the active dev-server origin, for example `http://localhost:3000/` or `http://127.0.0.1:3127/`.
+3. Upload one or more small readable TXT or Markdown files and confirm each successful file becomes a separate bookshelf card.
+4. Confirm each card shows the material name, knowledge-point count, and diagnosis progress; reopen a card to enter `/exam`.
+5. Confirm Agent 1 returns 1–15 worthwhile nodes grouped by importance in the knowledge map.
+6. Confirm Agent 2 advances by cognitive level, not fixed answer count.
+7. Confirm the hint and answer actions work.
+8. Confirm the report cites user wording and shows level status.
+9. Return to the bookshelf and confirm the material and diagnosis progress can be reopened, then repeat with small PDF, DOCX, and PPTX files.
 
 ## Failure Checks
 
 - If analysis returns no nodes, inspect `lib/agents/analyzer.ts` and source text extraction in `lib/pdf.ts`.
+- If bookshelf records fail to load, save, or reopen, inspect `app/_hooks/useMaterialLibrary.ts`, `app/_lib/materialLibrary.ts`, and `lib/localHistory.ts`.
 - If a node lacks evidence, inspect Agent 1 parsing and validation.
 - If dialogue does not advance by cognitive level, inspect `nextAction` derivation in `lib/agents/questioner.ts` (via `lib/examFlow.ts`), then `app/exam/_lib/questionFlowTransitions.ts`, `store/examReducer.ts`, and `/api/question`.
 - If switching knowledge points causes responses to appear in the wrong dialogue, inspect `nodeId`-targeted writes in `app/exam/_hooks/useQuestionFlow.ts`, `store/examReducer.ts`, and `lib/examFlow.ts`.
