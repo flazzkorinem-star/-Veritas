@@ -54,7 +54,7 @@ export function KnowledgeMap({
   openMenu: MenuTarget | null
   setOpenMenu: (target: MenuTarget | null) => void
   dispatch: Dispatch<Action>
-  onNodeImportance: (nodeId: string) => void
+  onNodeImportance: (nodeId: string, importance: KnowledgeNode['importance']) => void
   onNodePin: (nodeId: string) => void
   onNodeRename: (nodeId: string, currentName: string) => void
   onNodeDelete: (nodeId: string, nodeName: string) => void
@@ -197,7 +197,15 @@ export function KnowledgeMap({
                             anchor={openMenu.anchor}
                             onClose={() => setOpenMenu(null)}
                             items={[
-                              { icon: 'importance', label: '调整重要度', onClick: () => onNodeImportance(node.id) },
+                              {
+                                icon: 'importance',
+                                label: '调整重要度',
+                                onClick: () => setOpenMenu({
+                                  type: 'importance',
+                                  id: node.id,
+                                  anchor: openMenu.anchor,
+                                }),
+                              },
                               { icon: 'pin', label: node.pinned ? '取消置顶' : '置顶', onClick: () => onNodePin(node.id) },
                               {
                                 icon: 'rename',
@@ -210,6 +218,17 @@ export function KnowledgeMap({
                               { icon: 'share', label: '分享', disabled: true },
                               { icon: 'delete', label: '删除', danger: true, onClick: () => onNodeDelete(node.id, node.name) },
                             ]}
+                          />
+                        )}
+                        {openMenu?.type === 'importance' && openMenu.id === node.id && (
+                          <ActionMenu
+                            anchor={openMenu.anchor}
+                            onClose={() => setOpenMenu(null)}
+                            items={importanceLevels.map((level) => ({
+                              icon: 'importance',
+                              label: `${'◆'.repeat(4 - level)}${node.importance === level ? ' 当前' : ''}`,
+                              onClick: () => onNodeImportance(node.id, level),
+                            }))}
                           />
                         )}
                       </div>

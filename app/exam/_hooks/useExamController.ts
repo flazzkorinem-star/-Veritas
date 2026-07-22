@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useExam } from '@/store/examStore'
+import type { KnowledgeNode } from '@/lib/types'
 import { calculateNodeScore } from '@/lib/score'
 import { levelLabels } from '../_lib/examPageHelpers'
 import type { MenuTarget } from '../_lib/examPageTypes'
@@ -90,8 +91,8 @@ export function useExamController() {
     setOpenMenu(null)
   }
 
-  function handleNodeImportance(nodeId: string) {
-    dispatch({ type: 'CYCLE_NODE_IMPORTANCE', nodeId })
+  function handleNodeImportance(nodeId: string, importance: KnowledgeNode['importance']) {
+    dispatch({ type: 'SET_NODE_IMPORTANCE', nodeId, importance })
     setOpenMenu(null)
   }
 

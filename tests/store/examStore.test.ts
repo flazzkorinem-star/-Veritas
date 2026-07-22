@@ -236,16 +236,12 @@ describe('exam store v3 state', () => {
     expect(deleted.nodeLevelStates['node-2']).toBeUndefined()
   })
 
-  it('cycles node importance and keeps the conversation node in sync', () => {
+  it('sets node importance and keeps the conversation node in sync', () => {
     const withNodes = reducer(initialState, { type: 'SET_NODES', nodes })
-    const secondTier = reducer(withNodes, { type: 'CYCLE_NODE_IMPORTANCE', nodeId: 'node-1' })
-    const thirdTier = reducer(secondTier, { type: 'CYCLE_NODE_IMPORTANCE', nodeId: 'node-1' })
-    const firstTier = reducer(thirdTier, { type: 'CYCLE_NODE_IMPORTANCE', nodeId: 'node-1' })
+    const thirdTier = reducer(withNodes, { type: 'SET_NODE_IMPORTANCE', nodeId: 'node-1', importance: 3 })
 
-    expect(secondTier.nodes[0].importance).toBe(2)
-    expect(secondTier.nodeConversations[0].node.importance).toBe(2)
     expect(thirdTier.nodes[0].importance).toBe(3)
-    expect(firstTier.nodes[0].importance).toBe(1)
+    expect(thirdTier.nodeConversations[0].node.importance).toBe(3)
   })
 
   it('keeps dialogue open after report generation and marks report stale after new turns', () => {
