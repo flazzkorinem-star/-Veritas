@@ -4,7 +4,7 @@ Last synchronized: 2026-07-22
 
 ## Purpose
 
-This file only covers running, testing, deploying, and basic failure checks. Product decisions live in `docs/design-guide.md`; code navigation lives in `docs/project-map.md`.
+This file only covers running, testing, and basic failure checks. Product decisions live in `docs/design-guide.md`; code navigation lives in `docs/project-map.md`.
 
 ## Environment
 
@@ -17,8 +17,6 @@ LLM_MODEL_FAST=<confirmed fast model>
 ```
 
 Do not print, commit, or rewrite `.env.local`.
-
-Vercel Production environment variables are configured in Vercel, not committed files. `.vercelignore` excludes `.env` and `.env.*`.
 
 ## Commands
 
@@ -61,18 +59,6 @@ If Windows reserves the default Next.js port:
 npm.cmd run dev -- --port 3127 --hostname 127.0.0.1
 ```
 
-Deploy Production:
-
-```powershell
-npx.cmd vercel --prod --yes
-```
-
-Production URL:
-
-```text
-https://veritas-red.vercel.app
-```
-
 ## Verification Standard
 
 - Documentation-only changes do not require tests.
@@ -104,5 +90,5 @@ Use for v3.3 regression checks.
 - If prompts or answers behave like static content, inspect Agent 2 action handling and cache logic.
 - If scores do not match quick-path level status, inspect `lib/score.ts`.
 - If the frontend shows raw JSON parse errors, inspect `lib/apiResponse.ts` and the failing API route logs.
-- If PDF parsing fails only on Vercel with `DOMMatrix is not defined`, verify `@napi-rs/canvas` remains a direct dependency.
+- If PDF parsing fails with `DOMMatrix is not defined`, verify `@napi-rs/canvas` remains a direct dependency and `lib/pdf.ts` still installs the PDF globals.
 - If file parsing fails for a specific document, verify extension, MIME type, size limit, and extractable text. Image-only files, scans, and embedded chart text are not recognized in the current scope.

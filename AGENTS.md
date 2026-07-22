@@ -32,14 +32,13 @@ AI 编码代理在本仓库的作业契约。所有输出使用中文。本文�
 
 - **删除**：禁止批量删除。不用 `del /s`、`rd /s`、`rmdir /s`、`Remove-Item -Recurse`、`rm -rf`。一次只删一个明确路径：`Remove-Item "C:\path\to\file.txt"`。要批量删就停下，让用户手动做。
 - **密钥**：不修改 `.env.local`，不打印密钥真实值。
-- **依赖**：保留 `@napi-rs/canvas`（`pdf-parse` 在 Vercel Serverless 需要它）。
+- **依赖**：保留 `@napi-rs/canvas`（`lib/pdf.ts` 当前直接使用它为 PDF 解析补齐 `DOMMatrix`、`ImageData` 和 `Path2D`）。
 - **环境变量**：`DEEPSEEK_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL_FAST`。
 
 ## 验证（声称完成前必须跑）
 
 - 改完跑 `npm run test:run`；声称生产可用前跑 `npm run build`（Windows 用 `npm.cmd run ...`）。
 - 命令因 sandbox `spawn EPERM` 失败：用批准的提权方式重跑同一命令，不绕过测试。
-- 生产地址：`https://veritas-red.vercel.app`。
 
 ## 文档同步（任务结束前）
 
