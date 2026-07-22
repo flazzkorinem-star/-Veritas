@@ -7,6 +7,7 @@ import type { MenuTarget } from '../_lib/examPageTypes'
 import { getNodeStageText, nodeBookColors } from '../_lib/examPageHelpers'
 import { ActionMenu, getActionMenuAnchor } from '@/components/ActionMenu'
 import { RenameDialog } from '@/components/RenameDialog'
+import { ImportanceDialog } from '@/components/ImportanceDialog'
 
 const importanceLevels: KnowledgeNode['importance'][] = [1, 2, 3]
 
@@ -66,6 +67,7 @@ export function KnowledgeMap({
     () => new Set(defaultExpandedGroup ? [defaultExpandedGroup] : [])
   )
   const [renamingNode, setRenamingNode] = useState<KnowledgeNode | null>(null)
+  const [adjustingNode, setAdjustingNode] = useState<KnowledgeNode | null>(null)
   const groups = importanceLevels
     .map((importance) => ({
       importance,
@@ -200,11 +202,10 @@ export function KnowledgeMap({
                               {
                                 icon: 'importance',
                                 label: '调整重要度',
-                                onClick: () => setOpenMenu({
-                                  type: 'importance',
-                                  id: node.id,
-                                  anchor: openMenu.anchor,
-                                }),
+                                onClick: () => {
+                                  setOpenMenu(null)
+                                  setAdjustingNode(node)
+                                },
                               },
                               { icon: 'pin', label: node.pinned ? '取消置顶' : '置顶', onClick: () => onNodePin(node.id) },
                               {
@@ -218,17 +219,6 @@ export function KnowledgeMap({
                               { icon: 'share', label: '分享', disabled: true },
                               { icon: 'delete', label: '删除', danger: true, onClick: () => onNodeDelete(node.id, node.name) },
                             ]}
-                          />
-                        )}
-                        {openMenu?.type === 'importance' && openMenu.id === node.id && (
-                          <ActionMenu
-                            anchor={openMenu.anchor}
-                            onClose={() => setOpenMenu(null)}
-                            items={importanceLevels.map((level) => ({
-                              icon: 'importance',
-                              label: `${'◆'.repeat(4 - level)}${node.importance === level ? ' 当前' : ''}`,
-                              onClick: () => onNodeImportance(node.id, level),
-                            }))}
                           />
                         )}
                       </div>
@@ -252,6 +242,17 @@ export function KnowledgeMap({
           onConfirm={(name) => {
             onNodeRename(renamingNode.id, name)
             setRenamingNode(null)
+          }}
+        />
+      )}
+      {adjustingNode && (
+        <ImportanceDialog
+          nodeName={adjustingNode.name}
+          currentImportance={adjustingNode.importance}
+          onCancel={() => setAdjustingNode(null)}
+          onSelect={(importance) => {
+            onNodeImportance(adjustingNode.id, importance)
+            setAdjustingNode(null)
           }}
         />
       )}

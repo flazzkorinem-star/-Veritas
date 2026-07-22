@@ -103,8 +103,10 @@ describe('KnowledgeMap', () => {
     fireEvent.click(screen.getByRole('button', { name: '检索增强生成的更多操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '调整重要度' }))
     expect(onNodeImportance).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '调整重要度' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '◆◆◆ 当前' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('menuitem', { name: '◆◆' }))
+    fireEvent.click(screen.getByRole('button', { name: '◆◆' }))
     expect(onNodeImportance).toHaveBeenCalledWith('node-1', 2)
   })
 
