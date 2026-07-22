@@ -101,12 +101,7 @@ export function useLocalDiagnosisHistory({
     setOpenMenu(null)
   }
 
-  async function handleRecordRename(record: LocalDiagnosisRecord) {
-    const title = window.prompt('重命名', record.title)?.trim()
-    if (!title) {
-      setOpenMenu(null)
-      return
-    }
+  async function handleRecordRename(record: LocalDiagnosisRecord, title: string) {
     await saveDiagnosisRecord(updateDiagnosisRecordTitle(record, title))
     if (record.id === state.recordId) {
       dispatch({ type: 'SET_RECORD_META', materialTitle: title })

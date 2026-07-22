@@ -77,9 +77,7 @@ export function useMaterialLibrary() {
     }
   }
 
-  async function handleRename(record: LocalDiagnosisRecord) {
-    const title = window.prompt('重命名', record.title)?.trim()
-    if (!title) return
+  async function handleRename(record: LocalDiagnosisRecord, title: string) {
     try {
       await saveDiagnosisRecord(updateDiagnosisRecordTitle(record, title))
       if (record.id === state.recordId) {

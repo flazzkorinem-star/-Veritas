@@ -6,6 +6,7 @@ import type { Action, StoreExamState } from '@/store/examStore'
 import type { MenuTarget } from '../_lib/examPageTypes'
 import { getNodeStageText, nodeBookColors } from '../_lib/examPageHelpers'
 import { ActionMenu, getActionMenuAnchor } from '@/components/ActionMenu'
+import { RenameDialog } from '@/components/RenameDialog'
 
 const importanceLevels: KnowledgeNode['importance'][] = [1, 2, 3]
 
@@ -64,6 +65,7 @@ export function KnowledgeMap({
   const [expandedGroups, setExpandedGroups] = useState<Set<KnowledgeNode['importance']>>(
     () => new Set(defaultExpandedGroup ? [defaultExpandedGroup] : [])
   )
+  const [renamingNode, setRenamingNode] = useState<KnowledgeNode | null>(null)
   const groups = importanceLevels
     .map((importance) => ({
       importance,
@@ -197,7 +199,14 @@ export function KnowledgeMap({
                             items={[
                               { icon: 'importance', label: '调整重要度', onClick: () => onNodeImportance(node.id) },
                               { icon: 'pin', label: node.pinned ? '取消置顶' : '置顶', onClick: () => onNodePin(node.id) },
-                              { icon: 'rename', label: '重命名', onClick: () => onNodeRename(node.id, node.name) },
+                              {
+                                icon: 'rename',
+                                label: '重命名',
+                                onClick: () => {
+                                  setOpenMenu(null)
+                                  setRenamingNode(node)
+                                },
+                              },
                               { icon: 'share', label: '分享', disabled: true },
                               { icon: 'delete', label: '删除', danger: true, onClick: () => onNodeDelete(node.id, node.name) },
                             ]}
@@ -216,6 +225,17 @@ export function KnowledgeMap({
           </p>
         )}
       </nav>
+      {renamingNode && (
+        <RenameDialog
+          title="重命名知识点"
+          initialValue={renamingNode.name}
+          onCancel={() => setRenamingNode(null)}
+          onConfirm={(name) => {
+            onNodeRename(renamingNode.id, name)
+            setRenamingNode(null)
+          }}
+        />
+      )}
     </aside>
   )
 }

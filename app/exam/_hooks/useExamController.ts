@@ -100,12 +100,7 @@ export function useExamController() {
     setOpenMenu(null)
   }
 
-  function handleNodeRename(nodeId: string, currentName: string) {
-    const name = window.prompt('重命名', currentName)?.trim()
-    if (!name) {
-      setOpenMenu(null)
-      return
-    }
+  function handleNodeRename(nodeId: string, name: string) {
     dispatch({ type: 'UPDATE_NODE_NAME', nodeId, name })
     setOpenMenu(null)
   }

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { LocalDiagnosisRecord } from '@/lib/localHistory'
+import { RenameDialog } from '@/components/RenameDialog'
 import { MATERIAL_FILE_ACCEPT } from '../_lib/materialFile'
 import { MaterialCard, type MaterialCardMenu } from './MaterialCard'
 
@@ -25,11 +26,12 @@ export function MaterialLibrary({
   onFiles: (files: File[]) => void
   onOpenRecord: (record: LocalDiagnosisRecord) => void
   onPin: (record: LocalDiagnosisRecord) => void
-  onRename: (record: LocalDiagnosisRecord) => void
+  onRename: (record: LocalDiagnosisRecord, name: string) => void
   onDelete: (record: LocalDiagnosisRecord) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [openMenu, setOpenMenu] = useState<MaterialCardMenu | null>(null)
+  const [renamingRecord, setRenamingRecord] = useState<LocalDiagnosisRecord | null>(null)
 
   return (
     <main className="min-h-screen bg-[#f6f7f9] px-5 py-10 text-slate-900 sm:px-8 lg:px-12">
@@ -96,7 +98,7 @@ export function MaterialLibrary({
                 setOpenMenu={setOpenMenu}
                 onOpen={onOpenRecord}
                 onPin={onPin}
-                onRename={onRename}
+                onRename={setRenamingRecord}
                 onDelete={onDelete}
               />
             ))}
@@ -113,6 +115,17 @@ export function MaterialLibrary({
           </section>
         )}
       </div>
+      {renamingRecord && (
+        <RenameDialog
+          title="重命名材料"
+          initialValue={renamingRecord.title}
+          onCancel={() => setRenamingRecord(null)}
+          onConfirm={(name) => {
+            onRename(renamingRecord, name)
+            setRenamingRecord(null)
+          }}
+        />
+      )}
     </main>
   )
 }
