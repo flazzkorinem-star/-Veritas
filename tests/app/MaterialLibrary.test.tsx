@@ -31,6 +31,7 @@ describe('MaterialLibrary', () => {
         records={records}
         loading={false}
         uploading={false}
+        uploadProgress={null}
         uploadMessage=""
         error=""
         onFiles={() => {}}
@@ -60,6 +61,7 @@ describe('MaterialLibrary', () => {
         records={[record]}
         loading={false}
         uploading={false}
+        uploadProgress={null}
         uploadMessage=""
         error=""
         onFiles={onFiles}
@@ -83,5 +85,30 @@ describe('MaterialLibrary', () => {
     expect(screen.getByRole('menuitem', { name: '重命名' })).toBeEnabled()
     expect(screen.getByRole('menuitem', { name: '分享' })).toBeDisabled()
     expect(screen.getByRole('menuitem', { name: '删除' })).toBeEnabled()
+  })
+
+  it('shows real per-file parsing progress while uploading', () => {
+    render(
+      <MaterialLibrary
+        records={[]}
+        loading={false}
+        uploading
+        uploadProgress={{ current: 2, processed: 1, total: 3, fileName: '第二份.pdf' }}
+        uploadMessage=""
+        error=""
+        onFiles={() => {}}
+        onOpenRecord={() => {}}
+        onPin={() => {}}
+        onRename={() => {}}
+        onDelete={() => {}}
+      />
+    )
+
+    expect(screen.getByRole('status', { name: '材料解析进度' })).toHaveTextContent('正在解析 2/3：第二份.pdf')
+    expect(screen.getByText('已处理 1/3 份材料')).toBeInTheDocument()
+    const progressbar = screen.getByRole('progressbar', { name: '材料解析进度' })
+    expect(progressbar).toHaveAttribute('aria-valuenow', '1')
+    expect(progressbar).toHaveAttribute('aria-valuemax', '3')
+    expect(progressbar).toHaveClass('animate-pulse')
   })
 })

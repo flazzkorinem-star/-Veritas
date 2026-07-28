@@ -11,6 +11,7 @@ export default function Home() {
       records={library.records}
       loading={library.loading}
       uploading={library.uploading}
+      uploadProgress={library.uploadProgress}
       uploadMessage={library.uploadMessage}
       error={library.error}
       onFiles={library.handleFiles}

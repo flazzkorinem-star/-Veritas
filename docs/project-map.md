@@ -1,7 +1,7 @@
 # Veritas 代码地图
 
 > 只做代码导航与模块边界。产品规格看 `docs/design-guide.md`，工作规则看 `AGENTS.md`，本文件不复述这两者。
-> 最后对照真实代码：2026-07-22
+> 最后对照真实代码：2026-07-28
 
 ## 依赖方向（单向）
 
@@ -47,12 +47,12 @@ UI 组件不直接 fetch；fetch 封装在 `_lib/*Api.ts`；LLM 输出清洗只�
 ## app/（书架首页）
 
 - `page.tsx` — 材料库入口，装配 `MaterialLibrary` 与 `useMaterialLibrary`。
-- `_hooks/useMaterialLibrary.ts` — 加载材料记录、批量逐份解析、卡片打开 / 置顶 / 重命名 / 删除。
+- `_hooks/useMaterialLibrary.ts` — 加载材料记录、批量逐份解析及其进度状态、卡片打开 / 置顶 / 重命名 / 删除。
 - `_lib/materialApi.ts` — `/api/analyze` 客户端请求与响应校验。
 - `_lib/materialLibrary.ts` — 材料记录构造、进度派生、批量导入隔离。
 - `_lib/materialFile.ts` — 书架与工作台共用的文件类型 / 大小校验和上传格式声明。
 - `_lib/materialRecord.ts` — 书架与工作台共用的记录标题、id 和诊断计划文本纯函数。
-- `_components/MaterialLibrary.tsx` / `MaterialCard.tsx` — 书架布局、上传入口、材料卡片与三点菜单。
+- `_components/MaterialLibrary.tsx` / `MaterialCard.tsx` — 书架布局、上传入口、逐份解析进度、材料卡片与三点菜单。
 
 ## app/exam/（诊断工作台）
 
