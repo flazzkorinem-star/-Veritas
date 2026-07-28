@@ -21,6 +21,13 @@ export interface MaterialProgress {
   totalCount: number
 }
 
+export interface MaterialImportProgress {
+  current: number
+  processed: number
+  total: number
+  fileName: string
+}
+
 export function createMaterialRecord({
   id,
   fileName,

@@ -13,7 +13,7 @@ import {
   updateDiagnosisRecordTitle,
 } from '@/lib/localHistory'
 import { analyzeMaterialFile } from '../_lib/materialApi'
-import { importMaterialFiles } from '../_lib/materialLibrary'
+import { importMaterialFiles, type MaterialImportProgress } from '../_lib/materialLibrary'
 
 export function useMaterialLibrary() {
   const router = useRouter()
@@ -21,6 +21,7 @@ export function useMaterialLibrary() {
   const [records, setRecords] = useState<LocalDiagnosisRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<MaterialImportProgress | null>(null)
   const [uploadMessage, setUploadMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -39,13 +40,13 @@ export function useMaterialLibrary() {
     if (uploading || files.length === 0) return
     setUploading(true)
     setError('')
-    setUploadMessage('准备解析材料…')
+    setUploadMessage('')
 
     try {
       const result = await importMaterialFiles(files, {
         analyze: analyzeMaterialFile,
         onProgress: (current, total, fileName) => {
-          setUploadMessage(`正在解析 ${current}/${total}：${fileName}`)
+          setUploadProgress({ current, processed: current - 1, total, fileName })
         },
       })
       await refreshRecords()
@@ -56,6 +57,7 @@ export function useMaterialLibrary() {
       setError('材料导入失败，请重试')
     } finally {
       setUploading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -104,6 +106,7 @@ export function useMaterialLibrary() {
     records,
     loading,
     uploading,
+    uploadProgress,
     uploadMessage,
     error,
     handleFiles,

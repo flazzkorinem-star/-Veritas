@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import type { LocalDiagnosisRecord } from '@/lib/localHistory'
 import { RenameDialog } from '@/components/RenameDialog'
+import type { MaterialImportProgress } from '../_lib/materialLibrary'
 import { MATERIAL_FILE_ACCEPT } from '../_lib/materialFile'
 import { MaterialCard, type MaterialCardMenu } from './MaterialCard'
 
@@ -10,6 +11,7 @@ export function MaterialLibrary({
   records,
   loading,
   uploading,
+  uploadProgress,
   uploadMessage,
   error,
   onFiles,
@@ -21,6 +23,7 @@ export function MaterialLibrary({
   records: LocalDiagnosisRecord[]
   loading: boolean
   uploading: boolean
+  uploadProgress: MaterialImportProgress | null
   uploadMessage: string
   error: string
   onFiles: (files: File[]) => void
@@ -73,6 +76,34 @@ export function MaterialLibrary({
             </button>
           </div>
         </header>
+
+        {uploading && uploadProgress && (
+          <section
+            role="status"
+            aria-label="材料解析进度"
+            className="mb-5 rounded-2xl border border-[#5C6BC0]/20 bg-white px-4 py-3.5 shadow-sm"
+          >
+            <div className="flex items-start justify-between gap-4 text-sm">
+              <p className="min-w-0 font-medium text-[#4059ad]">
+                正在解析 {uploadProgress.current}/{uploadProgress.total}：
+                <span className="break-all">{uploadProgress.fileName}</span>
+              </p>
+              <span className="shrink-0 text-xs text-slate-500">
+                已处理 {uploadProgress.processed}/{uploadProgress.total} 份材料
+              </span>
+            </div>
+            <progress
+              aria-label="材料解析进度"
+              aria-valuemin={0}
+              aria-valuenow={uploadProgress.processed}
+              aria-valuemax={uploadProgress.total}
+              aria-valuetext={`已处理 ${uploadProgress.processed}/${uploadProgress.total} 份材料`}
+              value={uploadProgress.processed}
+              max={uploadProgress.total}
+              className="mt-3 block h-2 w-full animate-pulse accent-[#5C6BC0]"
+            />
+          </section>
+        )}
 
         {(uploadMessage || error) && (
           <div className="mb-5 space-y-2" aria-live="polite">
