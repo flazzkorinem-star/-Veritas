@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import type { ExamReport } from '@/lib/types'
 import type { LocalDiagnosisRecord } from '@/lib/localHistory'
 import type { MenuTarget } from '../_lib/examPageTypes'
 import { ActionMenu, getActionMenuAnchor } from '@/components/ActionMenu'
+import { RenameDialog } from '@/components/RenameDialog'
 
 export function WorkspaceSidebar({
   materialRecords,
@@ -29,9 +31,11 @@ export function WorkspaceSidebar({
   onOpenReport: () => void
   onLoadRecord: (recordId: string) => void
   onRecordPin: (record: LocalDiagnosisRecord) => void
-  onRecordRename: (record: LocalDiagnosisRecord) => void
+  onRecordRename: (record: LocalDiagnosisRecord, name: string) => void
   onRecordDelete: (record: LocalDiagnosisRecord) => void
 }) {
+  const [renamingRecord, setRenamingRecord] = useState<LocalDiagnosisRecord | null>(null)
+
   return (
     <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white/85">
       <div className="flex items-center gap-3 px-5 py-5">
@@ -116,7 +120,14 @@ export function WorkspaceSidebar({
                     onClose={() => setOpenMenu(null)}
                     items={[
                       { icon: 'pin', label: record.pinned ? '取消置顶' : '置顶', onClick: () => onRecordPin(record) },
-                      { icon: 'rename', label: '重命名', onClick: () => onRecordRename(record) },
+                      {
+                        icon: 'rename',
+                        label: '重命名',
+                        onClick: () => {
+                          setOpenMenu(null)
+                          setRenamingRecord(record)
+                        },
+                      },
                       { icon: 'share', label: '分享', disabled: true },
                       { icon: 'delete', label: '删除', danger: true, onClick: () => onRecordDelete(record) },
                     ]}
@@ -136,6 +147,17 @@ export function WorkspaceSidebar({
           设置
         </button>
       </div>
+      {renamingRecord && (
+        <RenameDialog
+          title="重命名材料"
+          initialValue={renamingRecord.title}
+          onCancel={() => setRenamingRecord(null)}
+          onConfirm={(name) => {
+            onRecordRename(renamingRecord, name)
+            setRenamingRecord(null)
+          }}
+        />
+      )}
     </aside>
   )
 }

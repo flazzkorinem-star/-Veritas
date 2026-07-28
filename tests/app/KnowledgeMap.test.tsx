@@ -36,9 +36,11 @@ function makeState(mapNodes = nodes): StoreExamState {
 
 function KnowledgeMapHarness({
   onNodeImportance = () => {},
+  onNodeRename = () => {},
   mapNodes = nodes,
 }: {
-  onNodeImportance?: (nodeId: string) => void
+  onNodeImportance?: (nodeId: string, importance: KnowledgeNode['importance']) => void
+  onNodeRename?: (nodeId: string, name: string) => void
   mapNodes?: KnowledgeNode[]
 }) {
   const [openMenu, setOpenMenu] = useState<MenuTarget | null>(null)
@@ -53,7 +55,7 @@ function KnowledgeMapHarness({
       dispatch={vi.fn<(action: Action) => void>()}
       onNodeImportance={onNodeImportance}
       onNodePin={() => {}}
-      onNodeRename={() => {}}
+      onNodeRename={onNodeRename}
       onNodeDelete={() => {}}
     />
   )
@@ -94,13 +96,31 @@ describe('KnowledgeMap', () => {
     expect(screen.queryByText('向量嵌入')).not.toBeInTheDocument()
   })
 
-  it('offers importance adjustment from the node action menu', () => {
+  it('lets the user select a specific importance tier', () => {
     const onNodeImportance = vi.fn()
     render(<KnowledgeMapHarness onNodeImportance={onNodeImportance} />)
 
     fireEvent.click(screen.getByRole('button', { name: '检索增强生成的更多操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '调整重要度' }))
+    expect(onNodeImportance).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '调整重要度' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '◆◆◆ 当前' })).toBeInTheDocument()
 
-    expect(onNodeImportance).toHaveBeenCalledWith('node-1')
+    fireEvent.click(screen.getByRole('button', { name: '◆◆' }))
+    expect(onNodeImportance).toHaveBeenCalledWith('node-1', 2)
+  })
+
+  it('renames a knowledge node through an in-page dialog', () => {
+    const onNodeRename = vi.fn()
+    render(<KnowledgeMapHarness onNodeRename={onNodeRename} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '检索增强生成的更多操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '新名称' }), {
+      target: { value: '  RAG 工作流  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(onNodeRename).toHaveBeenCalledWith('node-1', 'RAG 工作流')
   })
 })

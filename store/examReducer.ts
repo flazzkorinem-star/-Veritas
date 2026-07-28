@@ -1,4 +1,4 @@
-import type { KnowledgeNode, NodeConversation } from '@/lib/types'
+import type { NodeConversation } from '@/lib/types'
 import {
   appendTurnToNodeConversationById,
   appendTurnToNodeConversations,
@@ -13,12 +13,6 @@ import {
   setNodeLevelStatus,
   sortNodePairs,
 } from './examStateHelpers'
-
-function getNextImportance(importance: KnowledgeNode['importance']): KnowledgeNode['importance'] {
-  if (importance === 1) return 2
-  if (importance === 2) return 3
-  return 1
-}
 
 export function reducer(state: StoreExamState, action: Action): StoreExamState {
   switch (action.type) {
@@ -74,13 +68,13 @@ export function reducer(state: StoreExamState, action: Action): StoreExamState {
       }
     }
 
-    case 'CYCLE_NODE_IMPORTANCE': {
+    case 'SET_NODE_IMPORTANCE': {
       const nodes = state.nodes.map((node) => (
-        node.id === action.nodeId ? { ...node, importance: getNextImportance(node.importance) } : node
+        node.id === action.nodeId ? { ...node, importance: action.importance } : node
       ))
       const nodeConversations = state.nodeConversations.map((conversation) => (
         conversation.node.id === action.nodeId
-          ? { ...conversation, node: { ...conversation.node, importance: getNextImportance(conversation.node.importance) } }
+          ? { ...conversation, node: { ...conversation.node, importance: action.importance } }
           : conversation
       ))
       return {

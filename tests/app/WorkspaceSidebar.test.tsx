@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceSidebar } from '@/app/exam/_components/WorkspaceSidebar'
+import type { MenuTarget } from '@/app/exam/_lib/examPageTypes'
 import { createMaterialRecord } from '@/app/_lib/materialLibrary'
 
 const record = createMaterialRecord({
@@ -18,6 +20,31 @@ const record = createMaterialRecord({
     }],
   },
 })
+
+function WorkspaceSidebarHarness({
+  onRecordRename = () => {},
+}: {
+  onRecordRename?: (target: typeof record, name: string) => void
+}) {
+  const [openMenu, setOpenMenu] = useState<MenuTarget | null>(null)
+
+  return (
+    <WorkspaceSidebar
+      materialRecords={[record]}
+      selectedRecordId={record.id}
+      report={null}
+      openMenu={openMenu}
+      setOpenMenu={setOpenMenu}
+      onBackShelf={() => {}}
+      onNewDiagnosis={() => {}}
+      onOpenReport={() => {}}
+      onLoadRecord={() => {}}
+      onRecordPin={() => {}}
+      onRecordRename={onRecordRename}
+      onRecordDelete={() => {}}
+    />
+  )
+}
 
 describe('WorkspaceSidebar', () => {
   it('returns to the shelf and presents records as switchable materials', () => {
@@ -48,5 +75,19 @@ describe('WorkspaceSidebar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '切换材料：产品说明' }))
     expect(onLoadRecord).toHaveBeenCalledWith(record.id)
+  })
+
+  it('renames a workspace material through an in-page dialog', () => {
+    const onRecordRename = vi.fn()
+    render(<WorkspaceSidebarHarness onRecordRename={onRecordRename} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '产品说明的更多操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '新名称' }), {
+      target: { value: '  产品说明新版  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(onRecordRename).toHaveBeenCalledWith(record, '产品说明新版')
   })
 })

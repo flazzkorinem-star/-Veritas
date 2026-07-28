@@ -84,4 +84,33 @@ describe('MaterialLibrary', () => {
     expect(screen.getByRole('menuitem', { name: '分享' })).toBeDisabled()
     expect(screen.getByRole('menuitem', { name: '删除' })).toBeEnabled()
   })
+
+  it('renames a material through an in-page dialog', () => {
+    const record = makeRecord('a', '产品说明')
+    const onRename = vi.fn()
+
+    render(
+      <MaterialLibrary
+        records={[record]}
+        loading={false}
+        uploading={false}
+        uploadMessage=""
+        error=""
+        onFiles={() => {}}
+        onOpenRecord={() => {}}
+        onPin={() => {}}
+        onRename={onRename}
+        onDelete={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '产品说明的更多操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '新名称' }), {
+      target: { value: '  产品说明新版  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    expect(onRename).toHaveBeenCalledWith(record, '产品说明新版')
+  })
 })

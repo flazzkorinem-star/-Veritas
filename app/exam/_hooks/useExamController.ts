@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useExam } from '@/store/examStore'
+import type { KnowledgeNode } from '@/lib/types'
 import { calculateNodeScore } from '@/lib/score'
 import { levelLabels } from '../_lib/examPageHelpers'
 import type { MenuTarget } from '../_lib/examPageTypes'
@@ -90,8 +91,8 @@ export function useExamController() {
     setOpenMenu(null)
   }
 
-  function handleNodeImportance(nodeId: string) {
-    dispatch({ type: 'CYCLE_NODE_IMPORTANCE', nodeId })
+  function handleNodeImportance(nodeId: string, importance: KnowledgeNode['importance']) {
+    dispatch({ type: 'SET_NODE_IMPORTANCE', nodeId, importance })
     setOpenMenu(null)
   }
 
@@ -100,12 +101,7 @@ export function useExamController() {
     setOpenMenu(null)
   }
 
-  function handleNodeRename(nodeId: string, currentName: string) {
-    const name = window.prompt('重命名', currentName)?.trim()
-    if (!name) {
-      setOpenMenu(null)
-      return
-    }
+  function handleNodeRename(nodeId: string, name: string) {
     dispatch({ type: 'UPDATE_NODE_NAME', nodeId, name })
     setOpenMenu(null)
   }

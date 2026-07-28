@@ -70,7 +70,7 @@ export type Action =
     }
   | { type: 'SET_NODES'; nodes: KnowledgeNode[] }
   | { type: 'UPDATE_NODE_NAME'; nodeId: string; name: string }
-  | { type: 'CYCLE_NODE_IMPORTANCE'; nodeId: string }
+  | { type: 'SET_NODE_IMPORTANCE'; nodeId: string; importance: KnowledgeNode['importance'] }
   | { type: 'TOGGLE_NODE_PIN'; nodeId: string }
   | { type: 'DELETE_NODE'; nodeId: string }
   | { type: 'ADD_TURN'; turn: ConversationTurn; nodeId?: string }
