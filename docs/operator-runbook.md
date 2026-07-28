@@ -75,10 +75,11 @@ Use for v3.3 regression checks.
 3. Upload one or more small readable TXT or Markdown files; while parsing, confirm the current file, processed-file count, and animated progress feedback are visible, then confirm each successful file becomes a separate bookshelf card.
 4. Confirm each card shows the material name, knowledge-point count, and diagnosis progress; reopen a card to enter `/exam`.
 5. Confirm Agent 1 returns 1–15 worthwhile nodes grouped by importance in the knowledge map.
-6. Confirm Agent 2 advances by cognitive level, not fixed answer count.
-7. Confirm the hint and answer actions work.
-8. Confirm the report cites user wording and shows level status.
-9. Return to the bookshelf and confirm the material and diagnosis progress can be reopened, then repeat with small PDF, DOCX, and PPTX files.
+6. Confirm bookshelf materials, workspace materials, and knowledge nodes rename through in-page dialogs; confirm the importance dialog offers all three levels, marks the current level, and does not switch nodes when a level is selected.
+7. Confirm Agent 2 advances by cognitive level, not fixed answer count.
+8. Confirm the hint and answer actions work.
+9. Confirm the report cites user wording and shows level status.
+10. Return to the bookshelf and confirm the material and diagnosis progress can be reopened, then repeat with small PDF, DOCX, and PPTX files.
 
 ## Failure Checks
 
