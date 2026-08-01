@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 1：工程脚手架与质量门。
+阶段 2：领域模型与状态机。
 
 ## 根目录
 
@@ -30,7 +30,13 @@
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
+- `src/domain/types.ts`：任务、材料、知识地图、主题、层级、消息与报告的稳定领域类型。
+- `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约。
+- `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
+- `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
 
 ## 测试
 
 - `e2e/smoke.spec.ts`：验证桌面与移动端均可打开基础页面。
+- `src/domain/diagnostic/reducer.test.ts`：固定四层顺序、计分、提示、答案、停滞与非法转移测试。
+- `src/domain/diagnostic/selectors.test.ts`：任务完成与材料主题进度的确定性派生测试。
