@@ -13,6 +13,7 @@ export default defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    "public/parser-assets/**",
     "next-env.d.ts",
   ]),
 ]);

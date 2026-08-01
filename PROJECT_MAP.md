@@ -4,11 +4,11 @@
 
 ## 当前阶段
 
-阶段 5：Markdown/TXT 文本材料纵向闭环。
+阶段 6：全部承诺文件格式与本地 OCR。
 
 ## 根目录
 
-- `package.json`：本地开发、检查、测试与生产构建命令入口。
+- `package.json`：本地开发、解析资源准备、检查、测试与生产构建命令入口。
 - `next.config.ts`：Next.js 运行配置并为全部路由接入安全响应头。
 - `tsconfig.json`：TypeScript 严格模式与 `@/*` 源码别名；类型检查前由 Next.js 生成路由类型。
 - `eslint.config.mjs`：Next.js、TypeScript 与 Prettier 的静态检查规则。
@@ -16,6 +16,7 @@
 - `vitest.config.mts`、`vitest.setup.ts`：单元与组件测试环境，只收集 `src` 下的 Vitest 用例。
 - `playwright.config.ts`：桌面 Edge 与移动端 Edge 的真实浏览器项目配置。
 - `scripts/run-e2e.mjs`：启动本地生产服务器、等待就绪、运行 Playwright 并回收进程。
+- `scripts/prepare-parser-assets.mjs`：从锁定依赖复制 PDF Worker、OCR Worker、WASM 与中英文语言数据到同源生成目录。
 - `DESIGN_GUIDE.md`：唯一产品事实来源。
 - `SECURITY.md`：安全实现与测试底线。
 - `IMPLEMENTATION_PLAN.md`：阶段顺序与验收检查点。
@@ -23,6 +24,7 @@
 - `docs/brand/vita-assets.md`：记录维塔原创身份锁、七态动作与透明资产处理方式。
 - `tests/fixtures/end-to-end/water-cycle.md`：首条纵向验收用 Markdown 材料。
 - `public/vita/*.png`：维塔默认、等待上传、处理中、给提示、鼓励、展示答案和错误七态透明图片。
+- `public/ocr-worker.js`：启动同源 Tesseract Worker，并只过滤官方语言数据产生的已知无害参数警告。
 
 ## 源代码
 
@@ -42,10 +44,17 @@
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
 - `src/storage/task-repository.ts`：负责任务、原始材料、处理结果、首问会话、界面状态和事务性删除/撤销。
-- `src/features/materials/text-reader.ts`：校验并按真实字节进度读取 UTF-8 Markdown/TXT。
+- `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
+- `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
+- `src/features/materials/parsed-material.ts`、`chunk-source-blocks.ts`：定义多格式解析结果，并在保留页、幻灯片或段落来源的前提下分块。
+- `src/features/materials/docx-parser.ts`：使用 Mammoth 浏览器构建只提取 DOCX 纯文本段落。
+- `src/features/materials/pptx-parser.ts`：使用 JSZip 和受控 DOMParser 按演示文稿关系顺序提取 PPTX 文字。
+- `src/features/materials/pdf-parser.ts`：使用 PDF.js 逐页提取文字，并将无文字页面渲染为受限像素交给 OCR。
+- `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
+- `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式分派唯一解析实现。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
-- `src/features/materials/process-text-material.ts`：顺序编排分块提取、覆盖审计和首问生成。
+- `src/features/materials/process-text-material.ts`：顺序编排多格式解析、来源分块、覆盖审计和首问生成，并传播取消信号。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时与有限重试。
 - `src/server/agents/service.ts`：组装三个固定操作的隔离提示，校验输出并只重试受影响操作。
@@ -70,9 +79,10 @@
 - `src/storage/task-repository.test.ts`：验证 schema 迁移、任务操作、跨表删除/撤销和隔离错误。
 - `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复和任务菜单交互。
 - `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
-- `src/features/materials/*.test.ts`：验证文本入口、语义分块、同源客户端与两阶段处理编排。
+- `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
 - `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏与有限重试。
 - `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝和操作级重试。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、请求体限制与稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
 - `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首问、核心覆盖、双端布局与刷新恢复。
+- `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。

@@ -2,6 +2,7 @@ import Dexie from "dexie";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { MaterialFileError } from "@/features/materials/material-file";
 import { WorkspaceApp } from "@/features/workspace/WorkspaceApp";
 import { createVeritasDatabase, type VeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
@@ -207,5 +208,41 @@ describe("主工作区", () => {
     await expect(repository.listTasks()).resolves.toEqual([
       expect.objectContaining({ status: "FAILED", fileName: "notes.txt" }),
     ]);
+  });
+
+  it("解析期间可取消，并保留可重试的失败任务", async () => {
+    const { repository } = setup();
+    const processor: TextMaterialProcessor = async (_file, onProgress, dependencies) => {
+      onProgress({ stage: "OCR", current: 0, total: 1, label: "识别图片文字" });
+      return new Promise((_, reject) => {
+        dependencies?.signal?.addEventListener(
+          "abort",
+          () => reject(new MaterialFileError("CANCELLED", "已取消处理这份材料。 ")),
+          { once: true },
+        );
+      });
+    };
+    render(<WorkspaceApp processor={processor} repository={repository} />);
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["image"], "notes.png", { type: "image/png" })],
+      },
+    });
+    expect(await screen.findByText("识别图片文字", { exact: true })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "取消处理" }));
+
+    expect(await screen.findByText("这份材料暂时没能准备好")).toBeVisible();
+    expect(screen.getByText("已取消处理这份材料。")).toBeVisible();
+    await waitFor(async () =>
+      expect(await repository.listTasks()).toEqual([
+        expect.objectContaining({
+          status: "FAILED",
+          fileName: "notes.png",
+          failureReason: "已取消处理这份材料。",
+        }),
+      ]),
+    );
   });
 });

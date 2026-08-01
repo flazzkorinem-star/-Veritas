@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentClientError } from "@/features/materials/agent-client";
+import { MaterialFileError } from "@/features/materials/material-file";
+import { MaterialParseError } from "@/features/materials/parsed-material";
 import {
   processTextMaterial,
   TextProcessingError,
@@ -24,6 +26,8 @@ function errorMessage(error: unknown) {
 
 function processingErrorMessage(error: unknown) {
   return error instanceof MaterialReadError ||
+    error instanceof MaterialFileError ||
+    error instanceof MaterialParseError ||
     error instanceof AgentClientError ||
     error instanceof TextProcessingError
     ? error.message
@@ -48,6 +52,7 @@ export function useWorkspace(
   const [deletedSnapshot, setDeletedSnapshot] = useState<DeletedTaskSnapshot | null>(
     null,
   );
+  const processingController = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -109,10 +114,14 @@ export function useWorkspace(
   }
 
   async function runProcessing(task: StoredTask, file: File) {
+    const controller = new AbortController();
+    processingController.current = controller;
     setProcessingTaskId(task.id);
     setProcessingProgress({ stage: "READING", loadedBytes: 0, totalBytes: file.size });
     try {
-      const result = await processor(file, setProcessingProgress);
+      const result = await processor(file, setProcessingProgress, {
+        signal: controller.signal,
+      });
       await repository.completeTextProcessing(
         task.id,
         result.parsedText,
@@ -127,7 +136,14 @@ export function useWorkspace(
       setProcessingProgress(null);
       setProcessingTaskId(null);
       setIsImporting(false);
+      if (processingController.current === controller) {
+        processingController.current = null;
+      }
     }
+  }
+
+  function cancelProcessing() {
+    processingController.current?.abort();
   }
 
   async function importMaterial(file: File) {
@@ -264,6 +280,7 @@ export function useWorkspace(
     setSearch,
     importMaterial,
     retryProcessing,
+    cancelProcessing,
     selectTask,
     renameTask,
     setTaskPinned,

@@ -9,6 +9,7 @@ describe("安全响应头", () => {
     );
 
     expect(headers["Content-Security-Policy"]).toContain("default-src 'self'");
+    expect(headers["Content-Security-Policy"]).toContain("'wasm-unsafe-eval'");
     expect(headers["Content-Security-Policy"]).toContain("object-src 'none'");
     expect(headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
     expect(headers["X-Content-Type-Options"]).toBe("nosniff");

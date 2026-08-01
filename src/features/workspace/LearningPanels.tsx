@@ -29,6 +29,7 @@ interface LearningPanelsProps {
   uploadDisabled: boolean;
   onUpload: (file: File) => void;
   onRetry: () => void;
+  onCancelProcessing: () => void;
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
   onClosePanel: () => void;
 }
@@ -76,6 +77,23 @@ function ProcessingCopy({
       </div>
     );
   }
+  if (progress.stage === "PARSING" || progress.stage === "OCR") {
+    const percent = progress.total
+      ? Math.round((progress.current / progress.total) * 100)
+      : 0;
+    return (
+      <div className="processing-copy">
+        <strong>{progress.label}</strong>
+        <p>
+          {progress.stage === "OCR" ? "正在识别图片文字" : "正在解析材料"} ·{" "}
+          {progress.current}
+          {" / "}
+          {progress.total}
+        </p>
+        <ProgressBar label={`${progress.label} ${percent}%`} max={100} value={percent} />
+      </div>
+    );
+  }
   const title =
     progress.stage === "EXTRACTING"
       ? `正在整理内容 ${progress.currentChunk} / ${progress.totalChunks}`
@@ -105,6 +123,7 @@ export function LearningPanels({
   uploadDisabled,
   onUpload,
   onRetry,
+  onCancelProcessing,
   onOpenPanel,
   onClosePanel,
 }: LearningPanelsProps) {
@@ -219,6 +238,9 @@ export function LearningPanels({
               progress={processingProgress}
               elapsedSeconds={elapsedSeconds}
             />
+            <Button onClick={onCancelProcessing} size="sm" variant="ghost">
+              取消处理
+            </Button>
           </section>
         ) : learningData?.messages.length ? (
           <section className="chat-thread" aria-live="polite">

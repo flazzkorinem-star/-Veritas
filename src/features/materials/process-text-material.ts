@@ -1,11 +1,14 @@
 import type { FirstQuestion, KnowledgeMap } from "@/domain/knowledge-map/contracts";
 
 import { callAgent } from "./agent-client";
-import { chunkText } from "./chunk-text";
-import { readTextMaterial } from "./text-reader";
+import { chunkSourceBlocks } from "./chunk-source-blocks";
+import { MaterialFileError } from "./material-file";
+import { parseMaterial } from "./parse-material";
+import type { ParsingProgress } from "./parsed-material";
 
 export type MaterialProcessingProgress =
   | { stage: "READING"; loadedBytes: number; totalBytes: number }
+  | ParsingProgress
   | {
       stage: "EXTRACTING";
       currentChunk: number;
@@ -31,6 +34,8 @@ export interface TextProcessingResult {
 interface ProcessingDependencies {
   callAgent?: typeof callAgent;
   now?: () => number;
+  parseMaterial?: typeof parseMaterial;
+  signal?: AbortSignal;
 }
 
 export async function processTextMaterial(
@@ -40,14 +45,19 @@ export async function processTextMaterial(
 ): Promise<TextProcessingResult> {
   const runAgent = dependencies.callAgent ?? callAgent;
   const now = dependencies.now ?? Date.now;
-  const material = await readTextMaterial(file, (progress) =>
-    onProgress({ stage: "READING", ...progress }),
+  const material = await (dependencies.parseMaterial ?? parseMaterial)(
+    file,
+    onProgress,
+    dependencies.signal,
   );
-  const chunks = chunkText(material.text);
+  const chunks = chunkSourceBlocks(material.sourceBlocks);
   const startedAt = now();
   const extractedChunks = [];
 
   for (const [index, chunk] of chunks.entries()) {
+    if (dependencies.signal?.aborted) {
+      throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
+    }
     onProgress({
       stage: "EXTRACTING",
       currentChunk: index + 1,
@@ -60,6 +70,9 @@ export async function processTextMaterial(
     });
   }
 
+  if (dependencies.signal?.aborted) {
+    throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
+  }
   onProgress({ stage: "AUDITING", startedAt });
   const knowledgeMap = await runAgent({
     operation: "AUDIT_KNOWLEDGE_MAP",
@@ -71,6 +84,9 @@ export async function processTextMaterial(
   if (!firstNode) throw new TextProcessingError("NO_RELIABLE_NODE");
 
   const nodeItemIds = new Set(firstNode.knowledgeItemIds);
+  if (dependencies.signal?.aborted) {
+    throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
+  }
   onProgress({ stage: "PREPARING_QUESTION", startedAt });
   const firstQuestion = await runAgent({
     operation: "CREATE_FIRST_QUESTION",

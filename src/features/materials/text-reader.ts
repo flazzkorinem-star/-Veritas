@@ -1,10 +1,6 @@
-const MAX_FILE_BYTES = 30 * 1024 * 1024;
 const MAX_TEXT_CHARACTERS = 300_000;
 
-const TEXT_MIME_TYPES: Record<string, ReadonlySet<string>> = {
-  md: new Set(["text/markdown", "text/x-markdown", "text/plain", ""]),
-  txt: new Set(["text/plain", ""]),
-};
+import { inspectMaterialFile, readMaterialBytes } from "./material-file";
 
 export type MaterialReadErrorCode =
   | "UNSUPPORTED_TYPE"
@@ -29,71 +25,47 @@ export interface ReadProgress {
   totalBytes: number;
 }
 
-function validateFile(file: File) {
-  const fileName = file.name.split(/[\\/]/).at(-1)?.trim() ?? "";
-  const extension = fileName.toLocaleLowerCase("en-US").split(".").at(-1) ?? "";
-  const acceptedMimeTypes = TEXT_MIME_TYPES[extension];
-  if (!fileName || !acceptedMimeTypes) {
+export function decodeTextMaterial(file: File, bytes: Uint8Array) {
+  if (!/\.(?:md|txt)$/iu.test(file.name)) {
     throw new MaterialReadError(
       "UNSUPPORTED_TYPE",
       "当前步骤只支持 Markdown（MD）和 TXT 文件。",
     );
   }
-  if (!acceptedMimeTypes.has(file.type.toLocaleLowerCase("en-US"))) {
-    throw new MaterialReadError("MIME_MISMATCH", "文件类型与扩展名不一致，请重新选择。 ");
+  const inspected = inspectMaterialFile(file, bytes);
+  if (inspected.kind !== "TEXT") {
+    throw new MaterialReadError("UNSUPPORTED_TYPE", "当前文件不是文本材料。 ");
   }
-  if (file.size > MAX_FILE_BYTES) {
-    throw new MaterialReadError("FILE_TOO_LARGE", "文件超过 30MB，请拆分材料后再上传。");
-  }
-  return fileName;
-}
-
-async function readBytes(file: File, onProgress?: (progress: ReadProgress) => void) {
-  onProgress?.({ loadedBytes: 0, totalBytes: file.size });
-  return new Promise<Uint8Array>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onprogress = (event) =>
-      onProgress?.({ loadedBytes: event.loaded, totalBytes: file.size });
-    reader.onerror = () => reject(reader.error ?? new Error("读取文件失败。"));
-    reader.onabort = () => reject(new Error("读取已取消。"));
-    reader.onload = () => {
-      if (!(reader.result instanceof ArrayBuffer)) {
-        reject(new Error("读取结果无效。"));
-        return;
-      }
-      onProgress?.({ loadedBytes: file.size, totalBytes: file.size });
-      resolve(new Uint8Array(reader.result));
-    };
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-export async function readTextMaterial(
-  file: File,
-  onProgress?: (progress: ReadProgress) => void,
-) {
-  const fileName = validateFile(file);
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true })
-      .decode(await readBytes(file, onProgress))
-      .replace(/^\uFEFF/, "")
+      .decode(bytes)
+      .replace(/^\uFEFF/u, "")
       .trim();
-  } catch (error) {
-    if (error instanceof MaterialReadError) throw error;
+  } catch {
     throw new MaterialReadError(
       "INVALID_ENCODING",
       "文本不是有效的 UTF-8 编码，请转换编码后重试。",
     );
   }
-  if (!text) {
-    throw new MaterialReadError("EMPTY_TEXT", "材料中没有可读取的文字。 ");
-  }
+  if (!text) throw new MaterialReadError("EMPTY_TEXT", "材料中没有可读取的文字。 ");
   if (text.length > MAX_TEXT_CHARACTERS) {
     throw new MaterialReadError(
       "TEXT_TOO_LONG",
       "解析后的文字超过 30 万字符，请拆分材料后再上传。",
     );
   }
-  return { fileName, mimeType: file.type, sizeBytes: file.size, text };
+  return {
+    fileName: inspected.fileName,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    text,
+  };
+}
+
+export async function readTextMaterial(
+  file: File,
+  onProgress?: (progress: ReadProgress) => void,
+) {
+  return decodeTextMaterial(file, await readMaterialBytes(file, onProgress));
 }

@@ -78,6 +78,7 @@ export function WorkspaceApp({
         learningData={workspace.learningData}
         mobilePanel={mobilePanel}
         onClosePanel={() => setMobilePanel(null)}
+        onCancelProcessing={workspace.cancelProcessing}
         onOpenPanel={setMobilePanel}
         onRetry={() => {
           if (workspace.activeTask) {

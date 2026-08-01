@@ -119,6 +119,7 @@ Veritas 同时接收不可信文件、不可信自然语言和不可信模型输
 - 链接只允许 `http`、`https` 等明确协议，外链使用 `noopener noreferrer`；
 - 文件名、任务名、主题名、用户消息、模型消息和报告使用长度限制；
 - CSP 至少限制 `default-src`、`script-src`、`connect-src`、`img-src`、`frame-ancestors` 和 `object-src`；
+- OCR 只为同源 Tesseract WebAssembly 在 `script-src` 开放 `'wasm-unsafe-eval'`，不得因此开放 JavaScript `'unsafe-eval'` 或第三方脚本源；
 - 配置 `X-Content-Type-Options: nosniff`、点击劫持防护、合理 Referrer Policy 和 Permissions Policy；
 - 错误边界不显示堆栈、路径、环境变量和上游响应。
 
