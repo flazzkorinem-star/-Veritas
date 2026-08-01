@@ -104,6 +104,45 @@ describe("本地任务仓储", () => {
     reopened.close();
   });
 
+  it("刷新后恢复当前任务与工作区收起状态", async () => {
+    const name = databaseName();
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const storedTask = task();
+    await repository.saveTask(storedTask);
+    await repository.saveWorkspaceState({
+      id: "workspace",
+      activeTaskId: storedTask.id,
+      workspaceCollapsed: true,
+      updatedAt: new Date().toISOString(),
+    });
+    database.close();
+
+    const reopened = createVeritasDatabase(name);
+    await expect(
+      createTaskRepository(reopened).getWorkspaceState(),
+    ).resolves.toMatchObject({
+      activeTaskId: storedTask.id,
+      workspaceCollapsed: true,
+    });
+    reopened.close();
+  });
+
+  it("拒绝把不存在的任务设为当前任务", async () => {
+    const database = createVeritasDatabase(databaseName());
+    const repository = createTaskRepository(database);
+
+    await expect(
+      repository.saveWorkspaceState({
+        id: "workspace",
+        activeTaskId: crypto.randomUUID(),
+        workspaceCollapsed: false,
+        updatedAt: new Date().toISOString(),
+      }),
+    ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
+    database.close();
+  });
+
   it("删除任务时事务性删除全部关联数据，并可用短时快照恢复", async () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);

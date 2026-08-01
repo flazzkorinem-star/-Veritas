@@ -8,6 +8,7 @@ import type {
   StoredSession,
   StoredTask,
   StoredUiState,
+  StoredWorkspaceState,
 } from "@/storage/types";
 
 export class VeritasDatabase extends Dexie {
@@ -18,6 +19,7 @@ export class VeritasDatabase extends Dexie {
   drafts!: Table<StoredDraft, [string, string]>;
   reports!: Table<StoredReport, string>;
   uiStates!: Table<StoredUiState, string>;
+  workspaceStates!: Table<StoredWorkspaceState, string>;
 
   constructor(name = "veritas") {
     super(name);
@@ -48,6 +50,17 @@ export class VeritasDatabase extends Dexie {
             storedTask.isPinned ??= false;
           }),
       );
+
+    this.version(3).stores({
+      tasks: "&id, title, fileName, updatedAt",
+      materials: "&taskId",
+      sessions: "[taskId+nodeId], taskId, nodeId",
+      messages: "&id, taskId, nodeId, createdAt",
+      drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+      reports: "&taskId",
+      uiStates: "&taskId, updatedAt",
+      workspaceStates: "&id, updatedAt",
+    });
   }
 }
 

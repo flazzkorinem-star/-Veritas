@@ -54,6 +54,13 @@ export interface StoredUiState {
   updatedAt: string;
 }
 
+export interface StoredWorkspaceState {
+  id: "workspace";
+  activeTaskId: string | null;
+  workspaceCollapsed: boolean;
+  updatedAt: string;
+}
+
 export type StoredReport = Report;
 
 export interface DeletedTaskSnapshot {
@@ -64,4 +71,5 @@ export interface DeletedTaskSnapshot {
   drafts: StoredDraft[];
   report: StoredReport | undefined;
   uiState: StoredUiState | undefined;
+  workspaceState: StoredWorkspaceState | undefined;
 }

@@ -2,7 +2,12 @@ import { z } from "zod";
 
 import { TASK_STATUSES } from "@/domain/types";
 import type { VeritasDatabase } from "@/storage/database";
-import type { DeletedTaskSnapshot, StoredTask, StoredUiState } from "@/storage/types";
+import type {
+  DeletedTaskSnapshot,
+  StoredTask,
+  StoredUiState,
+  StoredWorkspaceState,
+} from "@/storage/types";
 
 const storedTaskSchema = z.object({
   id: z.uuid(),
@@ -22,6 +27,20 @@ const uiStateSchema = z.object({
   mobilePanel: z.enum(["TASKS", "TOPICS", "DIAGNOSTIC"]).nullable(),
   updatedAt: z.string().datetime(),
 });
+
+const workspaceStateSchema = z.object({
+  id: z.literal("workspace"),
+  activeTaskId: z.uuid().nullable(),
+  workspaceCollapsed: z.boolean(),
+  updatedAt: z.string().datetime(),
+});
+
+const EMPTY_WORKSPACE_STATE: StoredWorkspaceState = {
+  id: "workspace",
+  activeTaskId: null,
+  workspaceCollapsed: false,
+  updatedAt: "1970-01-01T00:00:00.000Z",
+};
 
 export type LocalStoreErrorCode =
   | "NOT_FOUND"
@@ -156,6 +175,45 @@ export function createTaskRepository(database: VeritasDatabase) {
       );
     },
 
+    getWorkspaceState() {
+      return run(async () => {
+        const stored = await database.workspaceStates.get("workspace");
+        if (!stored) return EMPTY_WORKSPACE_STATE;
+        const result = workspaceStateSchema.safeParse(stored);
+        if (!result.success) {
+          throw new LocalStoreError(
+            "CORRUPT_RECORD",
+            "本地工作区状态已损坏，请刷新页面后重试。",
+          );
+        }
+        return result.data;
+      });
+    },
+
+    saveWorkspaceState(workspaceState: StoredWorkspaceState) {
+      return run(() =>
+        database.transaction("rw", database.tasks, database.workspaceStates, async () => {
+          const result = workspaceStateSchema.safeParse(workspaceState);
+          if (!result.success) {
+            throw new LocalStoreError(
+              "CORRUPT_RECORD",
+              "本地工作区状态无效，已无法保存。",
+            );
+          }
+          if (
+            workspaceState.activeTaskId &&
+            !(await database.tasks.get(workspaceState.activeTaskId))
+          ) {
+            throw new LocalStoreError(
+              "RELATION_MISMATCH",
+              "当前任务与工作区不匹配，已拒绝保存。",
+            );
+          }
+          await database.workspaceStates.put(result.data);
+        }),
+      );
+    },
+
     deleteTask(taskId: string) {
       return run(() =>
         database.transaction(
@@ -168,8 +226,10 @@ export function createTaskRepository(database: VeritasDatabase) {
             database.drafts,
             database.reports,
             database.uiStates,
+            database.workspaceStates,
           ],
           async () => {
+            const workspaceState = await database.workspaceStates.get("workspace");
             const snapshot: DeletedTaskSnapshot = {
               task: await getExistingTask(taskId),
               material: await database.materials.get(taskId),
@@ -178,6 +238,8 @@ export function createTaskRepository(database: VeritasDatabase) {
               drafts: await database.drafts.where("taskId").equals(taskId).toArray(),
               report: await database.reports.get(taskId),
               uiState: await database.uiStates.get(taskId),
+              workspaceState:
+                workspaceState?.activeTaskId === taskId ? workspaceState : undefined,
             };
 
             await database.tasks.delete(taskId);
@@ -187,6 +249,13 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.drafts.where("taskId").equals(taskId).delete();
             await database.reports.delete(taskId);
             await database.uiStates.delete(taskId);
+            if (snapshot.workspaceState) {
+              await database.workspaceStates.put({
+                ...snapshot.workspaceState,
+                activeTaskId: null,
+                updatedAt: new Date().toISOString(),
+              });
+            }
             return snapshot;
           },
         ),
@@ -205,6 +274,7 @@ export function createTaskRepository(database: VeritasDatabase) {
             database.drafts,
             database.reports,
             database.uiStates,
+            database.workspaceStates,
           ],
           async () => {
             const task = parseTask(snapshot.task);
@@ -221,6 +291,9 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.drafts.bulkPut(snapshot.drafts);
             if (snapshot.report) await database.reports.put(snapshot.report);
             if (snapshot.uiState) await database.uiStates.put(snapshot.uiState);
+            if (snapshot.workspaceState) {
+              await database.workspaceStates.put(snapshot.workspaceState);
+            }
           },
         ),
       );
