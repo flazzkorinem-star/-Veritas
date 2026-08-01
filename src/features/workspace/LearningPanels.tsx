@@ -1,4 +1,9 @@
 import type { MobilePanel, StoredTask } from "@/storage/types";
+import { Button } from "@/ui/Button";
+import { Icon } from "@/ui/Icon";
+import { ProgressBar } from "@/ui/ProgressBar";
+import { StatusBadge } from "@/ui/StatusBadge";
+import { Vita } from "@/ui/Vita";
 
 import { UploadButton } from "./UploadButton";
 
@@ -27,14 +32,15 @@ export function LearningPanels({
             <span className="eyebrow">学习路线</span>
             <h2>主题</h2>
           </div>
-          <button
+          <Button
             aria-label="关闭主题抽屉"
             className="mobile-close"
             onClick={onClosePanel}
-            type="button"
+            size="icon"
+            variant="ghost"
           >
-            ×
-          </button>
+            <Icon name="close" />
+          </Button>
         </div>
         <div className="topic-empty">
           <span aria-hidden="true">◎</span>
@@ -49,26 +55,29 @@ export function LearningPanels({
 
       <main className="chat-workspace">
         <nav aria-label="移动端工作区导航" className="mobile-nav">
-          <button onClick={() => onOpenPanel("TASKS")} type="button">
-            任务
-          </button>
-          <button onClick={() => onOpenPanel("TOPICS")} type="button">
+          <Button onClick={() => onOpenPanel("TASKS")} size="sm" variant="ghost">
+            <Icon name="tasks" size={17} />
+            <span>任务</span>
+          </Button>
+          <Button onClick={() => onOpenPanel("TOPICS")} size="sm" variant="ghost">
+            <Icon name="topics" size={17} />
             {activeTask?.title ?? "主题"}
-          </button>
-          <button onClick={() => onOpenPanel("DIAGNOSTIC")} type="button">
-            进度
-          </button>
+          </Button>
+          <Button onClick={() => onOpenPanel("DIAGNOSTIC")} size="sm" variant="ghost">
+            <Icon name="progress" size={17} />
+            <span>进度</span>
+          </Button>
         </nav>
         <header className="chat-heading">
           <div>
             <span className="eyebrow">当前学习</span>
             <h1>{activeTask?.title ?? "从一份材料开始"}</h1>
           </div>
-          {activeTask ? <span className="status-pill">等待主题</span> : null}
+          {activeTask ? <StatusBadge tone="warning">等待主题</StatusBadge> : null}
         </header>
         <section className="chat-empty" aria-live="polite">
-          <div className="vita-placeholder" aria-hidden="true">
-            <span>V</span>
+          <div className="vita-figure">
+            <Vita state={activeTask ? "processing" : "waiting"} size={188} />
           </div>
           <div>
             <strong>{activeTask ? "材料已回到工作区" : "带上一份想学懂的材料"}</strong>
@@ -87,9 +96,9 @@ export function LearningPanels({
             </div>
           ) : null}
           <div className="composer-row">
-            <button aria-label="语音输入" disabled type="button">
-              ◉
-            </button>
+            <Button aria-label="语音输入" disabled size="icon" variant="ghost">
+              <Icon name="microphone" />
+            </Button>
             <label className="composer-input">
               <span className="visually-hidden">回答输入</span>
               <textarea
@@ -101,9 +110,9 @@ export function LearningPanels({
                 rows={1}
               />
             </label>
-            <button aria-label="发送回答" disabled type="button">
-              ↑
-            </button>
+            <Button aria-label="发送回答" disabled size="icon" variant="ghost">
+              <Icon name="send" />
+            </Button>
           </div>
         </footer>
       </main>
@@ -118,30 +127,22 @@ export function LearningPanels({
             <span className="eyebrow">诊断</span>
             <h2>学习进度</h2>
           </div>
-          <button
+          <Button
             aria-label="关闭诊断抽屉"
             className="mobile-close"
             onClick={onClosePanel}
-            type="button"
+            size="icon"
+            variant="ghost"
           >
-            ×
-          </button>
+            <Icon name="close" />
+          </Button>
         </div>
         <section className="progress-group" aria-labelledby="material-progress">
           <div className="progress-label">
             <h3 id="material-progress">整份材料</h3>
             <strong>0 / 0</strong>
           </div>
-          <div
-            aria-label="材料完成进度 0%"
-            className="progress-track"
-            role="progressbar"
-            aria-valuemax={100}
-            aria-valuemin={0}
-            aria-valuenow={0}
-          >
-            <span />
-          </div>
+          <ProgressBar label="材料完成进度 0%" max={100} value={0} />
           <p>完成的主题会逐步点亮这里。</p>
         </section>
         <section

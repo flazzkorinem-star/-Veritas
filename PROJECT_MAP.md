@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 3：本地数据与主界面骨架。
+阶段 4：品牌基础与维塔资产。
 
 ## 根目录
 
@@ -20,7 +20,9 @@
 - `SECURITY.md`：安全实现与测试底线。
 - `IMPLEMENTATION_PLAN.md`：阶段顺序与验收检查点。
 - `docs/acceptance/first-e2e.md`：首条纵向验收材料的预期行为。
+- `docs/brand/vita-assets.md`：记录维塔原创身份锁、七态动作与透明资产处理方式。
 - `tests/fixtures/end-to-end/water-cycle.md`：首条纵向验收用 Markdown 材料。
+- `public/vita/*.png`：维塔默认、等待上传、处理中、给提示、鼓励、展示答案和错误七态透明图片。
 
 ## 源代码
 
@@ -44,6 +46,12 @@
 - `src/features/workspace/LearningPanels.tsx`：显示主题、聊天、禁用输入区和两组诊断信息骨架。
 - `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
+- `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
+- `src/ui/components.css`：实现按钮、表面、消息气泡、进度条与状态标签的公共外观。
+- `src/ui/Icon.tsx`：提供当前流程需要的原创线性 SVG 图标。
+- `src/ui/Button.tsx`、`Card.tsx`：提供保留原生语义的基础交互与表面组件。
+- `src/ui/MessageBubble.tsx`、`ProgressBar.tsx`、`StatusBadge.tsx`：提供诊断对话与反馈基础组件。
+- `src/ui/Vita.tsx`：将七种角色状态映射到固定本地资产与替代文本。
 
 ## 测试
 
@@ -52,3 +60,4 @@
 - `src/domain/diagnostic/selectors.test.ts`：任务完成与材料主题进度的确定性派生测试。
 - `src/storage/task-repository.test.ts`：验证 schema 迁移、任务操作、跨表删除/撤销和隔离错误。
 - `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复和任务菜单交互。
+- `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。

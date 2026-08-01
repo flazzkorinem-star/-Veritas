@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 import type { StoredTask } from "@/storage/types";
+import { Button } from "@/ui/Button";
+import { Card } from "@/ui/Card";
 
 export function RenameDialog({
   task,
@@ -14,7 +16,7 @@ export function RenameDialog({
   const [title, setTitle] = useState(task.title);
   return (
     <div className="dialog-backdrop">
-      <section
+      <Card
         aria-labelledby="rename-title"
         aria-modal="true"
         className="task-dialog"
@@ -33,19 +35,18 @@ export function RenameDialog({
           />
         </label>
         <div className="dialog-actions">
-          <button className="secondary-button" onClick={onCancel} type="button">
+          <Button onClick={onCancel} variant="secondary">
             取消
-          </button>
-          <button
-            className="primary-button"
+          </Button>
+          <Button
             disabled={!title.trim()}
             onClick={() => onSave(title.trim())}
-            type="button"
+            variant="primary"
           >
             保存名称
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -61,7 +62,7 @@ export function DeleteDialog({
 }) {
   return (
     <div className="dialog-backdrop">
-      <section
+      <Card
         aria-labelledby="delete-title"
         aria-modal="true"
         className="task-dialog"
@@ -71,14 +72,14 @@ export function DeleteDialog({
         <h2 id="delete-title">删除任务</h2>
         <p>“{task.title}”及其材料、聊天和学习进度会从这台设备删除。</p>
         <div className="dialog-actions">
-          <button autoFocus className="secondary-button" onClick={onCancel} type="button">
+          <Button autoFocus onClick={onCancel} variant="secondary">
             取消
-          </button>
-          <button className="danger-button" onClick={onConfirm} type="button">
+          </Button>
+          <Button onClick={onConfirm} variant="danger">
             确认删除
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }

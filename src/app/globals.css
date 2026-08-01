@@ -1,25 +1,6 @@
 @import "tailwindcss";
-
-:root {
-  color: #2e2925;
-  background: #f7f2e8;
-  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
-  font-synthesis: none;
-  --ink: #2e2925;
-  --muted: #746d66;
-  --paper: #fffdf7;
-  --canvas: #f7f2e8;
-  --line: #ded6c9;
-  --accent: #d5533d;
-  --accent-dark: #a73a29;
-  --leaf: #19685d;
-  --leaf-soft: #dcece4;
-  --sun: #f1bf55;
-  --danger: #a43f35;
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --shadow-float: 0 16px 40px rgb(57 45 35 / 14%);
-}
+@import "../ui/tokens.css";
+@import "../ui/components.css";
 
 * {
   box-sizing: border-box;
@@ -124,7 +105,7 @@ textarea:disabled {
 }
 
 .brand-copy strong {
-  font-family: Georgia, "Noto Serif SC", serif;
+  font-family: var(--font-display);
   font-size: 19px;
   letter-spacing: 0.02em;
 }
@@ -174,10 +155,6 @@ textarea:disabled {
   gap: 1px;
   min-height: 58px;
   font-size: 11px;
-}
-
-.upload-button.compact span:first-child {
-  font-size: 22px;
 }
 
 .search-field {
@@ -380,7 +357,7 @@ textarea:disabled {
 .chat-heading h1,
 .task-dialog h2 {
   margin: 3px 0 0;
-  font-family: "Noto Serif SC", "Songti SC", Georgia, serif;
+  font-family: var(--font-display);
   color: var(--ink);
 }
 
@@ -448,16 +425,6 @@ textarea:disabled {
   font-size: clamp(20px, 2vw, 27px);
 }
 
-.status-pill {
-  padding: 6px 10px;
-  border: 1px solid #bcd4cb;
-  border-radius: 999px;
-  color: var(--leaf);
-  background: var(--leaf-soft);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .chat-empty {
   display: flex;
   align-items: center;
@@ -466,49 +433,37 @@ textarea:disabled {
   padding: 32px;
 }
 
-.vita-placeholder {
+.vita-figure {
   position: relative;
   display: grid;
-  width: 86px;
-  height: 70px;
+  flex: 0 0 auto;
+  width: 188px;
+  height: 188px;
   place-items: center;
-  border: 2px solid #4a413a;
-  border-radius: 52% 48% 45% 42%;
-  color: #fff7e6;
-  background: #7f5b44;
-  box-shadow: 8px 8px 0 #ead6b0;
 }
 
-.vita-placeholder::before,
-.vita-placeholder::after {
+.vita-figure::after {
   position: absolute;
-  top: -10px;
-  width: 20px;
-  height: 20px;
-  border: 2px solid #4a413a;
+  z-index: -1;
+  right: 14px;
+  bottom: 16px;
+  width: 92px;
+  height: 38px;
   border-radius: 50%;
-  background: #7f5b44;
+  background: rgb(241 191 85 / 26%);
   content: "";
+  transform: rotate(-7deg);
 }
 
-.vita-placeholder::before {
-  left: 12px;
-}
-
-.vita-placeholder::after {
-  right: 12px;
-}
-
-.vita-placeholder span {
-  z-index: 1;
-  font-family: Georgia, serif;
-  font-size: 22px;
-  font-weight: 800;
+.vita-figure img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .chat-empty strong {
   display: block;
-  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-family: var(--font-display);
   font-size: 18px;
 }
 
@@ -555,7 +510,7 @@ textarea:disabled {
   box-shadow: 0 8px 24px rgb(72 58 43 / 7%);
 }
 
-.composer-row button {
+.composer-row > .ui-button {
   border: 0;
   border-radius: 11px;
   color: #aaa198;
@@ -607,19 +562,8 @@ textarea:disabled {
   font-size: 16px;
 }
 
-.progress-track {
-  height: 8px;
+.progress-group .ui-progress {
   margin-top: 13px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e7e0d5;
-}
-
-.progress-track span {
-  display: block;
-  width: 0;
-  height: 100%;
-  background: var(--leaf);
 }
 
 .progress-group p {
@@ -709,23 +653,6 @@ textarea:disabled {
   cursor: pointer;
 }
 
-.secondary-button {
-  border: 1px solid var(--line);
-  background: transparent;
-}
-
-.primary-button {
-  border: 1px solid var(--leaf);
-  color: white;
-  background: var(--leaf);
-}
-
-.danger-button {
-  border: 1px solid var(--danger);
-  color: white;
-  background: var(--danger);
-}
-
 .undo-toast,
 .error-toast {
   position: fixed;
@@ -774,6 +701,10 @@ textarea:disabled {
 
 .workspace-sidebar[data-collapsed="true"] .workspace-compact {
   display: block;
+}
+
+.workspace-sidebar[data-collapsed="true"] .collapse-icon {
+  transform: rotate(180deg);
 }
 
 @media (max-width: 1199px) {
@@ -888,7 +819,7 @@ textarea:disabled {
   }
 
   .chat-heading .eyebrow,
-  .status-pill {
+  .chat-heading .status-badge {
     display: none;
   }
 

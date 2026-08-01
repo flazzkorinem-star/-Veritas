@@ -1,4 +1,6 @@
 import type { StoredTask } from "@/storage/types";
+import { Button } from "@/ui/Button";
+import { Icon } from "@/ui/Icon";
 
 import { UploadButton } from "./UploadButton";
 
@@ -43,21 +45,22 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
           <strong>Veritas</strong>
           <span>把材料真正学会</span>
         </div>
-        <button
+        <Button
           aria-label="关闭任务抽屉"
           className="mobile-close"
           onClick={props.onCloseMobile}
-          type="button"
+          size="icon"
+          variant="ghost"
         >
-          ×
-        </button>
+          <Icon name="close" />
+        </Button>
       </div>
 
       <div className="workspace-expanded">
         <UploadButton id="workspace-upload" />
         <label className="search-field">
           <span className="visually-hidden">搜索任务</span>
-          <span aria-hidden="true">⌕</span>
+          <Icon name="search" size={16} />
           <input
             aria-label="搜索任务"
             onChange={(event) => props.onSearch(event.target.value)}
@@ -95,17 +98,18 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                     {task.fileName} · {STATUS_TEXT[task.status]}
                   </span>
                 </button>
-                <button
+                <Button
                   aria-expanded={props.openMenuId === task.id}
                   aria-label={`打开“${task.title}”的任务菜单`}
                   className="task-menu-trigger"
                   onClick={() =>
                     props.onToggleMenu(props.openMenuId === task.id ? null : task.id)
                   }
-                  type="button"
+                  size="icon"
+                  variant="ghost"
                 >
-                  ···
-                </button>
+                  <Icon name="menu" size={18} />
+                </Button>
                 {props.openMenuId === task.id ? (
                   <div className="task-menu" role="menu">
                     <button
@@ -149,14 +153,15 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       <div className="workspace-compact">
         <UploadButton compact id="compact-upload" />
       </div>
-      <button
+      <Button
         aria-label={props.collapsed ? "展开工作区" : "收起工作区"}
         className="collapse-button"
         onClick={props.onToggleCollapsed}
-        type="button"
+        size="icon"
+        variant="ghost"
       >
-        {props.collapsed ? "›" : "‹"}
-      </button>
+        <Icon className="collapse-icon" name="chevron-left" size={18} />
+      </Button>
     </aside>
   );
 }

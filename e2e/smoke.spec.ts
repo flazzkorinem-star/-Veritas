@@ -56,6 +56,9 @@ test("基础工作区在真实浏览器中正确渲染", async ({ page }, testIn
   const response = await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "从一份材料开始" })).toBeVisible();
+  const vita = page.getByRole("img", { name: "维塔等你递来学习材料" });
+  await expect(vita).toBeVisible();
+  await expect(vita).toHaveJSProperty("complete", true);
   await expect(page.getByLabel("回答输入")).toBeDisabled();
   await expect(page).toHaveTitle("Veritas");
   expect(response?.status()).toBe(200);

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { getVeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
 import type { MobilePanel, StoredTask } from "@/storage/types";
+import { Button } from "@/ui/Button";
 
 import { LearningPanels } from "./LearningPanels";
 import { DeleteDialog, RenameDialog } from "./TaskDialogs";
@@ -75,9 +76,9 @@ export function WorkspaceApp({ repository }: { repository?: TaskRepository }) {
       {workspace.deletedSnapshot ? (
         <div className="undo-toast" role="status">
           <span>任务已删除</span>
-          <button onClick={() => void workspace.undoDelete()} type="button">
+          <Button onClick={() => void workspace.undoDelete()} size="sm" variant="ghost">
             撤销删除
-          </button>
+          </Button>
         </div>
       ) : null}
       {renameTask ? (
