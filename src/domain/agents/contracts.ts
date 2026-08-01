@@ -5,8 +5,27 @@ import {
   diagnosticNodeSchema,
   knowledgeItemSchema,
 } from "@/domain/knowledge-map/contracts";
+import { STAGE_ORDER } from "@/domain/types";
 
 const chunkIdSchema = z.string().regex(/^chunk-[1-9][0-9]*$/);
+const stageSchema = z.enum(STAGE_ORDER);
+const agentTwoContext = {
+  node: diagnosticNodeSchema,
+  knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),
+};
+const conversationContext = {
+  mainQuestion: z.string().trim().min(1).max(600),
+  recentMessages: z
+    .array(
+      z
+        .object({
+          role: z.enum(["USER", "ASSISTANT"]),
+          content: z.string().trim().min(1).max(2_000),
+        })
+        .strict(),
+    )
+    .max(12),
+};
 
 export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
   z
@@ -46,6 +65,50 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
           materialTitle: z.string().trim().min(1).max(255),
           node: diagnosticNodeSchema,
           knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("CREATE_STAGE_QUESTION"),
+      input: z.object({ ...agentTwoContext, stage: stageSchema }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("EVALUATE_ANSWER"),
+      input: z
+        .object({
+          ...agentTwoContext,
+          ...conversationContext,
+          stage: stageSchema,
+          userAnswer: z.string().trim().min(1).max(4_000),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("CREATE_HINT"),
+      input: z
+        .object({
+          ...agentTwoContext,
+          ...conversationContext,
+          stage: stageSchema,
+          hintLevel: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("CREATE_STAGE_ANSWER"),
+      input: z
+        .object({
+          ...agentTwoContext,
+          ...conversationContext,
+          stage: stageSchema,
         })
         .strict(),
     })

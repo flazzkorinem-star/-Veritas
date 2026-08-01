@@ -47,7 +47,12 @@ describe("同源 Agent API", () => {
     await expect(response.json()).resolves.toEqual({
       result: { opening: "材料开场", question: "问题？" },
     });
-    expect(runAgentOperation).toHaveBeenCalledWith(JSON.parse(body), "server-only-key");
+    expect(runAgentOperation).toHaveBeenCalledWith(
+      JSON.parse(body),
+      "server-only-key",
+      undefined,
+      expect.any(AbortSignal),
+    );
   });
 
   it("按浏览器实际 Host 判断同源，不受服务器内部 URL 主机名影响", async () => {

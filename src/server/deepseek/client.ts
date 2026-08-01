@@ -18,14 +18,16 @@ const responseSchema = z
   .passthrough();
 
 export type DeepSeekErrorCode =
-  "UPSTREAM_REJECTED" | "UPSTREAM_UNAVAILABLE" | "INVALID_RESPONSE";
+  "UPSTREAM_REJECTED" | "UPSTREAM_UNAVAILABLE" | "INVALID_RESPONSE" | "REQUEST_ABORTED";
 
 export class DeepSeekError extends Error {
   constructor(readonly code: DeepSeekErrorCode) {
     super(
-      code === "INVALID_RESPONSE"
-        ? "模型返回的内容不完整，请重试。"
-        : "模型服务暂时不可用，请稍后重试。",
+      code === "REQUEST_ABORTED"
+        ? "请求已取消。"
+        : code === "INVALID_RESPONSE"
+          ? "模型返回的内容不完整，请重试。"
+          : "模型服务暂时不可用，请稍后重试。",
     );
     this.name = "DeepSeekError";
   }
@@ -39,6 +41,7 @@ export interface DeepSeekJsonRequest {
   reasoningEffort?: "low";
   maxTokens: number;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 interface DeepSeekDependencies {
@@ -95,7 +98,10 @@ export async function callDeepSeekJson(
   let finalError: DeepSeekError = new DeepSeekError("UPSTREAM_UNAVAILABLE");
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    if (request.signal?.aborted) throw new DeepSeekError("REQUEST_ABORTED");
     const controller = new AbortController();
+    const abortFromCaller = () => controller.abort();
+    request.signal?.addEventListener("abort", abortFromCaller, { once: true });
     const timeout = setTimeout(() => controller.abort(), request.timeoutMs ?? 90_000);
     try {
       const response = await fetchImpl(DEEPSEEK_URL, {
@@ -124,6 +130,7 @@ export async function callDeepSeekJson(
         }
       }
     } catch (error) {
+      if (request.signal?.aborted) throw new DeepSeekError("REQUEST_ABORTED");
       if (error instanceof DeepSeekError && error.code === "UPSTREAM_REJECTED") {
         throw error;
       }
@@ -133,6 +140,7 @@ export async function callDeepSeekJson(
           : new DeepSeekError("UPSTREAM_UNAVAILABLE");
     } finally {
       clearTimeout(timeout);
+      request.signal?.removeEventListener("abort", abortFromCaller);
     }
 
     if (attempt < MAX_RETRIES) {

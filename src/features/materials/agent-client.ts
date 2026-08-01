@@ -12,10 +12,20 @@ import {
   type KnowledgeMap,
   knowledgeMapSchema,
 } from "@/domain/knowledge-map/contracts";
+import {
+  type EvaluationDecision,
+  evaluationDecisionSchema,
+  type HintResponse,
+  hintResponseSchema,
+  type StageAnswer,
+  stageAnswerSchema,
+  type StageQuestion,
+  stageQuestionSchema,
+} from "@/domain/diagnostic/agent-contracts";
 import { publicErrorCodeSchema, publicErrorSchema } from "@/lib/errors/public-error";
 
 export type AgentClientErrorCode =
-  z.infer<typeof publicErrorCodeSchema> | "INVALID_RESPONSE";
+  z.infer<typeof publicErrorCodeSchema> | "INVALID_RESPONSE" | "REQUEST_ABORTED";
 
 export class AgentClientError extends Error {
   constructor(
@@ -41,6 +51,13 @@ type QuestionRequest = Extract<
   AgentOperationRequest,
   { operation: "CREATE_FIRST_QUESTION" }
 >;
+type StageQuestionRequest = Extract<
+  AgentOperationRequest,
+  { operation: "CREATE_STAGE_QUESTION" }
+>;
+type EvaluationRequest = Extract<AgentOperationRequest, { operation: "EVALUATE_ANSWER" }>;
+type HintRequest = Extract<AgentOperationRequest, { operation: "CREATE_HINT" }>;
+type AnswerRequest = Extract<AgentOperationRequest, { operation: "CREATE_STAGE_ANSWER" }>;
 
 function resultSchema(operation: AgentOperationRequest["operation"]) {
   switch (operation) {
@@ -50,6 +67,14 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
       return knowledgeMapSchema;
     case "CREATE_FIRST_QUESTION":
       return firstQuestionSchema;
+    case "CREATE_STAGE_QUESTION":
+      return stageQuestionSchema;
+    case "EVALUATE_ANSWER":
+      return evaluationDecisionSchema;
+    case "CREATE_HINT":
+      return hintResponseSchema;
+    case "CREATE_STAGE_ANSWER":
+      return stageAnswerSchema;
   }
 }
 
@@ -65,6 +90,34 @@ export function callAgent(
   request: QuestionRequest,
   dependencies?: AgentClientDependencies,
 ): Promise<FirstQuestion>;
+export function callAgent(
+  request: StageQuestionRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<StageQuestion>;
+export function callAgent(
+  request: EvaluationRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<EvaluationDecision>;
+export function callAgent(
+  request: HintRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<HintResponse>;
+export function callAgent(
+  request: AnswerRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<StageAnswer>;
+export function callAgent(
+  request: AgentOperationRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<
+  | ChunkExtraction
+  | KnowledgeMap
+  | FirstQuestion
+  | StageQuestion
+  | EvaluationDecision
+  | HintResponse
+  | StageAnswer
+>;
 export async function callAgent(
   value: AgentOperationRequest,
   dependencies: AgentClientDependencies = {},
@@ -83,6 +136,9 @@ export async function callAgent(
       signal: dependencies.signal,
     });
   } catch {
+    if (dependencies.signal?.aborted) {
+      throw new AgentClientError("REQUEST_ABORTED", "请求已取消。");
+    }
     throw new AgentClientError("UPSTREAM_UNAVAILABLE", "模型服务暂时不可用，请重试。");
   }
 

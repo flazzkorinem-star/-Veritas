@@ -88,7 +88,10 @@ export async function POST(request: Request) {
   let release: (() => void) | undefined;
   try {
     release = acquireAgentRequest(clientId(request));
-    return json({ result: await runAgentOperation(body, apiKey) }, 200);
+    return json(
+      { result: await runAgentOperation(body, apiKey, undefined, request.signal) },
+      200,
+    );
   } catch (error) {
     if (error instanceof AgentRequestGuardError) {
       return errorResponse("RATE_LIMITED", "请求较多，请稍等片刻再试。", 429);
