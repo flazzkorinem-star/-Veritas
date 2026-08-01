@@ -1,4 +1,5 @@
 import type { NodeSession } from "@/domain/diagnostic/contracts";
+import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
 import type {
   CoverageAssignment,
   DiagnosticNode,
@@ -33,6 +34,15 @@ export interface StoredSession {
   taskId: string;
   nodeId: string;
   session: NodeSession;
+  scaffoldEvents?: StoredScaffoldEvent[];
+}
+
+export interface StoredScaffoldEvent {
+  id: string;
+  stage: NodeSession["currentStage"];
+  type: ScaffoldType;
+  reason: string;
+  createdAt: string;
 }
 
 export interface StoredMessage extends Message {

@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentClientError } from "@/features/materials/agent-client";
+import {
+  createInitialStageQuestion,
+  requestHint as runHintTurn,
+  revealStageAnswer,
+  submitDiagnosticAnswer,
+  type DiagnosticAgentCall,
+} from "@/features/diagnostic/diagnostic-turn";
 import { MaterialFileError } from "@/features/materials/material-file";
 import { MaterialParseError } from "@/features/materials/parsed-material";
 import {
@@ -37,6 +44,7 @@ function processingErrorMessage(error: unknown) {
 export function useWorkspace(
   repository: TaskRepository,
   processor: TextMaterialProcessor = processTextMaterial,
+  diagnosticAgent?: DiagnosticAgentCall,
 ) {
   const [tasks, setTasks] = useState<StoredTask[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -49,10 +57,14 @@ export function useWorkspace(
     useState<MaterialProcessingProgress | null>(null);
   const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isResponding, setIsResponding] = useState(false);
   const [deletedSnapshot, setDeletedSnapshot] = useState<DeletedTaskSnapshot | null>(
     null,
   );
   const processingController = useRef<AbortController | null>(null);
+  const diagnosticController = useRef<AbortController | null>(null);
+  const responding = useRef(false);
+  const draftWrite = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     let mounted = true;
@@ -144,6 +156,10 @@ export function useWorkspace(
 
   function cancelProcessing() {
     processingController.current?.abort();
+  }
+
+  function cancelDiagnosticTurn() {
+    diagnosticController.current?.abort();
   }
 
   async function importMaterial(file: File) {
@@ -251,6 +267,153 @@ export function useWorkspace(
     }
   }
 
+  function currentDiagnosticContext(controller: AbortController) {
+    const task = learningData?.task;
+    const material = learningData?.material;
+    const storedSession = learningData?.session;
+    const node = material?.nodes.find(
+      (candidate) => candidate.id === task?.currentNodeId,
+    );
+    if (!task || !material || !storedSession || !node) {
+      throw new LocalStoreError("NOT_FOUND", "当前学习主题尚未准备好。");
+    }
+    const itemIds = new Set(node.knowledgeItemIds);
+    return {
+      task,
+      node,
+      knowledgeItems: material.knowledgeItems.filter((item) => itemIds.has(item.id)),
+      session: storedSession.session,
+      recentMessages: learningData.messages
+        .slice(-12)
+        .map(({ role, content }) => ({ role, content })),
+      signal: controller.signal,
+    };
+  }
+
+  async function runDiagnosticAction(
+    action: (
+      context: ReturnType<typeof currentDiagnosticContext>,
+    ) => ReturnType<typeof runHintTurn>,
+    userMessage?: string,
+  ) {
+    if (responding.current) return;
+    const controller = new AbortController();
+    responding.current = true;
+    diagnosticController.current = controller;
+    setIsResponding(true);
+    setError(null);
+    try {
+      await draftWrite.current;
+      const context = currentDiagnosticContext(controller);
+      const result = await action(context);
+      await repository.saveDiagnosticTurn({
+        taskId: context.task.id,
+        nodeId: context.node.id,
+        session: result.session,
+        userMessage,
+        assistantMessages: result.assistantMessages,
+        scaffold: result.scaffold,
+      });
+      if (userMessage !== undefined) {
+        await repository.saveDraft(context.task.id, context.node.id, "");
+      }
+      await reloadTasks();
+      setLearningData(await repository.getTaskLearningData(context.task.id));
+    } catch (reason) {
+      if (!controller.signal.aborted) {
+        setError(
+          reason instanceof AgentClientError || reason instanceof LocalStoreError
+            ? reason.message
+            : "暂时无法继续这个回合，请重试。",
+        );
+      }
+    } finally {
+      if (diagnosticController.current === controller) {
+        diagnosticController.current = null;
+      }
+      responding.current = false;
+      setIsResponding(false);
+    }
+  }
+
+  async function sendAnswer(content: string) {
+    const answer = content.trim();
+    if (!answer) return;
+    await runDiagnosticAction(
+      (context) =>
+        diagnosticAgent
+          ? submitDiagnosticAnswer({ ...context, userAnswer: answer }, diagnosticAgent)
+          : submitDiagnosticAnswer({ ...context, userAnswer: answer }),
+      answer,
+    );
+  }
+
+  async function requestHint() {
+    await runDiagnosticAction((context) =>
+      diagnosticAgent ? runHintTurn(context, diagnosticAgent) : runHintTurn(context),
+    );
+  }
+
+  async function revealAnswer() {
+    await runDiagnosticAction((context) =>
+      diagnosticAgent
+        ? revealStageAnswer(context, diagnosticAgent)
+        : revealStageAnswer(context),
+    );
+  }
+
+  async function selectNode(nodeId: string) {
+    if (responding.current) return;
+    if (!learningData?.material || !learningData.task) return;
+    const node = learningData.material.nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    setError(null);
+    try {
+      await draftWrite.current;
+      const existing = learningData.sessions.some((stored) => stored.nodeId === nodeId);
+      let question: string | undefined;
+      if (!existing) {
+        const itemIds = new Set(node.knowledgeItemIds);
+        const input = {
+          node,
+          knowledgeItems: learningData.material.knowledgeItems.filter((item) =>
+            itemIds.has(item.id),
+          ),
+        };
+        const output = diagnosticAgent
+          ? await createInitialStageQuestion(input, diagnosticAgent)
+          : await createInitialStageQuestion(input);
+        question = output.question;
+      }
+      await repository.openNode(learningData.task.id, nodeId, question);
+      await reloadTasks();
+      setLearningData(await repository.getTaskLearningData(learningData.task.id));
+    } catch (reason) {
+      setError(
+        reason instanceof AgentClientError || reason instanceof LocalStoreError
+          ? reason.message
+          : "暂时无法打开这个主题，请重试。",
+      );
+    }
+  }
+
+  function saveDraft(content: string) {
+    const taskId = learningData?.task.id;
+    const nodeId = learningData?.task.currentNodeId;
+    if (!taskId || !nodeId) return;
+    setLearningData((current) =>
+      current && current.task.id === taskId
+        ? {
+            ...current,
+            draft: { taskId, nodeId, content, updatedAt: new Date().toISOString() },
+          }
+        : current,
+    );
+    draftWrite.current = draftWrite.current
+      .then(() => repository.saveDraft(taskId, nodeId, content))
+      .catch((reason: unknown) => setError(errorMessage(reason)));
+  }
+
   async function toggleWorkspace() {
     const collapsed = !workspaceCollapsed;
     setWorkspaceCollapsed(collapsed);
@@ -272,6 +435,7 @@ export function useWorkspace(
     learningData: learningData?.task.id === activeTaskId ? learningData : null,
     processingProgress: processingTaskId === activeTaskId ? processingProgress : null,
     isImporting,
+    isResponding,
     workspaceCollapsed,
     search,
     isLoading,
@@ -281,6 +445,12 @@ export function useWorkspace(
     importMaterial,
     retryProcessing,
     cancelProcessing,
+    cancelDiagnosticTurn,
+    sendAnswer,
+    requestHint,
+    revealAnswer,
+    selectNode,
+    saveDraft,
     selectTask,
     renameTask,
     setTaskPinned,

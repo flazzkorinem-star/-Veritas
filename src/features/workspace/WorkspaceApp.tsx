@@ -6,6 +6,7 @@ import { getVeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
 import type { MobilePanel, StoredTask } from "@/storage/types";
 import { Button } from "@/ui/Button";
+import type { DiagnosticAgentCall } from "@/features/diagnostic/diagnostic-turn";
 
 import { LearningPanels } from "./LearningPanels";
 import { DeleteDialog, RenameDialog } from "./TaskDialogs";
@@ -19,15 +20,17 @@ import { WorkspaceSidebar } from "./WorkspaceSidebar";
 export function WorkspaceApp({
   repository,
   processor,
+  diagnosticAgent,
 }: {
   repository?: TaskRepository;
   processor?: TextMaterialProcessor;
+  diagnosticAgent?: DiagnosticAgentCall;
 }) {
   const defaultRepository = useMemo(
     () => repository ?? createTaskRepository(getVeritasDatabase()),
     [repository],
   );
-  const workspace = useWorkspace(defaultRepository, processor);
+  const workspace = useWorkspace(defaultRepository, processor, diagnosticAgent);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renameTask, setRenameTask] = useState<StoredTask | null>(null);
   const [deleteTask, setDeleteTask] = useState<StoredTask | null>(null);
@@ -79,7 +82,13 @@ export function WorkspaceApp({
         mobilePanel={mobilePanel}
         onClosePanel={() => setMobilePanel(null)}
         onCancelProcessing={workspace.cancelProcessing}
+        onCancelTurn={workspace.cancelDiagnosticTurn}
         onOpenPanel={setMobilePanel}
+        onRequestHint={() => void workspace.requestHint()}
+        onRevealAnswer={() => void workspace.revealAnswer()}
+        onSelectNode={(nodeId) => void workspace.selectNode(nodeId)}
+        onSendAnswer={(content) => void workspace.sendAnswer(content)}
+        onDraftChange={(content) => void workspace.saveDraft(content)}
         onRetry={() => {
           if (workspace.activeTask) {
             void workspace.retryProcessing(workspace.activeTask.id);
@@ -87,6 +96,7 @@ export function WorkspaceApp({
         }}
         onUpload={(file) => void workspace.importMaterial(file)}
         processingProgress={workspace.processingProgress}
+        isResponding={workspace.isResponding}
         uploadDisabled={workspace.isImporting}
       />
 

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 6：全部承诺文件格式与本地 OCR。
+阶段 7：Agent 2 完整诊断教学。
 
 ## 根目录
 
@@ -40,10 +40,11 @@
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
 - `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属与首问。
-- `src/domain/agents/contracts.ts`：限制浏览器只能提交三种固定 Agent 业务操作。
+- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理与诊断教学操作。
+- `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验回答分类、证据、误解、教学动作、支架、问题、提示与答案。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务、原始材料、处理结果、首问会话、界面状态和事务性删除/撤销。
+- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、完成状态、界面状态和事务性删除/撤销。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
@@ -55,13 +56,14 @@
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式分派唯一解析实现。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
 - `src/features/materials/process-text-material.ts`：顺序编排多格式解析、来源分块、覆盖审计和首问生成，并传播取消信号。
+- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 回答、提示与答案回合，把所有状态转移交给唯一 reducer，并生成下一层主问题。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
-- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时与有限重试。
-- `src/server/agents/service.ts`：组装三个固定操作的隔离提示，校验输出并只重试受影响操作。
+- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时、有限重试与外部取消信号。
+- `src/server/agents/service.ts`：组装材料处理和诊断教学的隔离提示，独立校验输出并只重试受影响操作。
 - `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、移动抽屉与任务对话框。
 - `src/features/workspace/use-workspace.ts`：协调仓储读取与任务交互状态，不承载视图结构。
 - `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表和单任务菜单。
-- `src/features/workspace/LearningPanels.tsx`：显示完整主题、真实处理进度、失败重试、首问消息和两组诊断信息。
+- `src/features/workspace/LearningPanels.tsx`：显示可切换主题、节点历史、回答输入、提示与答案操作，以及实时任务进度和节点分数。
 - `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
@@ -86,3 +88,8 @@
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
 - `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首问、核心覆盖、双端布局与刷新恢复。
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
+- `src/features/diagnostic/diagnostic-turn.test.ts`：验证同题追问、答对推进、三轮停滞、三级提示与主动答案的确定性编排。
+- `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和任务完成的事务性持久化。
+- `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证提示、回答、分数、节点切换和草稿恢复的组件闭环。
+- `e2e/phase7-diagnostic.spec.ts`：在桌面与移动生产 Edge 中走完一个节点四层，覆盖直接通过、提示后通过和答案通过。
+- `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的问题、评价、提示、答案和越权字段隔离。

@@ -5,6 +5,9 @@ import {
   knowledgeMapSchema,
 } from "@/domain/knowledge-map/contracts";
 import { diagnosticReducer, createNodeSession } from "@/domain/diagnostic/reducer";
+import type { NodeSession } from "@/domain/diagnostic/contracts";
+import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
+import type { StageKey } from "@/domain/types";
 import { TASK_STATUSES } from "@/domain/types";
 import type { VeritasDatabase } from "@/storage/database";
 import type {
@@ -13,6 +16,15 @@ import type {
   StoredUiState,
   StoredWorkspaceState,
 } from "@/storage/types";
+
+interface DiagnosticTurnWrite {
+  taskId: string;
+  nodeId: string;
+  session: NodeSession;
+  userMessage?: string;
+  assistantMessages: string[];
+  scaffold: { stage: StageKey; type: ScaffoldType; reason: string } | null;
+}
 
 const storedTaskSchema = z.object({
   id: z.uuid(),
@@ -253,6 +265,7 @@ export function createTaskRepository(database: VeritasDatabase) {
               taskId,
               nodeId: firstNode.id,
               session,
+              scaffoldEvents: [],
             });
             await database.messages.put({
               id: crypto.randomUUID(),
@@ -321,6 +334,7 @@ export function createTaskRepository(database: VeritasDatabase) {
       return run(async () => {
         const task = await getExistingTask(taskId);
         const material = await database.materials.get(taskId);
+        const sessions = await database.sessions.where("taskId").equals(taskId).toArray();
         const session = task.currentNodeId
           ? await database.sessions.get([taskId, task.currentNodeId])
           : undefined;
@@ -331,8 +345,193 @@ export function createTaskRepository(database: VeritasDatabase) {
               .filter((message) => message.nodeId === task.currentNodeId)
               .sortBy("createdAt")
           : [];
-        return { task, material, session, messages };
+        const draft = task.currentNodeId
+          ? await database.drafts.get([taskId, task.currentNodeId])
+          : undefined;
+        return { task, material, session, sessions, messages, draft };
       });
+    },
+
+    saveDiagnosticTurn(value: DiagnosticTurnWrite) {
+      return run(() =>
+        database.transaction(
+          "rw",
+          [database.tasks, database.materials, database.sessions, database.messages],
+          async () => {
+            const task = await getExistingTask(value.taskId);
+            const material = await database.materials.get(value.taskId);
+            const existing = await database.sessions.get([value.taskId, value.nodeId]);
+            const userMessage = value.userMessage?.trim();
+            const assistantMessages = value.assistantMessages.map((message) =>
+              message.trim(),
+            );
+            if (
+              !material?.nodes.some((node) => node.id === value.nodeId) ||
+              !existing ||
+              value.session.nodeId !== value.nodeId ||
+              (userMessage !== undefined &&
+                (!userMessage || userMessage.length > 4_000)) ||
+              assistantMessages.length === 0 ||
+              assistantMessages.length > 4 ||
+              assistantMessages.some((message) => !message || message.length > 2_000)
+            ) {
+              throw new LocalStoreError(
+                "RELATION_MISMATCH",
+                "诊断回合与当前本地任务不匹配，已拒绝保存。",
+              );
+            }
+
+            const previousMessages = await database.messages
+              .where("taskId")
+              .equals(value.taskId)
+              .filter((message) => message.nodeId === value.nodeId)
+              .sortBy("createdAt");
+            const previousTime = Date.parse(
+              previousMessages.at(-1)?.createdAt ?? "1970-01-01T00:00:00.000Z",
+            );
+            const baseTime = Math.max(Date.now(), previousTime + 1);
+            const messages = [
+              ...(userMessage ? [{ role: "USER" as const, content: userMessage }] : []),
+              ...assistantMessages.map((content) => ({
+                role: "ASSISTANT" as const,
+                content,
+              })),
+            ].map((message, index) => ({
+              ...message,
+              id: crypto.randomUUID(),
+              taskId: value.taskId,
+              nodeId: value.nodeId,
+              createdAt: new Date(baseTime + index).toISOString(),
+            }));
+            const scaffoldEvents = [
+              ...(existing.scaffoldEvents ?? []),
+              ...(value.scaffold
+                ? [
+                    {
+                      id: crypto.randomUUID(),
+                      ...value.scaffold,
+                      createdAt: new Date(baseTime).toISOString(),
+                    },
+                  ]
+                : []),
+            ];
+            await database.sessions.put({
+              taskId: value.taskId,
+              nodeId: value.nodeId,
+              session: value.session,
+              scaffoldEvents,
+            });
+            await database.messages.bulkPut(messages);
+            const sessions = await database.sessions
+              .where("taskId")
+              .equals(value.taskId)
+              .toArray();
+            const completedNodeIds = new Set(
+              sessions
+                .filter((stored) => stored.session.status === "COMPLETED")
+                .map((stored) => stored.nodeId),
+            );
+            const updatedTask = parseTask({
+              ...task,
+              status: material.nodes.every((node) => completedNodeIds.has(node.id))
+                ? "COMPLETED"
+                : "IN_PROGRESS",
+              currentNodeId: value.nodeId,
+              updatedAt: new Date(baseTime).toISOString(),
+            });
+            await database.tasks.put(updatedTask);
+          },
+        ),
+      );
+    },
+
+    openNode(taskId: string, nodeId: string, question?: string) {
+      return run(() =>
+        database.transaction(
+          "rw",
+          [
+            database.tasks,
+            database.materials,
+            database.sessions,
+            database.messages,
+            database.uiStates,
+          ],
+          async () => {
+            const task = await getExistingTask(taskId);
+            const material = await database.materials.get(taskId);
+            if (!material?.nodes.some((node) => node.id === nodeId)) {
+              throw new LocalStoreError("RELATION_MISMATCH", "所选主题不属于当前任务。");
+            }
+            const now = new Date().toISOString();
+            let session = await database.sessions.get([taskId, nodeId]);
+            if (!session) {
+              const mainQuestion = question?.trim();
+              if (!mainQuestion || mainQuestion.length > 600) {
+                throw new LocalStoreError(
+                  "RELATION_MISMATCH",
+                  "新主题需要一个有效的首问。",
+                );
+              }
+              session = {
+                taskId,
+                nodeId,
+                session: diagnosticReducer(createNodeSession(nodeId), {
+                  type: "START_STAGE",
+                  question: mainQuestion,
+                }),
+                scaffoldEvents: [],
+              };
+              await database.sessions.put(session);
+              await database.messages.put({
+                id: crypto.randomUUID(),
+                taskId,
+                nodeId,
+                role: "ASSISTANT",
+                content: mainQuestion,
+                createdAt: now,
+              });
+            }
+            await database.tasks.put(
+              parseTask({ ...task, currentNodeId: nodeId, updatedAt: now }),
+            );
+            await database.uiStates.put({
+              taskId,
+              selectedNodeId: nodeId,
+              mobilePanel: null,
+              updatedAt: now,
+            });
+            return session;
+          },
+        ),
+      );
+    },
+
+    saveDraft(taskId: string, nodeId: string, content: string) {
+      return run(() =>
+        database.transaction(
+          "rw",
+          [database.tasks, database.materials, database.drafts],
+          async () => {
+            await getExistingTask(taskId);
+            const material = await database.materials.get(taskId);
+            if (
+              !material?.nodes.some((node) => node.id === nodeId) ||
+              content.length > 4_000
+            ) {
+              throw new LocalStoreError(
+                "RELATION_MISMATCH",
+                "草稿与当前本地任务不匹配，已拒绝保存。",
+              );
+            }
+            await database.drafts.put({
+              taskId,
+              nodeId,
+              content,
+              updatedAt: new Date().toISOString(),
+            });
+          },
+        ),
+      );
     },
 
     renameTask(taskId: string, title: string) {

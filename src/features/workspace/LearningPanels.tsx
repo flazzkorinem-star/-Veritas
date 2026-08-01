@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 
+import { getNodeScore } from "@/domain/diagnostic/selectors";
 import type { MaterialProcessingProgress } from "@/features/materials/process-text-material";
 import type {
   MobilePanel,
   StoredMaterial,
   StoredMessage,
+  StoredDraft,
   StoredSession,
   StoredTask,
 } from "@/storage/types";
@@ -22,7 +24,9 @@ interface LearningPanelsProps {
   learningData: {
     material: StoredMaterial | undefined;
     session: StoredSession | undefined;
+    sessions: StoredSession[];
     messages: StoredMessage[];
+    draft: StoredDraft | undefined;
   } | null;
   processingProgress: MaterialProcessingProgress | null;
   mobilePanel: MobilePanel;
@@ -30,6 +34,13 @@ interface LearningPanelsProps {
   onUpload: (file: File) => void;
   onRetry: () => void;
   onCancelProcessing: () => void;
+  onCancelTurn: () => void;
+  onSendAnswer: (content: string) => void;
+  onDraftChange: (content: string) => void;
+  onRequestHint: () => void;
+  onRevealAnswer: () => void;
+  onSelectNode: (nodeId: string) => void;
+  isResponding: boolean;
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
   onClosePanel: () => void;
 }
@@ -124,12 +135,28 @@ export function LearningPanels({
   onUpload,
   onRetry,
   onCancelProcessing,
+  onCancelTurn,
+  onSendAnswer,
+  onDraftChange,
+  onRequestHint,
+  onRevealAnswer,
+  onSelectNode,
+  isResponding,
   onOpenPanel,
   onClosePanel,
 }: LearningPanelsProps) {
   const elapsedSeconds = useElapsedSeconds(processingProgress);
   const material = learningData?.material;
   const nodes = material?.nodes.toSorted((left, right) => left.order - right.order) ?? [];
+  const currentSession = learningData?.session?.session;
+  const completedNodes =
+    learningData?.sessions.filter(({ session }) => session.status === "COMPLETED")
+      .length ?? 0;
+  const score = currentSession ? getNodeScore(currentSession) : 0;
+  const canRespond =
+    Boolean(currentSession) &&
+    currentSession?.status !== "COMPLETED" &&
+    activeTask?.status !== "PROCESSING";
   const badge = activeTask ? TASK_BADGES[activeTask.status] : null;
   return (
     <>
@@ -164,18 +191,32 @@ export function LearningPanels({
                     <h3>{module.title}</h3>
                     <span>{moduleNodes.length}</span>
                   </div>
-                  <div className="topic-list" role="list">
-                    {moduleNodes.map((node) => (
-                      <div
-                        className="topic-item"
-                        data-active={node.id === activeTask?.currentNodeId}
-                        key={node.id}
-                        role="listitem"
-                      >
-                        <span>{node.order}</span>
-                        <strong>{node.title}</strong>
-                      </div>
-                    ))}
+                  <div className="topic-list">
+                    {moduleNodes.map((node) => {
+                      const stored = learningData?.sessions.find(
+                        (candidate) => candidate.nodeId === node.id,
+                      );
+                      return (
+                        <button
+                          className="topic-item"
+                          data-active={node.id === activeTask?.currentNodeId}
+                          disabled={isResponding}
+                          key={node.id}
+                          onClick={() => onSelectNode(node.id)}
+                          type="button"
+                        >
+                          <span>{node.order}</span>
+                          <strong>{node.title}</strong>
+                          <small>
+                            {stored?.session.status === "COMPLETED"
+                              ? "已完成"
+                              : stored
+                                ? "继续"
+                                : "未开始"}
+                          </small>
+                        </button>
+                      );
+                    })}
                   </div>
                 </section>
               );
@@ -276,6 +317,31 @@ export function LearningPanels({
               <span>材料文字会发送给 DeepSeek 以整理主题；原始文件只保存在本机</span>
             </div>
           ) : null}
+          {canRespond ? (
+            <div className="composer-actions">
+              <Button
+                disabled={isResponding}
+                onClick={onRequestHint}
+                size="sm"
+                variant="ghost"
+              >
+                给我提示
+              </Button>
+              <Button
+                disabled={isResponding}
+                onClick={onRevealAnswer}
+                size="sm"
+                variant="ghost"
+              >
+                看答案
+              </Button>
+              {isResponding ? (
+                <Button onClick={onCancelTurn} size="sm" variant="ghost">
+                  停止生成
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <div className="composer-row">
             <Button aria-label="语音输入" disabled size="icon" variant="ghost">
               <Icon name="microphone" />
@@ -284,18 +350,30 @@ export function LearningPanels({
               <span className="visually-hidden">回答输入</span>
               <textarea
                 aria-label="回答输入"
-                disabled
+                disabled={!canRespond || isResponding}
+                onChange={(event) => onDraftChange(event.target.value)}
                 placeholder={
                   learningData?.messages.length
-                    ? "回答功能即将准备好"
+                    ? currentSession?.status === "COMPLETED"
+                      ? "这个主题已经完成"
+                      : "写下你的理解……"
                     : activeTask
                       ? "主题准备好后就能开始回答"
                       : "请先上传一份学习材料"
                 }
                 rows={1}
+                value={learningData?.draft?.content ?? ""}
               />
             </label>
-            <Button aria-label="发送回答" disabled size="icon" variant="ghost">
+            <Button
+              aria-label="发送回答"
+              disabled={
+                !canRespond || isResponding || !learningData?.draft?.content.trim()
+              }
+              onClick={() => onSendAnswer(learningData?.draft?.content ?? "")}
+              size="icon"
+              variant="ghost"
+            >
               <Icon name="send" />
             </Button>
           </div>
@@ -325,9 +403,15 @@ export function LearningPanels({
         <section className="progress-group" aria-labelledby="material-progress">
           <div className="progress-label">
             <h3 id="material-progress">整份材料</h3>
-            <strong>0 / {nodes.length}</strong>
+            <strong>
+              {completedNodes} / {nodes.length}
+            </strong>
           </div>
-          <ProgressBar label="材料完成进度 0%" max={100} value={0} />
+          <ProgressBar
+            label={`材料完成进度 ${nodes.length ? Math.round((completedNodes / nodes.length) * 100) : 0}%`}
+            max={nodes.length || 1}
+            value={completedNodes}
+          />
           <p>完成的主题会逐步点亮这里。</p>
         </section>
         <section
@@ -340,8 +424,14 @@ export function LearningPanels({
               "还没有主题"}
           </h3>
           <div className="score-line">
-            <span>未开始</span>
-            <strong>0</strong>
+            <span>
+              {currentSession?.status === "COMPLETED"
+                ? "已完成"
+                : currentSession
+                  ? "学习中"
+                  : "未开始"}
+            </span>
+            <strong>{score}</strong>
           </div>
         </section>
       </aside>

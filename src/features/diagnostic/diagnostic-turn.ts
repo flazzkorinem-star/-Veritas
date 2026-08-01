@@ -47,6 +47,25 @@ export interface DiagnosticTurnResult {
 const defaultAgentCall: DiagnosticAgentCall = (request, dependencies) =>
   callAgent(request, dependencies);
 
+export async function createInitialStageQuestion(
+  input: { node: DiagnosticNode; knowledgeItems: KnowledgeItem[]; signal?: AbortSignal },
+  agent: DiagnosticAgentCall = defaultAgentCall,
+) {
+  return stageQuestionSchema.parse(
+    await agent(
+      {
+        operation: "CREATE_STAGE_QUESTION",
+        input: {
+          node: input.node,
+          knowledgeItems: input.knowledgeItems,
+          stage: "MEMORY",
+        },
+      },
+      { signal: input.signal },
+    ),
+  );
+}
+
 function activeQuestion(session: NodeSession) {
   const stage = session.stages[session.currentStage];
   if (stage.status !== "ACTIVE" || !stage.mainQuestion) {
