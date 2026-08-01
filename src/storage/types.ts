@@ -12,6 +12,7 @@ import type {
 export interface StoredTask extends Task {
   fileName: string;
   isPinned: boolean;
+  failureReason?: string;
 }
 
 export interface StoredMaterial {

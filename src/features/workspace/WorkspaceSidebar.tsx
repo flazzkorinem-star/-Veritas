@@ -19,6 +19,8 @@ interface WorkspaceSidebarProps {
   onPin: (task: StoredTask) => void;
   onDelete: (task: StoredTask) => void;
   onCloseMobile: () => void;
+  onUpload: (file: File) => void;
+  uploadDisabled: boolean;
 }
 
 const STATUS_TEXT = {
@@ -57,7 +59,11 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       </div>
 
       <div className="workspace-expanded">
-        <UploadButton id="workspace-upload" />
+        <UploadButton
+          disabled={props.uploadDisabled}
+          id="workspace-upload"
+          onSelect={props.onUpload}
+        />
         <label className="search-field">
           <span className="visually-hidden">搜索任务</span>
           <Icon name="search" size={16} />
@@ -147,11 +153,18 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             ))
           )}
         </div>
-        <p className="privacy-note">任务只保存在这台设备的当前浏览器中。</p>
+        <p className="privacy-note">
+          原始文件只保存在当前浏览器；材料文字会发送给 DeepSeek 以整理学习主题。
+        </p>
       </div>
 
       <div className="workspace-compact">
-        <UploadButton compact id="compact-upload" />
+        <UploadButton
+          compact
+          disabled={props.uploadDisabled}
+          id="compact-upload"
+          onSelect={props.onUpload}
+        />
       </div>
       <Button
         aria-label={props.collapsed ? "展开工作区" : "收起工作区"}

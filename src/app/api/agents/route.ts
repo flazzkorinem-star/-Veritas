@@ -30,9 +30,28 @@ function clientId(request: Request) {
     .slice(0, 64);
 }
 
+function hasValidOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    const requestUrl = new URL(request.url);
+    const originUrl = new URL(origin);
+    const expectedHost =
+      request.headers.get("x-forwarded-host") ??
+      request.headers.get("host") ??
+      requestUrl.host;
+    const expectedProtocol =
+      request.headers.get("x-forwarded-proto") ?? requestUrl.protocol.replace(":", "");
+    return (
+      originUrl.host === expectedHost && originUrl.protocol === `${expectedProtocol}:`
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
-  const requestOrigin = request.headers.get("origin");
-  if (requestOrigin && requestOrigin !== new URL(request.url).origin) {
+  if (!hasValidOrigin(request)) {
     return errorResponse("VALIDATION_ERROR", "请求来源无效。", 403);
   }
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {

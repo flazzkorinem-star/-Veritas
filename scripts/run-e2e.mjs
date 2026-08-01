@@ -48,11 +48,15 @@ try {
     waitUntilReady(),
     new Promise((_, reject) => server.once("error", reject)),
   ]);
-  const tests = spawn(process.execPath, [playwrightCli, "test"], {
-    cwd: root,
-    stdio: "inherit",
-    windowsHide: true,
-  });
+  const tests = spawn(
+    process.execPath,
+    [playwrightCli, "test", ...process.argv.slice(2)],
+    {
+      cwd: root,
+      stdio: "inherit",
+      windowsHide: true,
+    },
+  );
   exitCode = await new Promise((resolve, reject) => {
     tests.once("error", reject);
     tests.once("exit", resolve);

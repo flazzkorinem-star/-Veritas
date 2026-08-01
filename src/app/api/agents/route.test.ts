@@ -50,6 +50,15 @@ describe("同源 Agent API", () => {
     expect(runAgentOperation).toHaveBeenCalledWith(JSON.parse(body), "server-only-key");
   });
 
+  it("按浏览器实际 Host 判断同源，不受服务器内部 URL 主机名影响", async () => {
+    runAgentOperation.mockResolvedValue({ ok: true });
+    const response = await POST(
+      request("{}", { host: "127.0.0.1:3000", origin: "http://127.0.0.1:3000" }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it.each([
     ["跨来源", { origin: "https://evil.example" }, 403],
     ["错误 Content-Type", { "content-type": "text/plain" }, 415],

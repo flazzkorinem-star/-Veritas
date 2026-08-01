@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 4：品牌基础与维塔资产。
+阶段 5：Markdown/TXT 文本材料纵向闭环。
 
 ## 根目录
 
@@ -37,13 +37,22 @@
 - `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约。
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
+- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属与首问。
+- `src/domain/agents/contracts.ts`：限制浏览器只能提交三种固定 Agent 业务操作。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务搜索、恢复、重命名、置顶、界面状态和事务性删除/撤销。
+- `src/storage/task-repository.ts`：负责任务、原始材料、处理结果、首问会话、界面状态和事务性删除/撤销。
+- `src/features/materials/text-reader.ts`：校验并按真实字节进度读取 UTF-8 Markdown/TXT。
+- `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
+- `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
+- `src/features/materials/process-text-material.ts`：顺序编排分块提取、覆盖审计和首问生成。
+- `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
+- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时与有限重试。
+- `src/server/agents/service.ts`：组装三个固定操作的隔离提示，校验输出并只重试受影响操作。
 - `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、移动抽屉与任务对话框。
 - `src/features/workspace/use-workspace.ts`：协调仓储读取与任务交互状态，不承载视图结构。
 - `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表和单任务菜单。
-- `src/features/workspace/LearningPanels.tsx`：显示主题、聊天、禁用输入区和两组诊断信息骨架。
+- `src/features/workspace/LearningPanels.tsx`：显示完整主题、真实处理进度、失败重试、首问消息和两组诊断信息。
 - `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
@@ -61,3 +70,9 @@
 - `src/storage/task-repository.test.ts`：验证 schema 迁移、任务操作、跨表删除/撤销和隔离错误。
 - `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复和任务菜单交互。
 - `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
+- `src/features/materials/*.test.ts`：验证文本入口、语义分块、同源客户端与两阶段处理编排。
+- `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏与有限重试。
+- `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝和操作级重试。
+- `src/app/api/agents/route.test.ts`：验证同源、Content-Type、请求体限制与稳定错误响应。
+- `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
+- `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首问、核心覆盖、双端布局与刷新恢复。

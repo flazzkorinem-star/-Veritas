@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  firstQuestionSchema,
+  knowledgeMapSchema,
+} from "@/domain/knowledge-map/contracts";
+import { diagnosticReducer, createNodeSession } from "@/domain/diagnostic/reducer";
 import { TASK_STATUSES } from "@/domain/types";
 import type { VeritasDatabase } from "@/storage/database";
 import type {
@@ -17,6 +22,7 @@ const storedTaskSchema = z.object({
   status: z.enum(TASK_STATUSES),
   currentNodeId: z.string().min(1).nullable(),
   isPinned: z.boolean(),
+  failureReason: z.string().trim().min(1).max(200).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -128,6 +134,204 @@ export function createTaskRepository(database: VeritasDatabase) {
       return run(async () => {
         const validTask = parseTask(task);
         await database.tasks.put(validTask);
+      });
+    },
+
+    createProcessingTask(file: File) {
+      return run(async () => {
+        const now = new Date().toISOString();
+        const fileName = file.name.split(/[\\/]/).at(-1)?.trim() || "未命名材料";
+        const title =
+          fileName
+            .replace(/\.[^.]+$/, "")
+            .trim()
+            .slice(0, 80) || "未命名材料";
+        const task = parseTask({
+          id: crypto.randomUUID(),
+          title,
+          fileName: fileName.slice(0, 255),
+          materialId: crypto.randomUUID(),
+          status: "PROCESSING",
+          currentNodeId: null,
+          isPinned: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await database.transaction(
+          "rw",
+          database.tasks,
+          database.materials,
+          database.workspaceStates,
+          async () => {
+            await database.tasks.put(task);
+            await database.materials.put({
+              taskId: task.id,
+              materialId: task.materialId,
+              fileName: task.fileName,
+              mimeType: file.type,
+              sizeBytes: file.size,
+              originalFile: file,
+              parsedText: null,
+              modules: [],
+              knowledgeItems: [],
+              nodes: [],
+              coverageAssignments: [],
+            });
+            await database.workspaceStates.put({
+              id: "workspace",
+              activeTaskId: task.id,
+              workspaceCollapsed: false,
+              updatedAt: now,
+            });
+          },
+        );
+        return task;
+      });
+    },
+
+    completeTextProcessing(
+      taskId: string,
+      parsedText: string,
+      mapValue: unknown,
+      questionValue: unknown,
+    ) {
+      return run(async () => {
+        const task = await getExistingTask(taskId);
+        const material = await database.materials.get(taskId);
+        const knowledgeMap = knowledgeMapSchema.safeParse(mapValue);
+        const firstQuestion = firstQuestionSchema.safeParse(questionValue);
+        if (
+          task.status !== "PROCESSING" ||
+          !material ||
+          !parsedText.trim() ||
+          parsedText.length > 300_000 ||
+          !knowledgeMap.success ||
+          !firstQuestion.success
+        ) {
+          throw new LocalStoreError(
+            "RELATION_MISMATCH",
+            "材料处理结果与本地任务不匹配，已拒绝保存。",
+          );
+        }
+        const firstNode = knowledgeMap.data.nodes.toSorted(
+          (left, right) => left.order - right.order,
+        )[0];
+        if (!firstNode) {
+          throw new LocalStoreError("RELATION_MISMATCH", "材料中没有可保存的学习主题。");
+        }
+        const now = new Date().toISOString();
+        const session = diagnosticReducer(createNodeSession(firstNode.id), {
+          type: "START_STAGE",
+          question: firstQuestion.data.question,
+        });
+        const updatedTask = parseTask({
+          ...task,
+          status: "IN_PROGRESS",
+          currentNodeId: firstNode.id,
+          failureReason: undefined,
+          updatedAt: now,
+        });
+
+        await database.transaction(
+          "rw",
+          [
+            database.tasks,
+            database.materials,
+            database.sessions,
+            database.messages,
+            database.uiStates,
+            database.workspaceStates,
+          ],
+          async () => {
+            await database.tasks.put(updatedTask);
+            await database.materials.put({
+              ...material,
+              parsedText: parsedText.trim(),
+              ...knowledgeMap.data,
+            });
+            await database.sessions.put({
+              taskId,
+              nodeId: firstNode.id,
+              session,
+            });
+            await database.messages.put({
+              id: crypto.randomUUID(),
+              taskId,
+              nodeId: firstNode.id,
+              role: "ASSISTANT",
+              content: `${firstQuestion.data.opening}\n\n${firstQuestion.data.question}`,
+              createdAt: now,
+            });
+            await database.uiStates.put({
+              taskId,
+              selectedNodeId: firstNode.id,
+              mobilePanel: null,
+              updatedAt: now,
+            });
+            const workspaceState = await database.workspaceStates.get("workspace");
+            await database.workspaceStates.put({
+              id: "workspace",
+              activeTaskId: taskId,
+              workspaceCollapsed: workspaceState?.workspaceCollapsed ?? false,
+              updatedAt: now,
+            });
+          },
+        );
+        return updatedTask;
+      });
+    },
+
+    failTaskProcessing(taskId: string, reason: string) {
+      return run(async () => {
+        const task = await getExistingTask(taskId);
+        const failureReason = reason.trim().slice(0, 200);
+        if (!failureReason) {
+          throw new LocalStoreError("CORRUPT_RECORD", "任务失败原因不能为空。 ");
+        }
+        const failedTask = parseTask({
+          ...task,
+          status: "FAILED",
+          failureReason,
+          updatedAt: new Date().toISOString(),
+        });
+        await database.tasks.put(failedTask);
+        return failedTask;
+      });
+    },
+
+    restartTaskProcessing(taskId: string) {
+      return run(async () => {
+        const task = await getExistingTask(taskId);
+        if (task.status !== "FAILED") {
+          throw new LocalStoreError("RELATION_MISMATCH", "当前任务不需要重新处理。");
+        }
+        const restartedTask = parseTask({
+          ...task,
+          status: "PROCESSING",
+          currentNodeId: null,
+          failureReason: undefined,
+          updatedAt: new Date().toISOString(),
+        });
+        await database.tasks.put(restartedTask);
+        return restartedTask;
+      });
+    },
+
+    getTaskLearningData(taskId: string) {
+      return run(async () => {
+        const task = await getExistingTask(taskId);
+        const material = await database.materials.get(taskId);
+        const session = task.currentNodeId
+          ? await database.sessions.get([taskId, task.currentNodeId])
+          : undefined;
+        const messages = task.currentNodeId
+          ? await database.messages
+              .where("taskId")
+              .equals(taskId)
+              .filter((message) => message.nodeId === task.currentNodeId)
+              .sortBy("createdAt")
+          : [];
+        return { task, material, session, messages };
       });
     },
 

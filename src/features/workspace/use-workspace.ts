@@ -2,10 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { AgentClientError } from "@/features/materials/agent-client";
+import {
+  processTextMaterial,
+  TextProcessingError,
+  type MaterialProcessingProgress,
+} from "@/features/materials/process-text-material";
+import { MaterialReadError } from "@/features/materials/text-reader";
 import { LocalStoreError, type createTaskRepository } from "@/storage/task-repository";
 import type { DeletedTaskSnapshot, StoredTask } from "@/storage/types";
 
 export type TaskRepository = ReturnType<typeof createTaskRepository>;
+export type TextMaterialProcessor = typeof processTextMaterial;
+type TaskLearningData = Awaited<ReturnType<TaskRepository["getTaskLearningData"]>>;
 
 function errorMessage(error: unknown) {
   return error instanceof LocalStoreError
@@ -13,13 +22,29 @@ function errorMessage(error: unknown) {
     : "本地任务暂时无法更新，请重试。";
 }
 
-export function useWorkspace(repository: TaskRepository) {
+function processingErrorMessage(error: unknown) {
+  return error instanceof MaterialReadError ||
+    error instanceof AgentClientError ||
+    error instanceof TextProcessingError
+    ? error.message
+    : "暂时无法处理这份材料，请重试。";
+}
+
+export function useWorkspace(
+  repository: TaskRepository,
+  processor: TextMaterialProcessor = processTextMaterial,
+) {
   const [tasks, setTasks] = useState<StoredTask[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [learningData, setLearningData] = useState<TaskLearningData | null>(null);
+  const [processingProgress, setProcessingProgress] =
+    useState<MaterialProcessingProgress | null>(null);
+  const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [deletedSnapshot, setDeletedSnapshot] = useState<DeletedTaskSnapshot | null>(
     null,
   );
@@ -53,6 +78,18 @@ export function useWorkspace(repository: TaskRepository) {
   }, [repository]);
 
   useEffect(() => {
+    let mounted = true;
+    if (!activeTaskId) return;
+    void repository
+      .getTaskLearningData(activeTaskId)
+      .then((data) => mounted && setLearningData(data))
+      .catch((reason: unknown) => mounted && setError(errorMessage(reason)));
+    return () => {
+      mounted = false;
+    };
+  }, [activeTaskId, repository]);
+
+  useEffect(() => {
     if (!deletedSnapshot) return;
     const timeout = window.setTimeout(() => setDeletedSnapshot(null), 6000);
     return () => window.clearTimeout(timeout);
@@ -69,6 +106,63 @@ export function useWorkspace(repository: TaskRepository) {
 
   async function reloadTasks() {
     setTasks(await repository.listTasks());
+  }
+
+  async function runProcessing(task: StoredTask, file: File) {
+    setProcessingTaskId(task.id);
+    setProcessingProgress({ stage: "READING", loadedBytes: 0, totalBytes: file.size });
+    try {
+      const result = await processor(file, setProcessingProgress);
+      await repository.completeTextProcessing(
+        task.id,
+        result.parsedText,
+        result.knowledgeMap,
+        result.firstQuestion,
+      );
+    } catch (reason) {
+      await repository.failTaskProcessing(task.id, processingErrorMessage(reason));
+    } finally {
+      await reloadTasks();
+      setLearningData(await repository.getTaskLearningData(task.id));
+      setProcessingProgress(null);
+      setProcessingTaskId(null);
+      setIsImporting(false);
+    }
+  }
+
+  async function importMaterial(file: File) {
+    if (isImporting) return;
+    setIsImporting(true);
+    setError(null);
+    try {
+      const task = await repository.createProcessingTask(file);
+      setWorkspaceCollapsed(false);
+      setActiveTaskId(task.id);
+      await reloadTasks();
+      await runProcessing(task, file);
+    } catch (reason) {
+      setError(errorMessage(reason));
+      setIsImporting(false);
+    }
+  }
+
+  async function retryProcessing(taskId: string) {
+    if (isImporting) return;
+    setIsImporting(true);
+    setError(null);
+    try {
+      const data = await repository.getTaskLearningData(taskId);
+      if (!data.material) throw new LocalStoreError("NOT_FOUND", "找不到原始材料。");
+      const task = await repository.restartTaskProcessing(taskId);
+      await reloadTasks();
+      const file = new File([data.material.originalFile], data.material.fileName, {
+        type: data.material.mimeType,
+      });
+      await runProcessing(task, file);
+    } catch (reason) {
+      setError(errorMessage(reason));
+      setIsImporting(false);
+    }
   }
 
   async function selectTask(taskId: string) {
@@ -115,6 +209,7 @@ export function useWorkspace(repository: TaskRepository) {
         activeTaskId === taskId ? (remaining[0]?.id ?? null) : activeTaskId;
       setTasks(remaining);
       setActiveTaskId(nextActiveId);
+      if (!nextActiveId) setLearningData(null);
       setDeletedSnapshot(snapshot);
       await repository.saveWorkspaceState({
         id: "workspace",
@@ -158,12 +253,17 @@ export function useWorkspace(repository: TaskRepository) {
   return {
     tasks: visibleTasks,
     activeTask: tasks.find((task) => task.id === activeTaskId) ?? null,
+    learningData: learningData?.task.id === activeTaskId ? learningData : null,
+    processingProgress: processingTaskId === activeTaskId ? processingProgress : null,
+    isImporting,
     workspaceCollapsed,
     search,
     isLoading,
     error,
     deletedSnapshot,
     setSearch,
+    importMaterial,
+    retryProcessing,
     selectTask,
     renameTask,
     setTaskPinned,

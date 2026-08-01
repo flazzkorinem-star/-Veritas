@@ -152,7 +152,12 @@ export const knowledgeMapSchema = z
 
 export const firstQuestionSchema = z
   .object({
-    opening: z.string().trim().min(1).max(300),
+    opening: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .refine((value) => !/[?？]/.test(value), "开场必须是陈述句。"),
     question: z.string().trim().min(1).max(600),
   })
   .strict();

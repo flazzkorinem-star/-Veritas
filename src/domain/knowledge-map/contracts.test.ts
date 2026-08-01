@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { knowledgeMapSchema, type KnowledgeMap } from "./contracts";
+import { firstQuestionSchema, knowledgeMapSchema, type KnowledgeMap } from "./contracts";
 
 function validMap(): KnowledgeMap {
   const source = { label: "第 1 节，第 1 段", excerpt: "太阳提供能量。" };
@@ -93,5 +93,16 @@ describe("完整知识地图契约", () => {
     ];
 
     expect(knowledgeMapSchema.safeParse(map).success).toBe(false);
+  });
+});
+
+describe("首问契约", () => {
+  it("拒绝在开场和正式问题中连续提出两个动作", () => {
+    expect(
+      firstQuestionSchema.safeParse({
+        opening: "太阳能首先引发哪个环节？",
+        question: "请按顺序列出五个环节。",
+      }).success,
+    ).toBe(false);
   });
 });

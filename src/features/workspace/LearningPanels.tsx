@@ -1,6 +1,16 @@
-import type { MobilePanel, StoredTask } from "@/storage/types";
+import { useEffect, useState } from "react";
+
+import type { MaterialProcessingProgress } from "@/features/materials/process-text-material";
+import type {
+  MobilePanel,
+  StoredMaterial,
+  StoredMessage,
+  StoredSession,
+  StoredTask,
+} from "@/storage/types";
 import { Button } from "@/ui/Button";
 import { Icon } from "@/ui/Icon";
+import { MessageBubble } from "@/ui/MessageBubble";
 import { ProgressBar } from "@/ui/ProgressBar";
 import { StatusBadge } from "@/ui/StatusBadge";
 import { Vita } from "@/ui/Vita";
@@ -9,17 +19,99 @@ import { UploadButton } from "./UploadButton";
 
 interface LearningPanelsProps {
   activeTask: StoredTask | null;
+  learningData: {
+    material: StoredMaterial | undefined;
+    session: StoredSession | undefined;
+    messages: StoredMessage[];
+  } | null;
+  processingProgress: MaterialProcessingProgress | null;
   mobilePanel: MobilePanel;
+  uploadDisabled: boolean;
+  onUpload: (file: File) => void;
+  onRetry: () => void;
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
   onClosePanel: () => void;
 }
 
+const TASK_BADGES = {
+  PROCESSING: { tone: "warning", text: "处理中" },
+  READY: { tone: "neutral", text: "待开始" },
+  IN_PROGRESS: { tone: "active", text: "学习中" },
+  COMPLETED: { tone: "success", text: "已完成" },
+  FAILED: { tone: "danger", text: "需要处理" },
+} as const;
+
+function useElapsedSeconds(progress: MaterialProcessingProgress | null) {
+  const startedAt = progress && "startedAt" in progress ? progress.startedAt : null;
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (startedAt === null) return;
+    const update = () =>
+      setElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    update();
+    const interval = window.setInterval(update, 1_000);
+    return () => window.clearInterval(interval);
+  }, [startedAt]);
+  return elapsed;
+}
+
+function ProcessingCopy({
+  progress,
+  elapsedSeconds,
+}: {
+  progress: MaterialProcessingProgress | null;
+  elapsedSeconds: number;
+}) {
+  if (!progress || progress.stage === "READING") {
+    const loadedBytes = progress?.loadedBytes ?? 0;
+    const totalBytes = progress?.totalBytes ?? 0;
+    const percent = totalBytes ? Math.round((loadedBytes / totalBytes) * 100) : 0;
+    return (
+      <div className="processing-copy">
+        <strong>正在读取文件</strong>
+        <p>
+          {totalBytes ? `已读取 ${loadedBytes} / ${totalBytes} 字节` : "正在准备读取…"}
+        </p>
+        <ProgressBar label={`文件读取进度 ${percent}%`} max={100} value={percent} />
+      </div>
+    );
+  }
+  const title =
+    progress.stage === "EXTRACTING"
+      ? `正在整理内容 ${progress.currentChunk} / ${progress.totalChunks}`
+      : progress.stage === "AUDITING"
+        ? "正在核对整份材料"
+        : "正在准备第一个主题";
+  return (
+    <div className="processing-copy">
+      <strong>{title}</strong>
+      <p>维塔正在仔细梳理 · 已用 {elapsedSeconds} 秒</p>
+      <div
+        aria-label="模型处理进行中"
+        className="indeterminate-progress"
+        role="progressbar"
+      >
+        <span />
+      </div>
+    </div>
+  );
+}
+
 export function LearningPanels({
   activeTask,
+  learningData,
+  processingProgress,
   mobilePanel,
+  uploadDisabled,
+  onUpload,
+  onRetry,
   onOpenPanel,
   onClosePanel,
 }: LearningPanelsProps) {
+  const elapsedSeconds = useElapsedSeconds(processingProgress);
+  const material = learningData?.material;
+  const nodes = material?.nodes.toSorted((left, right) => left.order - right.order) ?? [];
+  const badge = activeTask ? TASK_BADGES[activeTask.status] : null;
   return (
     <>
       <aside
@@ -42,15 +134,45 @@ export function LearningPanels({
             <Icon name="close" />
           </Button>
         </div>
-        <div className="topic-empty">
-          <span aria-hidden="true">◎</span>
-          <strong>还没有学习主题</strong>
-          <p>
-            {activeTask
-              ? "材料准备好后，主题会按模块排在这里。"
-              : "上传材料后，这里会出现完整的学习路线。"}
-          </p>
-        </div>
+        {material && nodes.length > 0 ? (
+          <div className="topic-modules">
+            {material.modules.map((module) => {
+              const moduleNodes = nodes.filter((node) => node.moduleId === module.id);
+              if (moduleNodes.length === 0) return null;
+              return (
+                <section className="topic-module" key={module.id}>
+                  <div className="topic-module-heading">
+                    <h3>{module.title}</h3>
+                    <span>{moduleNodes.length}</span>
+                  </div>
+                  <div className="topic-list" role="list">
+                    {moduleNodes.map((node) => (
+                      <div
+                        className="topic-item"
+                        data-active={node.id === activeTask?.currentNodeId}
+                        key={node.id}
+                        role="listitem"
+                      >
+                        <span>{node.order}</span>
+                        <strong>{node.title}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="topic-empty">
+            <span aria-hidden="true">◎</span>
+            <strong>还没有学习主题</strong>
+            <p>
+              {activeTask
+                ? "材料准备好后，主题会按模块排在这里。"
+                : "上传材料后，这里会出现完整的学习路线。"}
+            </p>
+          </div>
+        )}
       </aside>
 
       <main className="chat-workspace">
@@ -73,26 +195,63 @@ export function LearningPanels({
             <span className="eyebrow">当前学习</span>
             <h1>{activeTask?.title ?? "从一份材料开始"}</h1>
           </div>
-          {activeTask ? <StatusBadge tone="warning">等待主题</StatusBadge> : null}
+          {badge ? <StatusBadge tone={badge.tone}>{badge.text}</StatusBadge> : null}
         </header>
-        <section className="chat-empty" aria-live="polite">
-          <div className="vita-figure">
-            <Vita state={activeTask ? "processing" : "waiting"} size={188} />
-          </div>
-          <div>
-            <strong>{activeTask ? "材料已回到工作区" : "带上一份想学懂的材料"}</strong>
-            <p>
-              {activeTask
-                ? "主题准备好后，维塔会在这里陪你逐层说清楚。"
-                : "上传讲义、文章或图片，维塔会陪你从记忆走到分析。"}
-            </p>
-          </div>
-        </section>
+        {activeTask?.status === "FAILED" ? (
+          <section className="chat-empty" aria-live="polite">
+            <div className="vita-figure">
+              <Vita state="error" size={188} />
+            </div>
+            <div>
+              <strong>这份材料暂时没能准备好</strong>
+              <p>{activeTask.failureReason ?? "请稍后重试，原始文件仍保存在本机。"}</p>
+              <Button disabled={uploadDisabled} onClick={onRetry} variant="primary">
+                重新处理
+              </Button>
+            </div>
+          </section>
+        ) : activeTask?.status === "PROCESSING" ? (
+          <section className="chat-empty processing-state" aria-live="polite">
+            <div className="vita-figure">
+              <Vita state="processing" size={188} />
+            </div>
+            <ProcessingCopy
+              progress={processingProgress}
+              elapsedSeconds={elapsedSeconds}
+            />
+          </section>
+        ) : learningData?.messages.length ? (
+          <section className="chat-thread" aria-live="polite">
+            {learningData.messages.map((message) => (
+              <MessageBubble key={message.id} role={message.role}>
+                {message.content}
+              </MessageBubble>
+            ))}
+          </section>
+        ) : (
+          <section className="chat-empty" aria-live="polite">
+            <div className="vita-figure">
+              <Vita state={activeTask ? "processing" : "waiting"} size={188} />
+            </div>
+            <div>
+              <strong>{activeTask ? "正在恢复学习现场" : "带上一份想学懂的材料"}</strong>
+              <p>
+                {activeTask
+                  ? "主题和对话会从这台设备恢复。"
+                  : "上传讲义、文章或图片，维塔会陪你从记忆走到分析。"}
+              </p>
+            </div>
+          </section>
+        )}
         <footer className="composer-shell">
           {!activeTask ? (
             <div className="composer-upload">
-              <UploadButton id="composer-upload" />
-              <span>支持常见文档与图片，单个文件不超过 30MB</span>
+              <UploadButton
+                disabled={uploadDisabled}
+                id="composer-upload"
+                onSelect={onUpload}
+              />
+              <span>材料文字会发送给 DeepSeek 以整理主题；原始文件只保存在本机</span>
             </div>
           ) : null}
           <div className="composer-row">
@@ -105,7 +264,11 @@ export function LearningPanels({
                 aria-label="回答输入"
                 disabled
                 placeholder={
-                  activeTask ? "主题准备好后就能开始回答" : "请先上传一份学习材料"
+                  learningData?.messages.length
+                    ? "回答功能即将准备好"
+                    : activeTask
+                      ? "主题准备好后就能开始回答"
+                      : "请先上传一份学习材料"
                 }
                 rows={1}
               />
@@ -140,7 +303,7 @@ export function LearningPanels({
         <section className="progress-group" aria-labelledby="material-progress">
           <div className="progress-label">
             <h3 id="material-progress">整份材料</h3>
-            <strong>0 / 0</strong>
+            <strong>0 / {nodes.length}</strong>
           </div>
           <ProgressBar label="材料完成进度 0%" max={100} value={0} />
           <p>完成的主题会逐步点亮这里。</p>
@@ -150,7 +313,10 @@ export function LearningPanels({
           aria-labelledby="topic-progress"
         >
           <span className="eyebrow">当前主题</span>
-          <h3 id="topic-progress">还没有主题</h3>
+          <h3 id="topic-progress">
+            {nodes.find((node) => node.id === activeTask?.currentNodeId)?.title ??
+              "还没有主题"}
+          </h3>
           <div className="score-line">
             <span>未开始</span>
             <strong>0</strong>

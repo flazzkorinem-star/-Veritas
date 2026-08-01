@@ -116,6 +116,32 @@ describe("Agent 服务", () => {
     ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
   });
 
+  it("拒绝把多个来源章节静默合成一个材料模块", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      knowledgeMap,
+      sourceCoverage: [
+        { chunkId: "chunk-1", knowledgeItemIds: ["item-1"] },
+        { chunkId: "chunk-2", knowledgeItemIds: ["item-1"] },
+      ],
+    });
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "AUDIT_KNOWLEDGE_MAP",
+          input: {
+            chunks: [
+              { chunkId: "chunk-1", extraction },
+              { chunkId: "chunk-2", extraction },
+            ],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
+  });
+
   it("首问只接收已验证主题上下文，并返回简短开场与单一问题", async () => {
     const callModel = vi.fn().mockResolvedValue({
       opening: "雨落到硬化路面后，去向会明显改变。",
@@ -154,5 +180,25 @@ describe("Agent 服务", () => {
         callModel,
       ),
     ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
+    expect(callModel).toHaveBeenCalledTimes(3);
+  });
+
+  it("模型第一次返回无效结构时只重试当前操作", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce({ ...extraction, extra: true })
+      .mockResolvedValueOnce(extraction);
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "EXTRACT_KNOWLEDGE",
+          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual(extraction);
+    expect(callModel).toHaveBeenCalledTimes(2);
   });
 });

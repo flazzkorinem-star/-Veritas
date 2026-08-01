@@ -6,6 +6,7 @@ import { WorkspaceApp } from "@/features/workspace/WorkspaceApp";
 import { createVeritasDatabase, type VeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
 import type { StoredTask } from "@/storage/types";
+import type { TextMaterialProcessor } from "./use-workspace";
 
 const databaseNames: string[] = [];
 const databases: VeritasDatabase[] = [];
@@ -30,6 +31,58 @@ function task(overrides: Partial<StoredTask> = {}): StoredTask {
     createdAt: "2026-08-01T08:00:00.000Z",
     updatedAt: "2026-08-01T08:00:00.000Z",
     ...overrides,
+  };
+}
+
+function processingResult() {
+  const source = { label: "第 1 段", excerpt: "太阳驱动蒸发。" };
+  return {
+    parsedText: "# 水循环\n\n太阳驱动蒸发。",
+    knowledgeMap: {
+      modules: [{ id: "module-1", title: "自然水循环", sourceRange: "第 1 段" }],
+      knowledgeItems: [
+        {
+          id: "item-1",
+          moduleId: "module-1",
+          title: "循环动力",
+          summary: "太阳能驱动蒸发。",
+          kind: "CORE" as const,
+          diagnosticRationale: "基础机制",
+          sourceReferences: [source],
+          commonMisconceptions: [],
+        },
+      ],
+      nodes: [
+        {
+          id: "node-1",
+          moduleId: "module-1",
+          title: "循环动力",
+          objective: "解释循环动力。",
+          knowledgeItemIds: ["item-1"],
+          sourceReferences: [source],
+          canonicalUnderstanding: "太阳能驱动蒸发。",
+          commonMisconceptions: [],
+          bloomTargets: {
+            memory: "说出动力。",
+            understanding: "解释作用。",
+            application: "判断环节。",
+            analysis: "分析关系。",
+          },
+          order: 1,
+        },
+      ],
+      coverageAssignments: [
+        {
+          knowledgeItemId: "item-1",
+          disposition: "DIAGNOSED_IN_NODE" as const,
+          nodeId: "node-1",
+        },
+      ],
+    },
+    firstQuestion: {
+      opening: "先从循环的动力看。",
+      question: "水循环的主要动力是什么？",
+    },
   };
 }
 
@@ -104,5 +157,55 @@ describe("主工作区", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "撤销删除" }));
     expect(await screen.findByRole("heading", { name: "水循环复习" })).toBeVisible();
+  });
+
+  it("上传文本后显示完整主题入口和第一个真实问题", async () => {
+    const { repository } = setup();
+    const processor: TextMaterialProcessor = async (_file, onProgress) => {
+      onProgress({ stage: "AUDITING", startedAt: Date.now() });
+      return processingResult();
+    };
+    render(<WorkspaceApp processor={processor} repository={repository} />);
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [
+          new File(["# 水循环\n\n太阳驱动蒸发。"], "water-cycle.md", {
+            type: "text/markdown",
+          }),
+        ],
+      },
+    });
+
+    expect(
+      await screen.findByText("水循环的主要动力是什么？", { exact: false }),
+    ).toBeVisible();
+    expect(screen.getByText("自然水循环")).toBeVisible();
+    expect(screen.getAllByText("循环动力").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("学习中").length).toBeGreaterThan(0);
+  });
+
+  it("材料处理失败时保留任务并显示重试入口", async () => {
+    const { repository } = setup();
+    const processor: TextMaterialProcessor = async () => {
+      throw new Error("上游原始敏感错误");
+    };
+    render(<WorkspaceApp processor={processor} repository={repository} />);
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "notes.txt", { type: "text/plain" })],
+      },
+    });
+
+    expect(await screen.findByText("这份材料暂时没能准备好")).toBeVisible();
+    expect(screen.getByText("暂时无法处理这份材料，请重试。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "重新处理" })).toBeVisible();
+    expect(screen.queryByText("上游原始敏感错误")).toBeNull();
+    await expect(repository.listTasks()).resolves.toEqual([
+      expect.objectContaining({ status: "FAILED", fileName: "notes.txt" }),
+    ]);
   });
 });

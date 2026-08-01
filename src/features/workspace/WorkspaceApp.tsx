@@ -9,15 +9,25 @@ import { Button } from "@/ui/Button";
 
 import { LearningPanels } from "./LearningPanels";
 import { DeleteDialog, RenameDialog } from "./TaskDialogs";
-import { useWorkspace, type TaskRepository } from "./use-workspace";
+import {
+  useWorkspace,
+  type TaskRepository,
+  type TextMaterialProcessor,
+} from "./use-workspace";
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
 
-export function WorkspaceApp({ repository }: { repository?: TaskRepository }) {
+export function WorkspaceApp({
+  repository,
+  processor,
+}: {
+  repository?: TaskRepository;
+  processor?: TextMaterialProcessor;
+}) {
   const defaultRepository = useMemo(
     () => repository ?? createTaskRepository(getVeritasDatabase()),
     [repository],
   );
-  const workspace = useWorkspace(defaultRepository);
+  const workspace = useWorkspace(defaultRepository, processor);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renameTask, setRenameTask] = useState<StoredTask | null>(null);
   const [deleteTask, setDeleteTask] = useState<StoredTask | null>(null);
@@ -57,15 +67,26 @@ export function WorkspaceApp({ repository }: { repository?: TaskRepository }) {
         }}
         onToggleCollapsed={() => void workspace.toggleWorkspace()}
         onToggleMenu={setOpenMenuId}
+        onUpload={(file) => void workspace.importMaterial(file)}
         openMenuId={openMenuId}
         search={workspace.search}
         tasks={workspace.tasks}
+        uploadDisabled={workspace.isImporting}
       />
       <LearningPanels
         activeTask={workspace.activeTask}
+        learningData={workspace.learningData}
         mobilePanel={mobilePanel}
         onClosePanel={() => setMobilePanel(null)}
         onOpenPanel={setMobilePanel}
+        onRetry={() => {
+          if (workspace.activeTask) {
+            void workspace.retryProcessing(workspace.activeTask.id);
+          }
+        }}
+        onUpload={(file) => void workspace.importMaterial(file)}
+        processingProgress={workspace.processingProgress}
+        uploadDisabled={workspace.isImporting}
       />
 
       {workspace.error ? (
