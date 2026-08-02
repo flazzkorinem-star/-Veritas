@@ -4,11 +4,12 @@
 
 ## 当前阶段
 
-阶段 13：全面自动化与真实浏览器验收。
+阶段 0—14 已全部完成；首版本地验收通过。
 
 ## 根目录
 
 - `package.json`：本地开发、解析资源准备、检查、测试与生产构建命令入口。
+- `README.md`：面向用户和面试官的功能概览、快速开始、本地运行、架构、隐私、验收基线与已知限制。
 - `next.config.ts`：Next.js 运行配置并为全部路由接入安全响应头。
 - `tsconfig.json`：TypeScript 严格模式与 `@/*` 源码别名；类型检查前由 Next.js 生成路由类型。
 - `eslint.config.mjs`：Next.js、TypeScript 与 Prettier 的静态检查规则。
