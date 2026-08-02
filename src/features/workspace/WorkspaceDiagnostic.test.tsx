@@ -1,8 +1,9 @@
 import Dexie from "dexie";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DiagnosticAgentCall } from "@/features/diagnostic/diagnostic-turn";
+import type { SpeechRecognitionLike } from "@/features/speech/use-speech-input";
 import { createVeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
 
@@ -85,6 +86,69 @@ afterEach(async () => {
 });
 
 describe("工作区诊断交互", () => {
+  it("通过浏览器语音识别把中文转写写入草稿，停止后仍可编辑", async () => {
+    const name = `veritas-speech-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const recognition: SpeechRecognitionLike = {
+      lang: "",
+      continuous: true,
+      interimResults: false,
+      maxAlternatives: 2,
+      onstart: null,
+      onresult: null,
+      onerror: null,
+      onend: null,
+      start: vi.fn(),
+      stop: vi.fn(),
+      abort: vi.fn(),
+    };
+    render(
+      <WorkspaceApp
+        processor={async () => result()}
+        repository={repository}
+        speechRecognitionFactory={() => recognition}
+      />,
+    );
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "开始语音输入" })).toBeEnabled(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "开始语音输入" }));
+    expect(recognition).toMatchObject({
+      lang: "zh-CN",
+      continuous: false,
+      interimResults: true,
+    });
+    act(() => recognition.onstart?.());
+    expect(screen.getByRole("button", { name: "停止语音输入" })).toBeVisible();
+    act(() =>
+      recognition.onresult?.({
+        results: {
+          0: { 0: { transcript: "太阳能驱动水蒸发" }, isFinal: true },
+          length: 1,
+        },
+      }),
+    );
+    expect(screen.getByLabelText("回答输入")).toHaveValue("太阳能驱动水蒸发");
+
+    fireEvent.click(screen.getByRole("button", { name: "停止语音输入" }));
+    expect(recognition.stop).toHaveBeenCalledOnce();
+    act(() => recognition.onend?.());
+    const input = screen.getByLabelText("回答输入");
+    fireEvent.change(input, { target: { value: "太阳能驱动水蒸发并进入大气" } });
+    expect(input).toHaveValue("太阳能驱动水蒸发并进入大气");
+    expect(screen.getByRole("button", { name: "发送回答" })).toBeEnabled();
+    database.close();
+  });
+
   it("完成主题后后台生成报告，并开放查看与任务分享入口", async () => {
     const name = `veritas-report-ui-${crypto.randomUUID()}`;
     names.push(name);

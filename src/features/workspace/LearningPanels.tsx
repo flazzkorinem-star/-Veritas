@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 
 import { getNodeScore } from "@/domain/diagnostic/selectors";
 import type { MaterialProcessingProgress } from "@/features/materials/process-text-material";
+import {
+  useSpeechInput,
+  type SpeechRecognitionFactory,
+} from "@/features/speech/use-speech-input";
 import type {
   MobilePanel,
   StoredMaterial,
@@ -48,6 +52,7 @@ interface LearningPanelsProps {
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
   onClosePanel: () => void;
   onOpenReport: () => void;
+  speechRecognitionFactory?: SpeechRecognitionFactory;
 }
 
 const TASK_BADGES = {
@@ -152,10 +157,12 @@ export function LearningPanels({
   onOpenPanel,
   onClosePanel,
   onOpenReport,
+  speechRecognitionFactory,
 }: LearningPanelsProps) {
   const elapsedSeconds = useElapsedSeconds(processingProgress);
   const threadRef = useRef<HTMLElement | null>(null);
   const [isAtLatest, setIsAtLatest] = useState(true);
+  const speech = useSpeechInput(onDraftChange, speechRecognitionFactory);
   const material = learningData?.material;
   const nodes = material?.nodes.toSorted((left, right) => left.order - right.order) ?? [];
   const currentSession = learningData?.session?.session;
@@ -390,7 +397,16 @@ export function LearningPanels({
             </div>
           ) : null}
           <div className="composer-row">
-            <Button aria-label="语音输入" disabled size="icon" variant="ghost">
+            <Button
+              aria-label={speech.state === "IDLE" ? "开始语音输入" : "停止语音输入"}
+              aria-pressed={speech.state !== "IDLE"}
+              className="speech-button"
+              data-listening={speech.state !== "IDLE"}
+              disabled={!canRespond || isResponding}
+              onClick={() => speech.toggle(learningData?.draft?.content ?? "")}
+              size="icon"
+              variant="ghost"
+            >
               <Icon name="microphone" />
             </Button>
             <label className="composer-input">
@@ -415,7 +431,10 @@ export function LearningPanels({
             <Button
               aria-label="发送回答"
               disabled={
-                !canRespond || isResponding || !learningData?.draft?.content.trim()
+                !canRespond ||
+                isResponding ||
+                !learningData?.draft?.content.trim() ||
+                speech.state !== "IDLE"
               }
               onClick={() => onSendAnswer(learningData?.draft?.content ?? "")}
               size="icon"
@@ -424,6 +443,16 @@ export function LearningPanels({
               <Icon name="send" />
             </Button>
           </div>
+          {speech.state !== "IDLE" ? (
+            <p className="speech-feedback" role="status">
+              {speech.state === "STOPPING" ? "正在结束语音输入…" : "正在听，请说话…"}
+            </p>
+          ) : null}
+          {speech.error ? (
+            <p className="speech-feedback speech-error" role="alert">
+              {speech.error}
+            </p>
+          ) : null}
         </footer>
       </main>
 

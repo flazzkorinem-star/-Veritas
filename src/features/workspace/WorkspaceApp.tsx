@@ -10,6 +10,7 @@ import type { DiagnosticAgentCall } from "@/features/diagnostic/diagnostic-turn"
 import type { ReportAgentCall } from "@/features/report/generate-report";
 import { ReportView } from "@/features/report/ReportView";
 import { downloadReport, shareReport } from "@/features/report/report-actions";
+import type { SpeechRecognitionFactory } from "@/features/speech/use-speech-input";
 
 import { LearningPanels } from "./LearningPanels";
 import { DeleteDialog, RenameDialog } from "./TaskDialogs";
@@ -25,11 +26,13 @@ export function WorkspaceApp({
   processor,
   diagnosticAgent,
   reportAgent,
+  speechRecognitionFactory,
 }: {
   repository?: TaskRepository;
   processor?: TextMaterialProcessor;
   diagnosticAgent?: DiagnosticAgentCall;
   reportAgent?: ReportAgentCall;
+  speechRecognitionFactory?: SpeechRecognitionFactory;
 }) {
   const defaultRepository = useMemo(
     () => repository ?? createTaskRepository(getVeritasDatabase()),
@@ -134,6 +137,7 @@ export function WorkspaceApp({
         pendingUserMessage={workspace.pendingUserMessage}
         uploadDisabled={workspace.isImporting}
         onOpenReport={() => setReportOpen(true)}
+        speechRecognitionFactory={speechRecognitionFactory}
       />
 
       {workspace.error ? (
