@@ -11,6 +11,7 @@ interface WorkspaceSidebarProps {
   collapsed: boolean;
   mobileOpen: boolean;
   openMenuId: string | null;
+  reportTaskIds: string[];
   onSearch: (value: string) => void;
   onSelect: (taskId: string) => void;
   onToggleCollapsed: () => void;
@@ -18,6 +19,7 @@ interface WorkspaceSidebarProps {
   onRename: (task: StoredTask) => void;
   onPin: (task: StoredTask) => void;
   onDelete: (task: StoredTask) => void;
+  onShare: (task: StoredTask) => void;
   onCloseMobile: () => void;
   onUpload: (file: File) => void;
   uploadDisabled: boolean;
@@ -133,9 +135,14 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
                       {task.isPinned ? "取消置顶" : "置顶"}
                     </button>
                     <button
-                      disabled
+                      disabled={!props.reportTaskIds.includes(task.id)}
+                      onClick={() => props.onShare(task)}
                       role="menuitem"
-                      title="完成学习后可分享报告"
+                      title={
+                        props.reportTaskIds.includes(task.id)
+                          ? "分享当前任务报告"
+                          : "完成一个主题后可分享报告"
+                      }
                       type="button"
                     >
                       分享

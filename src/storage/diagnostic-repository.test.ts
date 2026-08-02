@@ -148,7 +148,7 @@ describe("诊断会话仓储", () => {
     database.close();
   });
 
-  it("只有全部节点都完成后才把任务标记为完成", async () => {
+  it("全部节点诊断完成后仍等待最终报告再完成任务", async () => {
     const { database, repository, task } = await setup();
     const complete = (initial: Awaited<ReturnType<typeof repository.openNode>>) => {
       let session = initial.session;
@@ -193,7 +193,9 @@ describe("诊断会话仓储", () => {
       scaffold: null,
     });
 
-    expect((await repository.getTaskLearningData(task.id)).task.status).toBe("COMPLETED");
+    expect((await repository.getTaskLearningData(task.id)).task.status).toBe(
+      "IN_PROGRESS",
+    );
     database.close();
   });
 });

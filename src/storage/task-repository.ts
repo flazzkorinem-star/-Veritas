@@ -9,6 +9,7 @@ import type { NodeSession } from "@/domain/diagnostic/contracts";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
 import type { StageKey } from "@/domain/types";
 import { TASK_STATUSES } from "@/domain/types";
+import { reportDocumentSchema, type ReportDocument } from "@/domain/report/build-report";
 import type { VeritasDatabase } from "@/storage/database";
 import type {
   DeletedTaskSnapshot,
@@ -348,8 +349,101 @@ export function createTaskRepository(database: VeritasDatabase) {
         const draft = task.currentNodeId
           ? await database.drafts.get([taskId, task.currentNodeId])
           : undefined;
-        return { task, material, session, sessions, messages, draft };
+        const report = await database.reports.get(taskId);
+        return { task, material, session, sessions, messages, draft, report };
       });
+    },
+
+    getReport(taskId: string) {
+      return run(async () => {
+        await getExistingTask(taskId);
+        return database.reports.get(taskId);
+      });
+    },
+
+    listReportTaskIds() {
+      return run(async () =>
+        (await database.reports.toArray()).map((report) => report.taskId),
+      );
+    },
+
+    getReportGenerationData(taskId: string) {
+      return run(async () => {
+        const task = await getExistingTask(taskId);
+        const material = await database.materials.get(taskId);
+        if (!material) {
+          throw new LocalStoreError("NOT_FOUND", "找不到这份任务的材料。");
+        }
+        const [sessions, messages] = await Promise.all([
+          database.sessions.where("taskId").equals(taskId).toArray(),
+          database.messages.where("taskId").equals(taskId).sortBy("createdAt"),
+        ]);
+        return { task, material, sessions, messages };
+      });
+    },
+
+    saveReport(documentValue: ReportDocument, markdownValue: string) {
+      return run(() =>
+        database.transaction(
+          "rw",
+          [database.tasks, database.materials, database.sessions, database.reports],
+          async () => {
+            const document = reportDocumentSchema.safeParse(documentValue);
+            const markdown = markdownValue.trim();
+            const task = await getExistingTask(documentValue.taskId);
+            const material = await database.materials.get(task.id);
+            const sessions = await database.sessions
+              .where("taskId")
+              .equals(task.id)
+              .toArray();
+            const completedNodeIds = sessions
+              .filter((stored) => stored.session.status === "COMPLETED")
+              .map((stored) => stored.nodeId)
+              .toSorted();
+            const reportNodeIds = document.success
+              ? document.data.nodes.map((node) => node.nodeId).toSorted()
+              : [];
+            if (
+              !document.success ||
+              !material ||
+              !markdown ||
+              markdown.length > 200_000 ||
+              document.data.materialTitle !== task.fileName ||
+              document.data.progress.completed !== completedNodeIds.length ||
+              document.data.progress.total !== material.nodes.length ||
+              completedNodeIds.join("\n") !== reportNodeIds.join("\n")
+            ) {
+              throw new LocalStoreError(
+                "RELATION_MISMATCH",
+                "报告与当前任务的诊断证据不匹配，已拒绝保存。",
+              );
+            }
+            const now = document.data.generatedAt;
+            const existing = await database.reports.get(task.id);
+            const report = {
+              id: existing?.id ?? crypto.randomUUID(),
+              taskId: task.id,
+              markdown,
+              document: document.data,
+              completedNodeIds,
+              createdAt: existing?.createdAt ?? now,
+              updatedAt: now,
+            };
+            await database.reports.put(report);
+            const allCompleted = material.nodes.every((node) =>
+              completedNodeIds.includes(node.id),
+            );
+            await database.tasks.put(
+              parseTask({
+                ...task,
+                status: allCompleted ? "COMPLETED" : "IN_PROGRESS",
+                updatedAt: now,
+              }),
+            );
+            return report;
+          },
+        ),
+      );
     },
 
     saveDiagnosticTurn(value: DiagnosticTurnWrite) {
@@ -422,20 +516,9 @@ export function createTaskRepository(database: VeritasDatabase) {
               scaffoldEvents,
             });
             await database.messages.bulkPut(messages);
-            const sessions = await database.sessions
-              .where("taskId")
-              .equals(value.taskId)
-              .toArray();
-            const completedNodeIds = new Set(
-              sessions
-                .filter((stored) => stored.session.status === "COMPLETED")
-                .map((stored) => stored.nodeId),
-            );
             const updatedTask = parseTask({
               ...task,
-              status: material.nodes.every((node) => completedNodeIds.has(node.id))
-                ? "COMPLETED"
-                : "IN_PROGRESS",
+              status: "IN_PROGRESS",
               currentNodeId: value.nodeId,
               updatedAt: new Date(baseTime).toISOString(),
             });

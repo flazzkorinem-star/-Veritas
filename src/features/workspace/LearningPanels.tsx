@@ -9,6 +9,7 @@ import type {
   StoredDraft,
   StoredSession,
   StoredTask,
+  StoredReport,
 } from "@/storage/types";
 import { Button } from "@/ui/Button";
 import { Icon } from "@/ui/Icon";
@@ -27,6 +28,7 @@ interface LearningPanelsProps {
     sessions: StoredSession[];
     messages: StoredMessage[];
     draft: StoredDraft | undefined;
+    report: StoredReport | undefined;
   } | null;
   processingProgress: MaterialProcessingProgress | null;
   mobilePanel: MobilePanel;
@@ -41,9 +43,11 @@ interface LearningPanelsProps {
   onRevealAnswer: () => void;
   onSelectNode: (nodeId: string) => void;
   isResponding: boolean;
+  isGeneratingReport: boolean;
   pendingUserMessage: string | null;
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
   onClosePanel: () => void;
+  onOpenReport: () => void;
 }
 
 const TASK_BADGES = {
@@ -143,9 +147,11 @@ export function LearningPanels({
   onRevealAnswer,
   onSelectNode,
   isResponding,
+  isGeneratingReport,
   pendingUserMessage,
   onOpenPanel,
   onClosePanel,
+  onOpenReport,
 }: LearningPanelsProps) {
   const elapsedSeconds = useElapsedSeconds(processingProgress);
   const threadRef = useRef<HTMLElement | null>(null);
@@ -475,6 +481,18 @@ export function LearningPanels({
             <strong>{score}</strong>
           </div>
         </section>
+        <Button
+          className="report-entry-button"
+          disabled={!learningData?.report}
+          onClick={onOpenReport}
+          variant="secondary"
+        >
+          {learningData?.report
+            ? "查看学习报告"
+            : isGeneratingReport
+              ? "正在更新报告…"
+              : "完成一个主题后可查看报告"}
+        </Button>
       </aside>
     </>
   );

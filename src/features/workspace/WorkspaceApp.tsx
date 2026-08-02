@@ -7,6 +7,9 @@ import { createTaskRepository } from "@/storage/task-repository";
 import type { MobilePanel, StoredTask } from "@/storage/types";
 import { Button } from "@/ui/Button";
 import type { DiagnosticAgentCall } from "@/features/diagnostic/diagnostic-turn";
+import type { ReportAgentCall } from "@/features/report/generate-report";
+import { ReportView } from "@/features/report/ReportView";
+import { downloadReport, shareReport } from "@/features/report/report-actions";
 
 import { LearningPanels } from "./LearningPanels";
 import { DeleteDialog, RenameDialog } from "./TaskDialogs";
@@ -21,20 +24,44 @@ export function WorkspaceApp({
   repository,
   processor,
   diagnosticAgent,
+  reportAgent,
 }: {
   repository?: TaskRepository;
   processor?: TextMaterialProcessor;
   diagnosticAgent?: DiagnosticAgentCall;
+  reportAgent?: ReportAgentCall;
 }) {
   const defaultRepository = useMemo(
     () => repository ?? createTaskRepository(getVeritasDatabase()),
     [repository],
   );
-  const workspace = useWorkspace(defaultRepository, processor, diagnosticAgent);
+  const workspace = useWorkspace(
+    defaultRepository,
+    processor,
+    diagnosticAgent,
+    reportAgent,
+  );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renameTask, setRenameTask] = useState<StoredTask | null>(null);
   const [deleteTask, setDeleteTask] = useState<StoredTask | null>(null);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
+
+  async function shareTaskReport(taskId: string) {
+    const report = await workspace.getReport(taskId);
+    if (!report) return;
+    try {
+      const result = await shareReport({
+        title: report.document.materialTitle,
+        summary: report.document.summary,
+        markdown: report.markdown,
+      });
+      if (result === "COPIED") setShareNotice("报告摘要已复制");
+    } catch {
+      setShareNotice("当前浏览器暂时无法分享报告");
+    }
+  }
 
   function openRename(task: StoredTask) {
     setOpenMenuId(null);
@@ -63,6 +90,10 @@ export function WorkspaceApp({
           void workspace.setTaskPinned(task.id, !task.isPinned);
         }}
         onRename={openRename}
+        onShare={(task) => {
+          setOpenMenuId(null);
+          void shareTaskReport(task.id);
+        }}
         onSearch={workspace.setSearch}
         onSelect={(taskId) => {
           setMobilePanel(null);
@@ -72,6 +103,7 @@ export function WorkspaceApp({
         onToggleMenu={setOpenMenuId}
         onUpload={(file) => void workspace.importMaterial(file)}
         openMenuId={openMenuId}
+        reportTaskIds={workspace.reportTaskIds}
         search={workspace.search}
         tasks={workspace.tasks}
         uploadDisabled={workspace.isImporting}
@@ -98,8 +130,10 @@ export function WorkspaceApp({
         onUpload={(file) => void workspace.importMaterial(file)}
         processingProgress={workspace.processingProgress}
         isResponding={workspace.isResponding}
+        isGeneratingReport={workspace.isGeneratingReport}
         pendingUserMessage={workspace.pendingUserMessage}
         uploadDisabled={workspace.isImporting}
+        onOpenReport={() => setReportOpen(true)}
       />
 
       {workspace.error ? (
@@ -114,6 +148,20 @@ export function WorkspaceApp({
               重试本轮
             </Button>
           ) : null}
+          {workspace.canRetryReport ? (
+            <Button
+              onClick={() => void workspace.retryReport()}
+              size="sm"
+              variant="ghost"
+            >
+              重试报告
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {shareNotice ? (
+        <div className="share-toast" role="status">
+          {shareNotice}
         </div>
       ) : null}
       {workspace.deletedSnapshot ? (
@@ -143,6 +191,20 @@ export function WorkspaceApp({
             setDeleteTask(null);
           }}
           task={deleteTask}
+        />
+      ) : null}
+      {reportOpen && workspace.learningData?.report ? (
+        <ReportView
+          onClose={() => setReportOpen(false)}
+          onDownload={() =>
+            downloadReport(
+              workspace.learningData!.report!.document.materialTitle,
+              workspace.learningData!.report!.markdown,
+            )
+          }
+          onPrint={() => window.print()}
+          onShare={() => void shareTaskReport(workspace.learningData!.task.id)}
+          report={workspace.learningData.report}
         />
       ) : null}
     </div>

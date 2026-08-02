@@ -85,6 +85,96 @@ afterEach(async () => {
 });
 
 describe("工作区诊断交互", () => {
+  it("完成主题后后台生成报告，并开放查看与任务分享入口", async () => {
+    const name = `veritas-report-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const diagnosticAgent = vi.fn(async (request: { operation: string }) => {
+      if (request.operation === "EVALUATE_ANSWER") {
+        return {
+          classification: "CORRECT",
+          isCorrect: true,
+          progress: "ADVANCING",
+          correctEvidence: ["回答包含关键概念"],
+          missingPoints: [],
+          misconceptions: [],
+          teachingMove: "AFFIRM_AND_ADVANCE",
+          scaffold: null,
+          assistantMessage: "这一步已经说清楚了。",
+        };
+      }
+      return { question: "请继续用一个新情境说明这个机制。" };
+    });
+    const reportAgent = vi.fn(
+      async (
+        request: Parameters<
+          NonNullable<React.ComponentProps<typeof WorkspaceApp>["reportAgent"]>
+        >[0],
+      ) => {
+        const node = request.input.completedNodes[0]!;
+        return {
+          summary: "已经能解释水循环的主要动力。",
+          nodeInsights: [
+            {
+              nodeId: node.nodeId,
+              understood: [
+                {
+                  statement: "能指出太阳能是主要动力。",
+                  userMessageId: node.userMessages[0]!.id,
+                },
+              ],
+              blindSpots: [],
+              userEvidenceMessageIds: [node.userMessages[0]!.id],
+              scaffoldNotes: [],
+              learnedOrCorrected: [],
+              nextSteps: ["换一个天气情境独立解释。"],
+              sourceReferenceIndexes: [0],
+            },
+          ],
+        };
+      },
+    );
+    render(
+      <WorkspaceApp
+        diagnosticAgent={diagnosticAgent as DiagnosticAgentCall}
+        processor={async () => result()}
+        reportAgent={reportAgent}
+        repository={repository}
+      />,
+    );
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+
+    for (let index = 1; index <= 4; index += 1) {
+      await waitFor(() => expect(screen.getByLabelText("回答输入")).toBeEnabled());
+      const input = screen.getByLabelText("回答输入");
+      fireEvent.change(input, { target: { value: `第 ${index} 层回答太阳能` } });
+      fireEvent.click(screen.getByRole("button", { name: "发送回答" }));
+      await waitFor(() =>
+        expect(
+          screen.getByText(String(index * 25), { selector: ".score-line strong" }),
+        ).toBeVisible(),
+      );
+    }
+
+    const reportButton = await screen.findByRole("button", { name: "查看学习报告" });
+    await waitFor(() => expect(reportButton).toBeEnabled());
+    fireEvent.click(reportButton);
+    expect(screen.getByRole("dialog", { name: "学习诊断报告" })).toBeVisible();
+    expect(screen.getByText("已经能解释水循环的主要动力。")).toBeVisible();
+    expect(reportAgent).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭报告" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开“water-cycle”的任务菜单" }));
+    expect(screen.getByRole("menuitem", { name: "分享" })).toBeEnabled();
+    database.close();
+  });
+
   it("长对话离开底部时提供回到最新消息入口", async () => {
     const name = `veritas-scroll-ui-${crypto.randomUUID()}`;
     names.push(name);

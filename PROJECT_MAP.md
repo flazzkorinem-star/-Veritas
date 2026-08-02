@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 8：完整桌面工作区。
+阶段 9：诊断报告、下载与分享。
 
 ## 根目录
 
@@ -30,7 +30,7 @@
 
 - `src/app/layout.tsx`：全局 HTML 外壳与页面元数据。
 - `src/app/page.tsx`：挂载本地学习工作区。
-- `src/app/globals.css`：全局令牌、四列工作区、窄屏抽屉与移动端布局样式。
+- `src/app/globals.css`：全局令牌、四列工作区、报告与打印页面、窄屏抽屉和移动端布局样式。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
@@ -40,11 +40,13 @@
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
 - `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属与首问。
-- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理与诊断教学操作。
+- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、诊断教学与报告操作。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验回答分类、证据、误解、教学动作、支架、问题、提示与答案。
+- `src/domain/report/contracts.ts`：校验 Agent 3 输入与洞察结构，并拒绝伪造用户原话、支架和来源引用。
+- `src/domain/report/build-report.ts`：由本地确定性证据回填任务级报告，并生成转义后的 Markdown 下载文本。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、完成状态、界面状态和事务性删除/撤销。
+- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、报告、完成状态、界面状态和事务性删除/撤销。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
@@ -59,11 +61,14 @@
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 回答、提示与答案回合，把所有状态转移交给唯一 reducer，并生成下一层主问题。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时、有限重试与外部取消信号。
-- `src/server/agents/service.ts`：组装材料处理和诊断教学的隔离提示，独立校验输出并只重试受影响操作。
-- `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、移动抽屉与任务对话框。
-- `src/features/workspace/use-workspace.ts`：协调仓储读取、任务交互、诊断发送/停止/重试与草稿写入队列，不承载视图结构。
-- `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表和单任务菜单。
-- `src/features/workspace/LearningPanels.tsx`：显示可折叠主题、节点历史、回答输入、提示与答案、生成中状态、回到最新消息，以及实时任务进度和节点分数。
+- `src/server/agents/service.ts`：组装材料处理、诊断教学与报告的隔离提示，独立校验输出并只重试受影响操作。
+- `src/features/report/generate-report.ts`：在主题完成后只汇集本任务的已验证证据，调用 Agent 3 并保存任务级报告。
+- `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
+- `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
+- `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、报告页面、移动抽屉与任务对话框。
+- `src/features/workspace/use-workspace.ts`：协调仓储读取、任务交互、诊断与报告重试，以及草稿和报告写入队列，不承载视图结构。
+- `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表，以及含报告分享状态的单任务菜单。
+- `src/features/workspace/LearningPanels.tsx`：显示可折叠主题、节点历史、回答输入、提示与答案、生成中状态、回到最新消息，以及实时进度、分数和报告入口。
 - `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
@@ -89,7 +94,11 @@
 - `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首问、核心覆盖、双端布局与刷新恢复。
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
 - `src/features/diagnostic/diagnostic-turn.test.ts`：验证同题追问、答对推进、三轮停滞、三级提示与主动答案的确定性编排。
-- `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和任务完成的事务性持久化。
+- `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和诊断完成等待报告的事务性持久化。
 - `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证提示、回答、分数、节点切换和草稿恢复的组件闭环。
-- `e2e/phase7-diagnostic.spec.ts`：在桌面与移动生产 Edge 中走完一个节点四层，并在桌面验证发送失败、草稿保留和原地重试。
+- `e2e/phase7-diagnostic.spec.ts`：在双端生产 Edge 中走完一个节点四层和报告查看、下载、分享，并在桌面验证发送失败、草稿保留和原地重试。
 - `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的问题、评价、提示、答案和越权字段隔离。
+- `src/domain/report/*.test.ts`：验证报告证据引用、确定性回填和安全 Markdown 生成。
+- `src/storage/report-repository.test.ts`：验证报告与完成主题严格匹配，并只在最终报告保存后完成任务。
+- `src/features/report/*.test.tsx`：验证报告编排、全屏渲染、下载文件名、系统分享与复制回退。
+- `e2e/phase9-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 3 的忠实报告结构和越权字段隔离。

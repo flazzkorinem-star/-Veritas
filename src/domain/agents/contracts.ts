@@ -5,6 +5,7 @@ import {
   diagnosticNodeSchema,
   knowledgeItemSchema,
 } from "@/domain/knowledge-map/contracts";
+import { reportAgentInputSchema } from "@/domain/report/contracts";
 import { STAGE_ORDER } from "@/domain/types";
 
 const chunkIdSchema = z.string().regex(/^chunk-[1-9][0-9]*$/);
@@ -111,6 +112,12 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
           stage: stageSchema,
         })
         .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("CREATE_REPORT"),
+      input: reportAgentInputSchema,
     })
     .strict(),
 ]);

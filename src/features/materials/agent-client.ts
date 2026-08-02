@@ -22,6 +22,10 @@ import {
   type StageQuestion,
   stageQuestionSchema,
 } from "@/domain/diagnostic/agent-contracts";
+import {
+  type ReportAgentOutput,
+  reportAgentOutputSchema,
+} from "@/domain/report/contracts";
 import { publicErrorCodeSchema, publicErrorSchema } from "@/lib/errors/public-error";
 
 export type AgentClientErrorCode =
@@ -58,6 +62,7 @@ type StageQuestionRequest = Extract<
 type EvaluationRequest = Extract<AgentOperationRequest, { operation: "EVALUATE_ANSWER" }>;
 type HintRequest = Extract<AgentOperationRequest, { operation: "CREATE_HINT" }>;
 type AnswerRequest = Extract<AgentOperationRequest, { operation: "CREATE_STAGE_ANSWER" }>;
+type ReportRequest = Extract<AgentOperationRequest, { operation: "CREATE_REPORT" }>;
 
 function resultSchema(operation: AgentOperationRequest["operation"]) {
   switch (operation) {
@@ -75,6 +80,8 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
       return hintResponseSchema;
     case "CREATE_STAGE_ANSWER":
       return stageAnswerSchema;
+    case "CREATE_REPORT":
+      return reportAgentOutputSchema;
   }
 }
 
@@ -107,6 +114,10 @@ export function callAgent(
   dependencies?: AgentClientDependencies,
 ): Promise<StageAnswer>;
 export function callAgent(
+  request: ReportRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<ReportAgentOutput>;
+export function callAgent(
   request: AgentOperationRequest,
   dependencies?: AgentClientDependencies,
 ): Promise<
@@ -117,6 +128,7 @@ export function callAgent(
   | EvaluationDecision
   | HintResponse
   | StageAnswer
+  | ReportAgentOutput
 >;
 export async function callAgent(
   value: AgentOperationRequest,

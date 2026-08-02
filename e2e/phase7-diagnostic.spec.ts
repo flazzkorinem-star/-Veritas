@@ -39,7 +39,14 @@ function fulfill(route: Route, result: unknown) {
 function mockAgent(route: Route) {
   const request = route.request().postDataJSON() as {
     operation: string;
-    input: { stage?: string; hintLevel?: number };
+    input: {
+      stage?: string;
+      hintLevel?: number;
+      completedNodes?: Array<{
+        nodeId: string;
+        userMessages: Array<{ id: string }>;
+      }>;
+    };
   };
   switch (request.operation) {
     case "EXTRACT_KNOWLEDGE":
@@ -95,6 +102,25 @@ function mockAgent(route: Route) {
       return fulfill(route, {
         assistantMessage: "湿衣服里的液态水吸收能量后蒸发成水蒸气。",
       });
+    case "CREATE_REPORT":
+      return fulfill(route, {
+        summary: "已经能解释太阳能怎样推动水循环，应用环节仍依赖了完整答案。",
+        nodeInsights: request.input.completedNodes!.map((completedNode) => ({
+          nodeId: completedNode.nodeId,
+          understood: [
+            {
+              statement: "能指出太阳能是水循环的主要动力。",
+              userMessageId: completedNode.userMessages[0]!.id,
+            },
+          ],
+          blindSpots: ["应用到新情境时依赖了家教完整答案。"],
+          userEvidenceMessageIds: [completedNode.userMessages[0]!.id],
+          scaffoldNotes: [],
+          learnedOrCorrected: [],
+          nextSteps: ["换一个天气情境独立解释能量变化。"],
+          sourceReferenceIndexes: [0],
+        })),
+      });
     default:
       throw new Error(`未处理的 Agent 操作：${request.operation}`);
   }
@@ -110,6 +136,21 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
     problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
   );
   await page.route("**/api/agents", mockAgent);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText(value: string) {
+          sessionStorage.setItem("copied-report", value);
+          return Promise.resolve();
+        },
+      },
+    });
+  });
   await page.goto("/");
   await page.locator("#workspace-upload").setInputFiles({
     name: "water-cycle.md",
@@ -152,6 +193,41 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
   ).toBe(false);
   await page.screenshot({
     path: testInfo.outputPath(`phase7-${testInfo.project.name}.png`),
+    fullPage: false,
+  });
+
+  if (testInfo.project.name === "mobile-edge") {
+    await page.getByRole("button", { name: "进度" }).click();
+  }
+  await page.getByRole("button", { name: "查看学习报告" }).click();
+  const report = page.getByRole("dialog", { name: "学习诊断报告" });
+  await expect(report).toBeVisible();
+  await expect(report.getByText("1 / 1 个主题")).toBeVisible();
+  await expect(report.getByText("主要动力是太阳能。")).toBeVisible();
+  await expect(report.getByText("第 1 段")).toBeVisible();
+  const downloadPromise = page.waitForEvent("download");
+  await report.getByRole("button", { name: "下载 Markdown" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("water-cycle-学习诊断报告.md");
+  expect(await download.failure()).toBeNull();
+  await report.getByRole("button", { name: "分享报告" }).click();
+  await expect(page.getByRole("status")).toHaveText("报告摘要已复制");
+  expect(await page.evaluate(() => sessionStorage.getItem("copied-report"))).toContain(
+    "太阳能",
+  );
+  if (testInfo.project.name === "desktop-edge") {
+    await page.emulateMedia({ media: "print" });
+    const pdf = await page.pdf({
+      format: "A4",
+      path: testInfo.outputPath("phase9-report-print.pdf"),
+      printBackground: true,
+    });
+    expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+    expect(pdf.length).toBeGreaterThan(10_000);
+    await page.emulateMedia({ media: "screen" });
+  }
+  await page.screenshot({
+    path: testInfo.outputPath(`phase9-report-${testInfo.project.name}.png`),
     fullPage: false,
   });
   expect(problems).toEqual([]);

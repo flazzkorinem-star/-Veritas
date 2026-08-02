@@ -1,3 +1,5 @@
+import type { ReportDocument } from "@/domain/report/build-report";
+
 export const TASK_STATUSES = [
   "PROCESSING",
   "READY",
@@ -126,6 +128,7 @@ export interface Report {
   id: string;
   taskId: string;
   markdown: string;
+  document: ReportDocument;
   completedNodeIds: string[];
   createdAt: string;
   updatedAt: string;

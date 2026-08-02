@@ -17,6 +17,10 @@ import {
   TextProcessingError,
   type MaterialProcessingProgress,
 } from "@/features/materials/process-text-material";
+import {
+  generateTaskReport,
+  type ReportAgentCall,
+} from "@/features/report/generate-report";
 import { MaterialReadError } from "@/features/materials/text-reader";
 import { LocalStoreError, type createTaskRepository } from "@/storage/task-repository";
 import type { DeletedTaskSnapshot, StoredTask } from "@/storage/types";
@@ -47,8 +51,10 @@ export function useWorkspace(
   repository: TaskRepository,
   processor: TextMaterialProcessor = processTextMaterial,
   diagnosticAgent?: DiagnosticAgentCall,
+  reportAgent?: ReportAgentCall,
 ) {
   const [tasks, setTasks] = useState<StoredTask[]>([]);
+  const [reportTaskIds, setReportTaskIds] = useState<string[]>([]);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
   const [search, setSearch] = useState("");
@@ -60,6 +66,8 @@ export function useWorkspace(
   const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [failedReportTaskId, setFailedReportTaskId] = useState<string | null>(null);
   const [pendingDiagnosticAction, setPendingDiagnosticAction] =
     useState<DiagnosticAction | null>(null);
   const [failedDiagnosticAction, setFailedDiagnosticAction] =
@@ -71,11 +79,16 @@ export function useWorkspace(
   const diagnosticController = useRef<AbortController | null>(null);
   const responding = useRef(false);
   const draftWrite = useRef<Promise<void>>(Promise.resolve());
+  const reportWrite = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([repository.listTasks(), repository.getWorkspaceState()])
-      .then(async ([storedTasks, workspaceState]) => {
+    void Promise.all([
+      repository.listTasks(),
+      repository.getWorkspaceState(),
+      repository.listReportTaskIds(),
+    ])
+      .then(async ([storedTasks, workspaceState, storedReportTaskIds]) => {
         if (!mounted) return;
         const restoredId = storedTasks.some(
           (task) => task.id === workspaceState.activeTaskId,
@@ -83,6 +96,7 @@ export function useWorkspace(
           ? workspaceState.activeTaskId
           : (storedTasks[0]?.id ?? null);
         setTasks(storedTasks);
+        setReportTaskIds(storedReportTaskIds);
         setActiveTaskId(restoredId);
         setWorkspaceCollapsed(workspaceState.workspaceCollapsed);
         if (restoredId !== workspaceState.activeTaskId) {
@@ -128,7 +142,33 @@ export function useWorkspace(
   }, [search, tasks]);
 
   async function reloadTasks() {
-    setTasks(await repository.listTasks());
+    const [storedTasks, storedReportTaskIds] = await Promise.all([
+      repository.listTasks(),
+      repository.listReportTaskIds(),
+    ]);
+    setTasks(storedTasks);
+    setReportTaskIds(storedReportTaskIds);
+  }
+
+  async function updateReport(taskId: string) {
+    setIsGeneratingReport(true);
+    setFailedReportTaskId(null);
+    try {
+      await generateTaskReport(taskId, repository, reportAgent);
+      await reloadTasks();
+      if (activeTaskId === taskId) {
+        setLearningData(await repository.getTaskLearningData(taskId));
+      }
+    } catch {
+      setFailedReportTaskId(taskId);
+      setError("这个主题已经保存，但学习报告暂时没有更新。请重试报告生成。");
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }
+
+  function queueReportUpdate(taskId: string) {
+    reportWrite.current = reportWrite.current.then(() => updateReport(taskId));
   }
 
   async function runProcessing(task: StoredTask, file: File) {
@@ -340,6 +380,12 @@ export function useWorkspace(
       }
       await reloadTasks();
       setLearningData(await repository.getTaskLearningData(context.task.id));
+      if (
+        context.session.status !== "COMPLETED" &&
+        result.session.status === "COMPLETED"
+      ) {
+        queueReportUpdate(context.task.id);
+      }
     } catch (reason) {
       if (!controller.signal.aborted) {
         setFailedDiagnosticAction(action);
@@ -375,6 +421,10 @@ export function useWorkspace(
 
   async function retryDiagnosticTurn() {
     if (failedDiagnosticAction) await runDiagnosticAction(failedDiagnosticAction);
+  }
+
+  async function retryReport() {
+    if (failedReportTaskId) queueReportUpdate(failedReportTaskId);
   }
 
   async function selectNode(nodeId: string) {
@@ -447,16 +497,19 @@ export function useWorkspace(
 
   return {
     tasks: visibleTasks,
+    reportTaskIds,
     activeTask: tasks.find((task) => task.id === activeTaskId) ?? null,
     learningData: learningData?.task.id === activeTaskId ? learningData : null,
     processingProgress: processingTaskId === activeTaskId ? processingProgress : null,
     isImporting,
     isResponding,
+    isGeneratingReport,
     pendingUserMessage:
       pendingDiagnosticAction?.kind === "ANSWER"
         ? pendingDiagnosticAction.userMessage
         : null,
     canRetryDiagnosticTurn: failedDiagnosticAction !== null,
+    canRetryReport: failedReportTaskId !== null,
     workspaceCollapsed,
     search,
     isLoading,
@@ -471,6 +524,7 @@ export function useWorkspace(
     requestHint,
     revealAnswer,
     retryDiagnosticTurn,
+    retryReport,
     selectNode,
     saveDraft,
     selectTask,
@@ -479,5 +533,6 @@ export function useWorkspace(
     deleteTask,
     undoDelete,
     toggleWorkspace,
+    getReport: repository.getReport,
   };
 }
