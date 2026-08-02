@@ -228,6 +228,9 @@ describe("工作区诊断交互", () => {
 
     const reportButton = await screen.findByRole("button", { name: "查看学习报告" });
     await waitFor(() => expect(reportButton).toBeEnabled());
+    expect(
+      screen.getByRole("button", { name: "学习下一个主题：降水回流" }),
+    ).toBeVisible();
     fireEvent.click(reportButton);
     expect(screen.getByRole("dialog", { name: "学习诊断报告" })).toBeVisible();
     expect(screen.getByText("已经能解释水循环的主要动力。")).toBeVisible();
@@ -236,6 +239,8 @@ describe("工作区诊断交互", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭报告" }));
     fireEvent.click(screen.getByRole("button", { name: "打开“water-cycle”的任务菜单" }));
     expect(screen.getByRole("menuitem", { name: "分享" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "学习下一个主题：降水回流" }));
+    expect(await screen.findByText("请继续用一个新情境说明这个机制。")).toBeVisible();
     database.close();
   });
 

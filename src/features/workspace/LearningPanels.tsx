@@ -166,6 +166,21 @@ export function LearningPanels({
   const material = learningData?.material;
   const nodes = material?.nodes.toSorted((left, right) => left.order - right.order) ?? [];
   const currentSession = learningData?.session?.session;
+  const nextNode =
+    currentSession?.status === "COMPLETED"
+      ? nodes.find((node) => {
+          if (
+            node.order <=
+            (nodes.find((item) => item.id === currentSession.nodeId)?.order ?? 0)
+          ) {
+            return false;
+          }
+          return !learningData?.sessions.some(
+            (stored) =>
+              stored.nodeId === node.id && stored.session.status === "COMPLETED",
+          );
+        })
+      : undefined;
   const completedNodes =
     learningData?.sessions.filter(({ session }) => session.status === "COMPLETED")
       .length ?? 0;
@@ -394,6 +409,19 @@ export function LearningPanels({
                   停止生成
                 </Button>
               ) : null}
+            </div>
+          ) : null}
+          {nextNode ? (
+            <div className="next-topic-action">
+              <Button
+                aria-label={`学习下一个主题：${nextNode.title}`}
+                onClick={() => onSelectNode(nextNode.id)}
+                size="sm"
+                variant="secondary"
+              >
+                <span>下一个主题</span>
+                <strong>{nextNode.title}</strong>
+              </Button>
             </div>
           ) : null}
           <div className="composer-row">

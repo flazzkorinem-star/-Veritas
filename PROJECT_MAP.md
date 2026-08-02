@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 10：语音输入。
+阶段 11：移动端完整适配。
 
 ## 根目录
 
@@ -30,7 +30,7 @@
 
 - `src/app/layout.tsx`：全局 HTML 外壳与页面元数据。
 - `src/app/page.tsx`：挂载本地学习工作区。
-- `src/app/globals.css`：全局令牌、四列工作区、语音状态、报告与打印页面、窄屏抽屉和移动端布局样式。
+- `src/app/globals.css`：全局令牌、四列工作区、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
@@ -66,10 +66,10 @@
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。
-- `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、报告页面、移动抽屉与任务对话框。
+- `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、报告页面、移动抽屉、遮罩、返回行为与任务对话框。
 - `src/features/workspace/use-workspace.ts`：协调仓储读取、任务交互、诊断与报告重试，以及草稿和报告写入队列，不承载视图结构。
 - `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表，以及含报告分享状态的单任务菜单。
-- `src/features/workspace/LearningPanels.tsx`：显示可折叠主题、节点历史、文字与语音回答、提示与答案、生成中状态、回到最新消息，以及实时进度、分数和报告入口。
+- `src/features/workspace/LearningPanels.tsx`：显示可折叠主题、节点历史、文字与语音回答、提示与答案、生成中状态、回到最新消息、下一主题入口，以及实时进度、分数和报告入口。
 - `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
@@ -105,3 +105,4 @@
 - `e2e/phase9-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 3 的忠实报告结构和越权字段隔离。
 - `src/features/speech/use-speech-input.test.tsx`：验证中文转写、停止、权限、无声音、设备失败、中断、不支持和卸载释放。
 - `e2e/phase10-speech.spec.ts`：在双端生产 Edge 验证原生 API 支持、语音转写至回答，并在桌面验证权限拒绝和草稿保留。
+- `e2e/phase11-mobile.spec.ts`：在 390×844 生产 Edge 中从上传走到报告，并验证移动浮层、返回、软键盘、长内容、下一主题、横屏和溢出。

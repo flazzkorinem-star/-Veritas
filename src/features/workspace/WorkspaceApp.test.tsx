@@ -93,6 +93,39 @@ afterEach(async () => {
 });
 
 describe("主工作区", () => {
+  it("移动浮层支持遮罩、Escape 和浏览器返回关闭", async () => {
+    const { repository } = setup();
+    render(<WorkspaceApp repository={repository} />);
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^任务$/ }));
+    expect(screen.getByLabelText("任务工作区")).toHaveAttribute(
+      "data-mobile-open",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "关闭当前浮层" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("任务工作区")).toHaveAttribute(
+        "data-mobile-open",
+        "false",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^主题$/ }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByLabelText("学习主题")).toHaveAttribute(
+      "data-mobile-open",
+      "false",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^进度$/ }));
+    fireEvent.popState(window);
+    expect(screen.getByLabelText("诊断进度")).toHaveAttribute(
+      "data-mobile-open",
+      "false",
+    );
+  });
+
   it("无任务时显示上传入口并禁用回答输入", async () => {
     const { repository } = setup();
 

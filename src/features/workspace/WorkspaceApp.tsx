@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getVeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
@@ -51,6 +51,39 @@ export function WorkspaceApp({
   const [reportOpen, setReportOpen] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
 
+  useEffect(() => {
+    const close = () => {
+      setMobilePanel(null);
+      setReportOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close();
+        if (window.history.state?.veritasOverlay) window.history.back();
+      }
+    };
+    window.addEventListener("popstate", close);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("popstate", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
+
+  function openOverlay(panel: Exclude<MobilePanel, null> | "REPORT") {
+    if (!mobilePanel && !reportOpen) {
+      window.history.pushState({ ...window.history.state, veritasOverlay: true }, "");
+    }
+    setMobilePanel(panel === "REPORT" ? null : panel);
+    setReportOpen(panel === "REPORT");
+  }
+
+  function closeOverlay() {
+    setMobilePanel(null);
+    setReportOpen(false);
+    if (window.history.state?.veritasOverlay) window.history.back();
+  }
+
   async function shareTaskReport(taskId: string) {
     const report = await workspace.getReport(taskId);
     if (!report) return;
@@ -86,7 +119,7 @@ export function WorkspaceApp({
         activeTaskId={workspace.activeTask?.id}
         collapsed={workspace.workspaceCollapsed}
         mobileOpen={mobilePanel === "TASKS"}
-        onCloseMobile={() => setMobilePanel(null)}
+        onCloseMobile={closeOverlay}
         onDelete={openDelete}
         onPin={(task) => {
           setOpenMenuId(null);
@@ -99,7 +132,7 @@ export function WorkspaceApp({
         }}
         onSearch={workspace.setSearch}
         onSelect={(taskId) => {
-          setMobilePanel(null);
+          closeOverlay();
           void workspace.selectTask(taskId);
         }}
         onToggleCollapsed={() => void workspace.toggleWorkspace()}
@@ -116,10 +149,10 @@ export function WorkspaceApp({
         activeTask={workspace.activeTask}
         learningData={workspace.learningData}
         mobilePanel={mobilePanel}
-        onClosePanel={() => setMobilePanel(null)}
+        onClosePanel={closeOverlay}
         onCancelProcessing={workspace.cancelProcessing}
         onCancelTurn={workspace.cancelDiagnosticTurn}
-        onOpenPanel={setMobilePanel}
+        onOpenPanel={openOverlay}
         onRequestHint={() => void workspace.requestHint()}
         onRevealAnswer={() => void workspace.revealAnswer()}
         onSelectNode={(nodeId) => void workspace.selectNode(nodeId)}
@@ -136,9 +169,18 @@ export function WorkspaceApp({
         isGeneratingReport={workspace.isGeneratingReport}
         pendingUserMessage={workspace.pendingUserMessage}
         uploadDisabled={workspace.isImporting}
-        onOpenReport={() => setReportOpen(true)}
+        onOpenReport={() => openOverlay("REPORT")}
         speechRecognitionFactory={speechRecognitionFactory}
       />
+
+      {mobilePanel ? (
+        <button
+          aria-label="关闭当前浮层"
+          className="drawer-backdrop"
+          onClick={closeOverlay}
+          type="button"
+        />
+      ) : null}
 
       {workspace.error ? (
         <div className="error-toast" role="alert">
@@ -199,7 +241,7 @@ export function WorkspaceApp({
       ) : null}
       {reportOpen && workspace.learningData?.report ? (
         <ReportView
-          onClose={() => setReportOpen(false)}
+          onClose={closeOverlay}
           onDownload={() =>
             downloadReport(
               workspace.learningData!.report!.document.materialTitle,
