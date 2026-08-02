@@ -427,6 +427,12 @@ textarea:disabled {
   gap: 8px;
   padding: 0 3px 8px;
   color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.topic-module-heading::-webkit-details-marker {
+  display: none;
 }
 
 .topic-module-heading h3 {
@@ -604,6 +610,17 @@ textarea:disabled {
 
 .chat-thread .message-bubble {
   white-space: pre-wrap;
+}
+
+.turn-pending {
+  color: var(--muted);
+}
+
+.latest-message-button {
+  position: sticky;
+  bottom: 0;
+  align-self: center;
+  box-shadow: var(--shadow-sm);
 }
 
 .composer-shell {
@@ -809,7 +826,8 @@ textarea:disabled {
   font-size: 13px;
 }
 
-.undo-toast button {
+.undo-toast button,
+.error-toast button {
   border: 0;
   color: #ffdb8e;
   background: transparent;

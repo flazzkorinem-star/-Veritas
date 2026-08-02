@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getNodeScore } from "@/domain/diagnostic/selectors";
 import type { MaterialProcessingProgress } from "@/features/materials/process-text-material";
@@ -41,6 +41,7 @@ interface LearningPanelsProps {
   onRevealAnswer: () => void;
   onSelectNode: (nodeId: string) => void;
   isResponding: boolean;
+  pendingUserMessage: string | null;
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
   onClosePanel: () => void;
 }
@@ -142,10 +143,13 @@ export function LearningPanels({
   onRevealAnswer,
   onSelectNode,
   isResponding,
+  pendingUserMessage,
   onOpenPanel,
   onClosePanel,
 }: LearningPanelsProps) {
   const elapsedSeconds = useElapsedSeconds(processingProgress);
+  const threadRef = useRef<HTMLElement | null>(null);
+  const [isAtLatest, setIsAtLatest] = useState(true);
   const material = learningData?.material;
   const nodes = material?.nodes.toSorted((left, right) => left.order - right.order) ?? [];
   const currentSession = learningData?.session?.session;
@@ -158,6 +162,11 @@ export function LearningPanels({
     currentSession?.status !== "COMPLETED" &&
     activeTask?.status !== "PROCESSING";
   const badge = activeTask ? TASK_BADGES[activeTask.status] : null;
+  useEffect(() => {
+    if (!isAtLatest) return;
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [isAtLatest, isResponding, learningData?.messages.length, pendingUserMessage]);
   return (
     <>
       <aside
@@ -186,11 +195,11 @@ export function LearningPanels({
               const moduleNodes = nodes.filter((node) => node.moduleId === module.id);
               if (moduleNodes.length === 0) return null;
               return (
-                <section className="topic-module" key={module.id}>
-                  <div className="topic-module-heading">
+                <details className="topic-module" key={module.id} open>
+                  <summary className="topic-module-heading">
                     <h3>{module.title}</h3>
                     <span>{moduleNodes.length}</span>
-                  </div>
+                  </summary>
                   <div className="topic-list">
                     {moduleNodes.map((node) => {
                       const stored = learningData?.sessions.find(
@@ -218,7 +227,7 @@ export function LearningPanels({
                       );
                     })}
                   </div>
-                </section>
+                </details>
               );
             })}
           </div>
@@ -284,12 +293,44 @@ export function LearningPanels({
             </Button>
           </section>
         ) : learningData?.messages.length ? (
-          <section className="chat-thread" aria-live="polite">
+          <section
+            className="chat-thread"
+            aria-live="polite"
+            onScroll={(event) => {
+              const thread = event.currentTarget;
+              setIsAtLatest(
+                thread.scrollHeight - thread.scrollTop - thread.clientHeight < 64,
+              );
+            }}
+            ref={threadRef}
+          >
             {learningData.messages.map((message) => (
               <MessageBubble key={message.id} role={message.role}>
                 {message.content}
               </MessageBubble>
             ))}
+            {pendingUserMessage ? (
+              <MessageBubble role="USER">{pendingUserMessage}</MessageBubble>
+            ) : null}
+            {isResponding ? (
+              <MessageBubble role="ASSISTANT">
+                <span className="turn-pending">维塔正在组织反馈…</span>
+              </MessageBubble>
+            ) : null}
+            {!isAtLatest ? (
+              <Button
+                className="latest-message-button"
+                onClick={() => {
+                  const thread = threadRef.current;
+                  if (thread) thread.scrollTop = thread.scrollHeight;
+                  setIsAtLatest(true);
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                回到最新消息
+              </Button>
+            ) : null}
           </section>
         ) : (
           <section className="chat-empty" aria-live="polite">

@@ -156,3 +156,59 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
   });
   expect(problems).toEqual([]);
 });
+
+test("桌面端网络失败后保留输入并可重试当前回合", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-edge", "桌面精细交互只执行一次。");
+  const problems: string[] = [];
+  let evaluationAttempts = 0;
+  page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      !message.text().includes("status of 503 (Service Unavailable)")
+    ) {
+      problems.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => problems.push(error.message));
+  page.on("requestfailed", (request) =>
+    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+  );
+  await page.route("**/api/agents", (route) => {
+    const operation = (route.request().postDataJSON() as { operation: string }).operation;
+    if (operation === "EVALUATE_ANSWER" && evaluationAttempts++ === 0) {
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {
+            code: "UPSTREAM_UNAVAILABLE",
+            message: "模型服务暂时不可用，请重试。",
+          },
+        }),
+      });
+    }
+    return mockAgent(route);
+  });
+  await page.goto("/");
+  await page.locator("#workspace-upload").setInputFiles({
+    name: "retry-water.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发。"),
+  });
+  await expect(
+    page.getByText("水循环的主要动力是什么？", { exact: false }),
+  ).toBeVisible();
+  await page.getByLabel("回答输入").fill("主要动力是太阳能。");
+  await page.getByRole("button", { name: "发送回答" }).click();
+
+  await expect(page.getByRole("button", { name: "重试本轮" })).toBeVisible();
+  await expect(page.getByLabel("回答输入")).toHaveValue("主要动力是太阳能。");
+  await page.screenshot({ path: testInfo.outputPath("phase8-retry-error.png") });
+  await page.getByRole("button", { name: "重试本轮" }).click();
+
+  await expect(page.getByText("对，太阳能正是推动蒸发的关键动力。")).toBeVisible();
+  await expect(page.getByLabel("回答输入")).toHaveValue("");
+  await page.screenshot({ path: testInfo.outputPath("phase8-retry-recovered.png") });
+  expect(evaluationAttempts).toBe(2);
+  expect(problems).toEqual([]);
+});

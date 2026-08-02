@@ -24,6 +24,8 @@ import type { DeletedTaskSnapshot, StoredTask } from "@/storage/types";
 export type TaskRepository = ReturnType<typeof createTaskRepository>;
 export type TextMaterialProcessor = typeof processTextMaterial;
 type TaskLearningData = Awaited<ReturnType<TaskRepository["getTaskLearningData"]>>;
+type DiagnosticAction =
+  { kind: "ANSWER"; userMessage: string } | { kind: "HINT" } | { kind: "REVEAL" };
 
 function errorMessage(error: unknown) {
   return error instanceof LocalStoreError
@@ -58,6 +60,10 @@ export function useWorkspace(
   const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
+  const [pendingDiagnosticAction, setPendingDiagnosticAction] =
+    useState<DiagnosticAction | null>(null);
+  const [failedDiagnosticAction, setFailedDiagnosticAction] =
+    useState<DiagnosticAction | null>(null);
   const [deletedSnapshot, setDeletedSnapshot] = useState<DeletedTaskSnapshot | null>(
     null,
   );
@@ -199,6 +205,7 @@ export function useWorkspace(
 
   async function selectTask(taskId: string) {
     setActiveTaskId(taskId);
+    setFailedDiagnosticAction(null);
     setError(null);
     try {
       await repository.saveWorkspaceState({
@@ -290,37 +297,52 @@ export function useWorkspace(
     };
   }
 
-  async function runDiagnosticAction(
-    action: (
-      context: ReturnType<typeof currentDiagnosticContext>,
-    ) => ReturnType<typeof runHintTurn>,
-    userMessage?: string,
-  ) {
+  async function runDiagnosticAction(action: DiagnosticAction) {
     if (responding.current) return;
     const controller = new AbortController();
     responding.current = true;
     diagnosticController.current = controller;
     setIsResponding(true);
+    setPendingDiagnosticAction(action);
+    setFailedDiagnosticAction(null);
     setError(null);
     try {
       await draftWrite.current;
       const context = currentDiagnosticContext(controller);
-      const result = await action(context);
+      const result =
+        action.kind === "ANSWER"
+          ? diagnosticAgent
+            ? await submitDiagnosticAnswer(
+                { ...context, userAnswer: action.userMessage },
+                diagnosticAgent,
+              )
+            : await submitDiagnosticAnswer({
+                ...context,
+                userAnswer: action.userMessage,
+              })
+          : action.kind === "HINT"
+            ? diagnosticAgent
+              ? await runHintTurn(context, diagnosticAgent)
+              : await runHintTurn(context)
+            : diagnosticAgent
+              ? await revealStageAnswer(context, diagnosticAgent)
+              : await revealStageAnswer(context);
       await repository.saveDiagnosticTurn({
         taskId: context.task.id,
         nodeId: context.node.id,
         session: result.session,
-        userMessage,
+        userMessage: action.kind === "ANSWER" ? action.userMessage : undefined,
         assistantMessages: result.assistantMessages,
         scaffold: result.scaffold,
       });
-      if (userMessage !== undefined) {
+      if (action.kind === "ANSWER") {
         await repository.saveDraft(context.task.id, context.node.id, "");
       }
       await reloadTasks();
       setLearningData(await repository.getTaskLearningData(context.task.id));
     } catch (reason) {
       if (!controller.signal.aborted) {
+        setFailedDiagnosticAction(action);
         setError(
           reason instanceof AgentClientError || reason instanceof LocalStoreError
             ? reason.message
@@ -332,6 +354,7 @@ export function useWorkspace(
         diagnosticController.current = null;
       }
       responding.current = false;
+      setPendingDiagnosticAction(null);
       setIsResponding(false);
     }
   }
@@ -339,27 +362,19 @@ export function useWorkspace(
   async function sendAnswer(content: string) {
     const answer = content.trim();
     if (!answer) return;
-    await runDiagnosticAction(
-      (context) =>
-        diagnosticAgent
-          ? submitDiagnosticAnswer({ ...context, userAnswer: answer }, diagnosticAgent)
-          : submitDiagnosticAnswer({ ...context, userAnswer: answer }),
-      answer,
-    );
+    await runDiagnosticAction({ kind: "ANSWER", userMessage: answer });
   }
 
   async function requestHint() {
-    await runDiagnosticAction((context) =>
-      diagnosticAgent ? runHintTurn(context, diagnosticAgent) : runHintTurn(context),
-    );
+    await runDiagnosticAction({ kind: "HINT" });
   }
 
   async function revealAnswer() {
-    await runDiagnosticAction((context) =>
-      diagnosticAgent
-        ? revealStageAnswer(context, diagnosticAgent)
-        : revealStageAnswer(context),
-    );
+    await runDiagnosticAction({ kind: "REVEAL" });
+  }
+
+  async function retryDiagnosticTurn() {
+    if (failedDiagnosticAction) await runDiagnosticAction(failedDiagnosticAction);
   }
 
   async function selectNode(nodeId: string) {
@@ -367,6 +382,7 @@ export function useWorkspace(
     if (!learningData?.material || !learningData.task) return;
     const node = learningData.material.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
+    setFailedDiagnosticAction(null);
     setError(null);
     try {
       await draftWrite.current;
@@ -436,6 +452,11 @@ export function useWorkspace(
     processingProgress: processingTaskId === activeTaskId ? processingProgress : null,
     isImporting,
     isResponding,
+    pendingUserMessage:
+      pendingDiagnosticAction?.kind === "ANSWER"
+        ? pendingDiagnosticAction.userMessage
+        : null,
+    canRetryDiagnosticTurn: failedDiagnosticAction !== null,
     workspaceCollapsed,
     search,
     isLoading,
@@ -449,6 +470,7 @@ export function useWorkspace(
     sendAnswer,
     requestHint,
     revealAnswer,
+    retryDiagnosticTurn,
     selectNode,
     saveDraft,
     selectTask,

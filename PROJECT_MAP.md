@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 7：Agent 2 完整诊断教学。
+阶段 8：完整桌面工作区。
 
 ## 根目录
 
@@ -61,9 +61,9 @@
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时、有限重试与外部取消信号。
 - `src/server/agents/service.ts`：组装材料处理和诊断教学的隔离提示，独立校验输出并只重试受影响操作。
 - `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、移动抽屉与任务对话框。
-- `src/features/workspace/use-workspace.ts`：协调仓储读取与任务交互状态，不承载视图结构。
+- `src/features/workspace/use-workspace.ts`：协调仓储读取、任务交互、诊断发送/停止/重试与草稿写入队列，不承载视图结构。
 - `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表和单任务菜单。
-- `src/features/workspace/LearningPanels.tsx`：显示可切换主题、节点历史、回答输入、提示与答案操作，以及实时任务进度和节点分数。
+- `src/features/workspace/LearningPanels.tsx`：显示可折叠主题、节点历史、回答输入、提示与答案、生成中状态、回到最新消息，以及实时任务进度和节点分数。
 - `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
@@ -91,5 +91,5 @@
 - `src/features/diagnostic/diagnostic-turn.test.ts`：验证同题追问、答对推进、三轮停滞、三级提示与主动答案的确定性编排。
 - `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和任务完成的事务性持久化。
 - `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证提示、回答、分数、节点切换和草稿恢复的组件闭环。
-- `e2e/phase7-diagnostic.spec.ts`：在桌面与移动生产 Edge 中走完一个节点四层，覆盖直接通过、提示后通过和答案通过。
+- `e2e/phase7-diagnostic.spec.ts`：在桌面与移动生产 Edge 中走完一个节点四层，并在桌面验证发送失败、草稿保留和原地重试。
 - `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的问题、评价、提示、答案和越权字段隔离。

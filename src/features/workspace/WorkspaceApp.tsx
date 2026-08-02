@@ -77,6 +77,7 @@ export function WorkspaceApp({
         uploadDisabled={workspace.isImporting}
       />
       <LearningPanels
+        key={`${workspace.activeTask?.id ?? "empty"}:${workspace.activeTask?.currentNodeId ?? "none"}`}
         activeTask={workspace.activeTask}
         learningData={workspace.learningData}
         mobilePanel={mobilePanel}
@@ -97,12 +98,22 @@ export function WorkspaceApp({
         onUpload={(file) => void workspace.importMaterial(file)}
         processingProgress={workspace.processingProgress}
         isResponding={workspace.isResponding}
+        pendingUserMessage={workspace.pendingUserMessage}
         uploadDisabled={workspace.isImporting}
       />
 
       {workspace.error ? (
         <div className="error-toast" role="alert">
-          {workspace.error}
+          <span>{workspace.error}</span>
+          {workspace.canRetryDiagnosticTurn ? (
+            <Button
+              onClick={() => void workspace.retryDiagnosticTurn()}
+              size="sm"
+              variant="ghost"
+            >
+              重试本轮
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {workspace.deletedSnapshot ? (

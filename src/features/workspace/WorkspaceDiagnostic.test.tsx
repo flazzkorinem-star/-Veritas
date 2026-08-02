@@ -85,6 +85,34 @@ afterEach(async () => {
 });
 
 describe("工作区诊断交互", () => {
+  it("长对话离开底部时提供回到最新消息入口", async () => {
+    const name = `veritas-scroll-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    render(<WorkspaceApp processor={async () => result()} repository={repository} />);
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+    const thread = await screen
+      .findByLabelText("维塔的消息")
+      .then((message) => message.closest<HTMLElement>(".chat-thread"));
+    expect(thread).not.toBeNull();
+    Object.defineProperties(thread!, {
+      scrollHeight: { configurable: true, value: 1_000 },
+      clientHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+    fireEvent.scroll(thread!);
+
+    fireEvent.click(await screen.findByRole("button", { name: "回到最新消息" }));
+    expect(thread!.scrollTop).toBe(1_000);
+    database.close();
+  });
+
   it("请求提示、发送回答并显示持久化后的分数", async () => {
     const name = `veritas-diagnostic-ui-${crypto.randomUUID()}`;
     names.push(name);
@@ -164,20 +192,124 @@ describe("工作区诊断交互", () => {
         files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
       },
     });
-    const input = await screen.findByLabelText("回答输入");
-    await waitFor(() => expect(input).toBeEnabled());
+    await waitFor(() => expect(screen.getByLabelText("回答输入")).toBeEnabled());
+    const input = screen.getByLabelText("回答输入");
     fireEvent.change(input, { target: { value: "第一个主题的草稿" } });
     await waitFor(() => expect(input).toHaveValue("第一个主题的草稿"));
 
     fireEvent.click(screen.getByRole("button", { name: /降水回流/ }));
     expect(await screen.findByText("降水怎样回到地表？")).toBeVisible();
-    fireEvent.change(input, { target: { value: "第二个主题的草稿" } });
-    await waitFor(() => expect(input).toHaveValue("第二个主题的草稿"));
+    const secondInput = screen.getByLabelText("回答输入");
+    fireEvent.change(secondInput, { target: { value: "第二个主题的草稿" } });
+    await waitFor(() => expect(secondInput).toHaveValue("第二个主题的草稿"));
 
     fireEvent.click(screen.getByRole("button", { name: /循环动力/ }));
-    await waitFor(() => expect(input).toHaveValue("第一个主题的草稿"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("回答输入")).toHaveValue("第一个主题的草稿"),
+    );
     expect(screen.getByText("水循环的主要动力是什么？", { exact: false })).toBeVisible();
     expect(agent).toHaveBeenCalledTimes(1);
+    database.close();
+  });
+
+  it("发送中显示本轮内容，失败后保留草稿并可原地重试", async () => {
+    const name = `veritas-retry-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    let rejectFirst!: (reason: unknown) => void;
+    const firstAttempt = new Promise((_, reject) => {
+      rejectFirst = reject;
+    });
+    const agent = vi
+      .fn()
+      .mockReturnValueOnce(firstAttempt)
+      .mockResolvedValueOnce({
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        correctEvidence: ["说出太阳能"],
+        missingPoints: [],
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        scaffold: null,
+        assistantMessage: "对，太阳能是关键动力。",
+      })
+      .mockResolvedValueOnce({ question: "太阳能怎样推动蒸发？" });
+    render(
+      <WorkspaceApp
+        diagnosticAgent={agent as DiagnosticAgentCall}
+        processor={async () => result()}
+        repository={repository}
+      />,
+    );
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+    await waitFor(() => expect(screen.getByLabelText("回答输入")).toBeEnabled());
+    const input = screen.getByLabelText("回答输入");
+    fireEvent.change(input, { target: { value: "主要动力是太阳能。" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送回答" }));
+
+    expect(await screen.findByText("维塔正在组织反馈…")).toBeVisible();
+    expect(screen.getByLabelText("我的消息")).toHaveTextContent("主要动力是太阳能。");
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeVisible();
+    await waitFor(() => expect(agent).toHaveBeenCalledTimes(1));
+    rejectFirst(new Error("模拟网络失败"));
+
+    expect(await screen.findByRole("button", { name: "重试本轮" })).toBeVisible();
+    expect(input).toHaveValue("主要动力是太阳能。");
+    fireEvent.click(screen.getByRole("button", { name: "重试本轮" }));
+
+    expect(await screen.findByText("对，太阳能是关键动力。")).toBeVisible();
+    expect(screen.getByText("太阳能怎样推动蒸发？")).toBeVisible();
+    expect(input).toHaveValue("");
+    expect(agent).toHaveBeenCalledTimes(3);
+    database.close();
+  });
+
+  it("停止生成会取消当前请求并保留可编辑草稿", async () => {
+    const name = `veritas-cancel-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const agent: DiagnosticAgentCall = (_request, dependencies) =>
+      new Promise((_, reject) => {
+        if (dependencies.signal?.aborted) {
+          reject(new DOMException("Aborted", "AbortError"));
+          return;
+        }
+        dependencies.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+      });
+    render(
+      <WorkspaceApp
+        diagnosticAgent={agent}
+        processor={async () => result()}
+        repository={repository}
+      />,
+    );
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+    await waitFor(() => expect(screen.getByLabelText("回答输入")).toBeEnabled());
+    const input = screen.getByLabelText("回答输入");
+    fireEvent.change(input, { target: { value: "稍后继续修改的回答" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送回答" }));
+    fireEvent.click(await screen.findByRole("button", { name: "停止生成" }));
+
+    await waitFor(() => expect(input).toBeEnabled());
+    expect(input).toHaveValue("稍后继续修改的回答");
+    expect(screen.queryByRole("button", { name: "重试本轮" })).toBeNull();
     database.close();
   });
 });
