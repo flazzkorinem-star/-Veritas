@@ -1,5 +1,5 @@
 import Dexie from "dexie";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createVeritasDatabase } from "@/storage/database";
 import { createNodeSession } from "@/domain/diagnostic/reducer";
@@ -254,6 +254,22 @@ describe("本地任务仓储", () => {
       expect.objectContaining<Partial<LocalStoreError>>({
         code: "CORRUPT_RECORD",
         message: "本地任务数据已损坏，请删除该任务后重新导入材料。",
+      }),
+    );
+    database.close();
+  });
+
+  it("把存储配额耗尽转换为可恢复的稳定错误", async () => {
+    const database = createVeritasDatabase(databaseName());
+    const repository = createTaskRepository(database);
+    vi.spyOn(database.tasks, "put").mockRejectedValueOnce(
+      new DOMException("内部配额细节", "QuotaExceededError"),
+    );
+
+    await expect(repository.saveTask(task())).rejects.toEqual(
+      expect.objectContaining<Partial<LocalStoreError>>({
+        code: "QUOTA_EXCEEDED",
+        message: "浏览器存储空间不足，请清理空间后重试。",
       }),
     );
     database.close();

@@ -119,7 +119,14 @@ export function useWorkspace(
     if (!activeTaskId) return;
     void repository
       .getTaskLearningData(activeTaskId)
-      .then((data) => mounted && setLearningData(data))
+      .then((data) => {
+        if (!mounted) return;
+        setLearningData(data);
+        if (data.reportCorrupted) {
+          setFailedReportTaskId(activeTaskId);
+          setError("本地学习报告已损坏，核心任务仍可继续。请重试报告生成。");
+        }
+      })
       .catch((reason: unknown) => mounted && setError(errorMessage(reason)));
     return () => {
       mounted = false;

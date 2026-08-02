@@ -69,12 +69,14 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
             nodeId: z.string().trim().min(1).max(120),
             title: z.string().trim().min(1).max(200),
             score: z.number().int().min(0).max(100),
-            stages: z.object({
-              MEMORY: storedStageStatus,
-              UNDERSTANDING: storedStageStatus,
-              APPLICATION: storedStageStatus,
-              ANALYSIS: storedStageStatus,
-            }),
+            stages: z
+              .object({
+                MEMORY: storedStageStatus,
+                UNDERSTANDING: storedStageStatus,
+                APPLICATION: storedStageStatus,
+                ANALYSIS: storedStageStatus,
+              })
+              .strict(),
             understood: z
               .array(
                 z.object({ statement: storedText, evidenceQuote: storedText }).strict(),
@@ -179,7 +181,11 @@ export function buildReportDocument(options: {
 }
 
 function escapeMarkdown(value: string) {
-  return value.replace(/[\\`*_[\]<>#|]/g, "\\$&");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replace(/[\\`*_[\]#|]/g, "\\$&");
 }
 
 function list(values: string[]) {

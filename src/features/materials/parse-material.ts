@@ -1,5 +1,3 @@
-import { parseDocx } from "./docx-parser";
-import { parseImage } from "./image-parser";
 import {
   inspectMaterialFile,
   MaterialFileError,
@@ -10,8 +8,6 @@ import {
   MaterialParseError,
   type ParsingProgress,
 } from "./parsed-material";
-import { parsePdf } from "./pdf-parser";
-import { parsePptx } from "./pptx-parser";
 import { decodeTextMaterial } from "./text-reader";
 
 export type MaterialParserProgress =
@@ -37,14 +33,22 @@ export async function parseMaterial(
           { sourceLabel: "全文", text: material.text },
         ]);
       }
-      case "DOCX":
+      case "DOCX": {
+        const { parseDocx } = await import("./docx-parser");
         return parseDocx(bytes, inspected.fileName, file.type, parsingProgress);
-      case "PPTX":
+      }
+      case "PPTX": {
+        const { parsePptx } = await import("./pptx-parser");
         return parsePptx(bytes, inspected.fileName, file.type, parsingProgress);
-      case "PDF":
+      }
+      case "PDF": {
+        const { parsePdf } = await import("./pdf-parser");
         return parsePdf(bytes, inspected.fileName, file.type, parsingProgress, signal);
-      case "IMAGE":
+      }
+      case "IMAGE": {
+        const { parseImage } = await import("./image-parser");
         return parseImage(file, parsingProgress, signal);
+      }
     }
   } catch (error) {
     if (

@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段 11：移动端完整适配。
+阶段 12：安全、可靠性与性能集中审计。
 
 ## 根目录
 
@@ -30,7 +30,7 @@
 
 - `src/app/layout.tsx`：全局 HTML 外壳与页面元数据。
 - `src/app/page.tsx`：挂载本地学习工作区。
-- `src/app/globals.css`：全局令牌、四列工作区、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
+- `src/app/globals.css`：全局令牌、四列工作区、语音状态、报告与打印页面，以及含安全区、横竖屏、软键盘边界和长列表离屏渲染优化的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
@@ -46,7 +46,7 @@
 - `src/domain/report/build-report.ts`：由本地确定性证据回填任务级报告，并生成转义后的 Markdown 下载文本。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、报告、完成状态、界面状态和事务性删除/撤销。
+- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、报告、完成状态、界面状态和事务性删除/撤销，并把配额耗尽与损坏报告转换为稳定本地错误。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
@@ -55,7 +55,7 @@
 - `src/features/materials/pptx-parser.ts`：使用 JSZip 和受控 DOMParser 按演示文稿关系顺序提取 PPTX 文字。
 - `src/features/materials/pdf-parser.ts`：使用 PDF.js 逐页提取文字，并将无文字页面渲染为受限像素交给 OCR。
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
-- `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式分派唯一解析实现。
+- `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
 - `src/features/materials/process-text-material.ts`：顺序编排多格式解析、来源分块、覆盖审计和首问生成，并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 回答、提示与答案回合，把所有状态转移交给唯一 reducer，并生成下一层主问题。
@@ -90,7 +90,8 @@
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
 - `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏与有限重试。
 - `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝和操作级重试。
-- `src/app/api/agents/route.test.ts`：验证同源、Content-Type、请求体限制与稳定错误响应。
+- `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
+- `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
 - `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首问、核心覆盖、双端布局与刷新恢复。
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
@@ -106,3 +107,4 @@
 - `src/features/speech/use-speech-input.test.tsx`：验证中文转写、停止、权限、无声音、设备失败、中断、不支持和卸载释放。
 - `e2e/phase10-speech.spec.ts`：在双端生产 Edge 验证原生 API 支持、语音转写至回答，并在桌面验证权限拒绝和草稿保留。
 - `e2e/phase11-mobile.spec.ts`：在 390×844 生产 Edge 中从上传走到报告，并验证移动浮层、返回、软键盘、长内容、下一主题、横屏和溢出。
+- `e2e/phase12-security.spec.ts`：在双端生产 Edge 验证生产 CSP、安全响应头、API 错误脱敏、客户端静态分块秘密隔离和恶意文本纯文本渲染。

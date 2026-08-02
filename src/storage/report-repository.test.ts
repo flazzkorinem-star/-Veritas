@@ -155,6 +155,22 @@ describe("报告仓储", () => {
     await expect(repository.saveReport(invalid, "# 坏报告")).rejects.toMatchObject({
       code: "RELATION_MISMATCH",
     });
+
+    await database.reports.update(taskId, { id: "损坏-id", markdown: "" });
+    await expect(repository.getReport(taskId)).rejects.toMatchObject({
+      code: "CORRUPT_RECORD",
+    });
+    await expect(repository.getTaskLearningData(taskId)).resolves.toMatchObject({
+      report: undefined,
+      reportCorrupted: true,
+    });
+    await expect(repository.listReportTaskIds()).resolves.toEqual([]);
+
+    await repository.saveReport(document, reportToMarkdown(document));
+    await expect(repository.getReport(taskId)).resolves.toMatchObject({
+      document,
+      markdown: expect.stringContaining("学习诊断报告"),
+    });
     database.close();
   });
 });

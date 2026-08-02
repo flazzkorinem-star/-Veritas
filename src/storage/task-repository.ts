@@ -54,6 +54,30 @@ const workspaceStateSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
+const storedReportSchema = z
+  .object({
+    id: z.uuid(),
+    taskId: z.uuid(),
+    markdown: z.string().trim().min(1).max(200_000),
+    document: reportDocumentSchema,
+    completedNodeIds: z.array(z.string().trim().min(1).max(120)).max(40),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((report, context) => {
+    const documentNodeIds = report.document.nodes.map((node) => node.nodeId).toSorted();
+    if (
+      report.taskId !== report.document.taskId ||
+      report.completedNodeIds.toSorted().join("\n") !== documentNodeIds.join("\n")
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "报告关联关系无效。",
+      });
+    }
+  });
+
 const EMPTY_WORKSPACE_STATE: StoredWorkspaceState = {
   id: "workspace",
   activeTaskId: null,
@@ -101,6 +125,19 @@ function parseTask(value: unknown) {
     );
   }
   return result.data;
+}
+
+function parseReport(value: unknown) {
+  const result = storedReportSchema.safeParse(value);
+  if (!result.success) {
+    throw new LocalStoreError("CORRUPT_RECORD", "本地报告数据已损坏，请重新生成报告。");
+  }
+  return result.data;
+}
+
+function readReport(value: unknown) {
+  const result = storedReportSchema.safeParse(value);
+  return result.success ? result.data : undefined;
 }
 
 function sortTasks(tasks: StoredTask[]) {
@@ -349,21 +386,35 @@ export function createTaskRepository(database: VeritasDatabase) {
         const draft = task.currentNodeId
           ? await database.drafts.get([taskId, task.currentNodeId])
           : undefined;
-        const report = await database.reports.get(taskId);
-        return { task, material, session, sessions, messages, draft, report };
+        const storedReport = await database.reports.get(taskId);
+        const report = storedReport ? readReport(storedReport) : undefined;
+        return {
+          task,
+          material,
+          session,
+          sessions,
+          messages,
+          draft,
+          report,
+          reportCorrupted: Boolean(storedReport && !report),
+        };
       });
     },
 
     getReport(taskId: string) {
       return run(async () => {
         await getExistingTask(taskId);
-        return database.reports.get(taskId);
+        const report = await database.reports.get(taskId);
+        return report ? parseReport(report) : undefined;
       });
     },
 
     listReportTaskIds() {
       return run(async () =>
-        (await database.reports.toArray()).map((report) => report.taskId),
+        (await database.reports.toArray()).flatMap((report) => {
+          const valid = readReport(report);
+          return valid ? [valid.taskId] : [];
+        }),
       );
     },
 
@@ -420,15 +471,16 @@ export function createTaskRepository(database: VeritasDatabase) {
             }
             const now = document.data.generatedAt;
             const existing = await database.reports.get(task.id);
-            const report = {
-              id: existing?.id ?? crypto.randomUUID(),
+            const validExisting = existing ? readReport(existing) : undefined;
+            const report = parseReport({
+              id: validExisting?.id ?? crypto.randomUUID(),
               taskId: task.id,
               markdown,
               document: document.data,
               completedNodeIds,
-              createdAt: existing?.createdAt ?? now,
+              createdAt: validExisting?.createdAt ?? now,
               updatedAt: now,
-            };
+            });
             await database.reports.put(report);
             const allCompleted = material.nodes.every((node) =>
               completedNodeIds.includes(node.id),

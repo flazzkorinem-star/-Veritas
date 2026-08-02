@@ -86,6 +86,13 @@ describe("同源 Agent API", () => {
     expect(runAgentOperation).not.toHaveBeenCalled();
   });
 
+  it("不信任缺失的 Content-Length，仍按实际字节数拒绝大请求", async () => {
+    const response = await POST(request(`{"input":"${"中".repeat(1_400_000)}"}`));
+
+    expect(response.status).toBe(413);
+    expect(runAgentOperation).not.toHaveBeenCalled();
+  });
+
   it("不向浏览器暴露无效模型输出细节", async () => {
     runAgentOperation.mockRejectedValue(new AgentServiceError("INVALID_MODEL_OUTPUT"));
 

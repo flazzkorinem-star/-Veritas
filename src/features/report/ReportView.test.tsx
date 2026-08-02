@@ -84,4 +84,24 @@ describe("报告全屏页面", () => {
     expect(actions.onPrint).toHaveBeenCalledOnce();
     expect(actions.onShare).toHaveBeenCalledOnce();
   });
+
+  it("把不可信报告文本作为纯文本渲染", () => {
+    const hostile = structuredClone(report);
+    hostile.document.summary = "<img src=x onerror=alert(1)>";
+    hostile.document.nodes[0]!.evidenceQuotes = ["<script>alert(1)</script>"];
+    render(
+      <ReportView
+        onClose={vi.fn()}
+        onDownload={vi.fn()}
+        onPrint={vi.fn()}
+        onShare={vi.fn()}
+        report={hostile}
+      />,
+    );
+
+    expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeVisible();
+    expect(screen.getByText("<script>alert(1)</script>")).toBeVisible();
+    expect(document.querySelector("script")).toBeNull();
+    expect(document.querySelector("img[src='x']")).toBeNull();
+  });
 });
