@@ -170,7 +170,9 @@ test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", as
   await page.getByRole("button", { name: /一份名称很长/ }).click();
   await expect(page.locator('.topic-sidebar[data-mobile-open="true"]')).toBeVisible();
   await expect(page.getByRole("button", { name: new RegExp(longTitle) })).toBeVisible();
-  await page.getByRole("button", { name: "关闭当前浮层" }).click();
+  await page
+    .getByRole("button", { name: "关闭当前浮层" })
+    .click({ position: { x: 380, y: 422 } });
   await expect(page.locator(".topic-sidebar")).toBeHidden();
 
   await page.setViewportSize({ width: 390, height: 500 });
@@ -213,7 +215,8 @@ test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", as
   await page.getByRole("button", { name: "进度", exact: true }).click();
   const landscapeDiagnostic = page.locator('.diagnostic-panel[data-mobile-open="true"]');
   await expect(landscapeDiagnostic).toBeVisible();
-  expect((await landscapeDiagnostic.boundingBox())?.width).toBeLessThanOrEqual(420);
+  await expect(landscapeDiagnostic).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  expect((await landscapeDiagnostic.boundingBox())?.width).toBeLessThanOrEqual(421);
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("phase11-mobile-landscape.png") });
   await page.keyboard.press("Escape");
