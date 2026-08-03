@@ -6,13 +6,13 @@
 
 1. 先读本文件。
 2. 读 `DESIGN_GUIDE.md` 中与当前任务有关的章节。
-3. 读 `IMPLEMENTATION_PLAN.md` 的当前阶段。
+3. 涉及文件、模型、API、存储、用户输入或渲染边界时，读 `SECURITY.md` 的相关章节。
 4. 代码出现后，先读 `PROJECT_MAP.md` 和将要修改的源码、测试与相邻模式。
-5. `VERITAS_DISCOVERY.md` 只是历史记录，不作为开发依据；`BENCHMARK.md` 当前延后。
+5. 除非用户明确要求回顾、恢复或整理历史资料，否则禁止读取、搜索或引用 `归档文件/` 目录内的任何内容；文件枚举和全文搜索也必须排除该目录。
 
 ## 权威顺序
 
-用户最新明确决定 > `DESIGN_GUIDE.md` > `SECURITY.md` > `IMPLEMENTATION_PLAN.md` > `PROJECT_MAP.md` > 代码现状 > 历史探索记录。
+用户最新明确决定 > `DESIGN_GUIDE.md` > `SECURITY.md` > `PROJECT_MAP.md` > 代码现状。
 
 发现冲突或缺少会改变产品结果的信息时，第一时间询问用户。禁止在模棱两可的情况下自行猜测。已经由权威文档明确的内容不要重复询问。
 
@@ -83,5 +83,5 @@ npm run build
 ## 当前边界
 
 - 当前任务只要求本地正式运行，不部署公网。
-- `BENCHMARK.md`、AI Judge、账号、云同步、多产物、完整游戏化和复杂知识图谱均延后。
-- 只有 `IMPLEMENTATION_PLAN.md` 全部阶段和最终检查点真实通过后，才能宣布首版完成。
+- Benchmark、AI Judge、账号、云同步、多产物、完整游戏化和复杂知识图谱均延后。
+- 首版本地交付基线已经完成；后续迭代按用户当前任务范围、权威文档和真实验收结果判断完成。
