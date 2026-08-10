@@ -161,7 +161,7 @@ function diagnosticPrompt(
     CREATE_STAGE_QUESTION:
       '为当前层生成一个边界清楚、只要求一个动作的主问题。MEMORY 只能检验后续理解真正需要的核心定义或关系，不得考代码、编号、名单或孤立数字；其他层分别检验解释、应用和机制。结合 learningGoal 调整场景。只输出 {"question":"..."}。',
     RESPOND_TO_USER:
-      '判断这一轮应当正常对话、开始诊断，还是评价正在显示的诊断题。普通问答、讨论、解释、整理、创作、换话题和暂停都返回 CONVERSATION，即使当前存在主问题也不要评分；assistantMessage 可以自然提问，但不会进入计分。只有用户明确要求或接受测验且当前没有主问题时返回 START_DIAGNOSTIC。只有用户主要在回答当前已显示主问题时返回 EVALUATE_DIAGNOSTIC。learningGoalUpdate 仅在用户明确表达或改变目标时填写，否则为 null。CONVERSATION 只输出 {"responseMode":"CONVERSATION","learningGoalUpdate":null或"...","assistantMessage":"..."}；START_DIAGNOSTIC 只输出 {"responseMode":"START_DIAGNOSTIC","learningGoalUpdate":null或"...","assistantMessage":"自然过渡","question":"唯一主问题"}；EVALUATE_DIAGNOSTIC 输出 {"responseMode":"EVALUATE_DIAGNOSTIC","learningGoalUpdate":null或"...","classification":"CORRECT|PARTIAL|INCORRECT|TOO_SHORT|COPIED|MISCONCEPTION|OFF_TOPIC|NO_ANSWER","isCorrect":boolean,"progress":"ADVANCING|STALLED","correctEvidence":[],"missingPoints":[],"misconceptions":[],"teachingMove":"AFFIRM_AND_ADVANCE|ASK_MISSING_POINT|CLARIFY_CONFLICT|REQUEST_OWN_WORDS|USE_COUNTEREXAMPLE|BRIDGE_BACK|PROVIDE_SCAFFOLD|PAUSE","scaffold":null或{"type":"CLARIFICATION|EXAMPLE|ANALOGY|COUNTEREXAMPLE|STEP_BY_STEP","reason":"..."},"assistantMessage":"..."}。CORRECT 才能令 isCorrect=true，正确回答的 progress 必须是 ADVANCING。',
+      '先判断用户这一轮真正想做什么。普通问答、讨论、解释、整理、创作、换话题和暂停都返回 CONVERSATION，即使当前存在主问题也不要评分；assistantMessage 应直接完成用户请求。用户主要在回答当前主问题时返回 EVALUATE_DIAGNOSTIC。当前有主问题且用户在语义上请求提示时返回 {"responseMode":"REQUEST_HINT"}，请求直接查看答案时返回 {"responseMode":"REVEAL_ANSWER"}；不要依赖某个固定关键词。只有当前没有主问题且用户明确要求开始检验时才返回 START_DIAGNOSTIC。learningGoalUpdate 仅在用户明确表达或改变目标时填写，否则为 null。CONVERSATION 只输出 {"responseMode":"CONVERSATION","learningGoalUpdate":null或"...","assistantMessage":"..."}；START_DIAGNOSTIC 只输出 {"responseMode":"START_DIAGNOSTIC","learningGoalUpdate":null或"...","assistantMessage":"自然过渡","question":"唯一主问题"}；EVALUATE_DIAGNOSTIC 输出 {"responseMode":"EVALUATE_DIAGNOSTIC","learningGoalUpdate":null或"...","classification":"CORRECT|PARTIAL|INCORRECT|TOO_SHORT|COPIED|MISCONCEPTION|OFF_TOPIC|NO_ANSWER","isCorrect":boolean,"progress":"ADVANCING|STALLED","correctEvidence":[],"missingPoints":[],"misconceptions":[],"teachingMove":"AFFIRM_AND_ADVANCE|ASK_MISSING_POINT|CLARIFY_CONFLICT|REQUEST_OWN_WORDS|USE_COUNTEREXAMPLE|BRIDGE_BACK|PROVIDE_SCAFFOLD|PAUSE","scaffold":null或{"type":"CLARIFICATION|EXAMPLE|ANALOGY|COUNTEREXAMPLE|STEP_BY_STEP","reason":"..."},"assistantMessage":"..."}。CORRECT 才能令 isCorrect=true，正确回答的 progress 必须是 ADVANCING。',
     CREATE_HINT:
       '按 hintLevel 生成对应强度的提示：1 只给方向，2 给案例或类比，3 给接近答案的结构化线索。不得直接改变主问题。只输出 {"hintLevel":1|2|3,"assistantMessage":"..."}。',
     CREATE_STAGE_ANSWER:
@@ -177,12 +177,15 @@ function validateUserTurnMode(
   input: Extract<AgentOperationRequest, { operation: "RESPOND_TO_USER" }>["input"],
   output: z.infer<typeof userTurnDecisionSchema>,
 ) {
+  const needsActiveQuestion =
+    output.responseMode === "REQUEST_HINT" || output.responseMode === "REVEAL_ANSWER";
   if (
     (input.diagnostic.status === "NOT_STARTED" &&
       output.responseMode === "EVALUATE_DIAGNOSTIC") ||
     (input.diagnostic.status === "ACTIVE" &&
       output.responseMode === "START_DIAGNOSTIC") ||
-    (input.diagnostic.status === "COMPLETED" && output.responseMode !== "CONVERSATION")
+    (input.diagnostic.status === "COMPLETED" && output.responseMode !== "CONVERSATION") ||
+    (input.diagnostic.status !== "ACTIVE" && needsActiveQuestion)
   ) {
     invalidModelOutput(["RESPOND_TO_USER:responseMode:custom"]);
   }

@@ -89,6 +89,8 @@ export const userTurnDecisionSchema = z
         assistantMessage: assistantMessageSchema,
       })
       .strict(),
+    z.object({ responseMode: z.literal("REQUEST_HINT") }).strict(),
+    z.object({ responseMode: z.literal("REVEAL_ANSWER") }).strict(),
   ])
   .superRefine((value, context) => {
     if (value.responseMode === "EVALUATE_DIAGNOSTIC") {

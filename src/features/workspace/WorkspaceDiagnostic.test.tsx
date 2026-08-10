@@ -445,6 +445,64 @@ describe("工作区诊断交互", () => {
     database.close();
   });
 
+  it("在输入框里自然请求提示或答案时复用现有按钮流程", async () => {
+    const name = `veritas-semantic-actions-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const agent = vi
+      .fn()
+      .mockResolvedValueOnce({ responseMode: "REQUEST_HINT" })
+      .mockResolvedValueOnce({
+        hintLevel: 1,
+        assistantMessage: "先想想蒸发需要的能量从哪里来。",
+      })
+      .mockResolvedValueOnce({ responseMode: "REVEAL_ANSWER" })
+      .mockResolvedValueOnce({
+        assistantMessage: "太阳能为水分子提供能量，使液态水蒸发。",
+      })
+      .mockResolvedValueOnce({ question: "太阳能怎样推动水蒸发？" });
+    render(
+      <WorkspaceApp
+        diagnosticAgent={agent as DiagnosticAgentCall}
+        processor={async () => result()}
+        repository={repository}
+      />,
+    );
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+
+    const input = await screen.findByLabelText("消息输入");
+    await waitFor(() => expect(input).toBeEnabled());
+    fireEvent.change(input, { target: { value: "能不能给我一点方向，先别揭晓。" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(await screen.findByText("先想想蒸发需要的能量从哪里来。")).toBeVisible();
+
+    await waitFor(() => expect(input).toBeEnabled());
+    fireEvent.change(input, { target: { value: "我还是不会，这次直接告诉我吧。" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(
+      await screen.findByText("太阳能为水分子提供能量，使液态水蒸发。"),
+    ).toBeVisible();
+    expect(await screen.findByText("太阳能怎样推动水蒸发？")).toBeVisible();
+    expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
+      "RESPOND_TO_USER",
+      "CREATE_HINT",
+      "RESPOND_TO_USER",
+      "CREATE_STAGE_ANSWER",
+      "CREATE_STAGE_QUESTION",
+    ]);
+    const learning = await repository.getTaskLearningData(
+      (await repository.listTasks())[0]!.id,
+    );
+    expect(learning.session?.session.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
+    database.close();
+  });
+
   it("Enter 发送消息，Shift+Enter 只保留当前草稿", async () => {
     const name = `veritas-enter-ui-${crypto.randomUUID()}`;
     names.push(name);

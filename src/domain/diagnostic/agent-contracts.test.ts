@@ -127,6 +127,13 @@ describe("Agent 2 结构化输出契约", () => {
     ).toMatchObject({ responseMode: "EVALUATE_DIAGNOSTIC" });
   });
 
+  it.each(["REQUEST_HINT", "REVEAL_ANSWER"] as const)(
+    "接收由模型语义识别的 %s 操作",
+    (responseMode) => {
+      expect(userTurnDecisionSchema.parse({ responseMode })).toEqual({ responseMode });
+    },
+  );
+
   it("拒绝普通对话夹带分数或层级状态", () => {
     expect(
       userTurnDecisionSchema.safeParse({

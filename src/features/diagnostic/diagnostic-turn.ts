@@ -181,6 +181,14 @@ export async function respondToUser(
     };
   }
 
+  if (decision.responseMode === "REQUEST_HINT") {
+    return requestHint(context, agent);
+  }
+
+  if (decision.responseMode === "REVEAL_ANSWER") {
+    return revealStageAnswer(context, agent);
+  }
+
   const current = activeQuestion(context.session);
   let session = diagnosticReducer(context.session, {
     type: "ANSWER_EVALUATED",

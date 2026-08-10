@@ -220,6 +220,31 @@ describe("诊断回合编排", () => {
     );
   });
 
+  it("文字请求提示时复用与按钮相同的提示流程", async () => {
+    const agent = vi
+      .fn()
+      .mockResolvedValueOnce({ responseMode: "REQUEST_HINT" })
+      .mockResolvedValueOnce({
+        hintLevel: 1,
+        assistantMessage: "先想能量从哪里来。",
+      });
+
+    const result = await respondToUser(
+      { ...turnContext(), userMessage: "给我一点提示，但先别说答案。" },
+      agent,
+    );
+
+    expect(result.session.stages.MEMORY).toMatchObject({
+      hintLevel: 1,
+      hasRequestedHint: true,
+    });
+    expect(result.assistantMessages).toEqual(["先想能量从哪里来。"]);
+    expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
+      "RESPOND_TO_USER",
+      "CREATE_HINT",
+    ]);
+  });
+
   it("主动查看答案立即记为答案通过，并生成下一层问题", async () => {
     const agent = vi
       .fn()
@@ -231,5 +256,27 @@ describe("诊断回合编排", () => {
     expect(result.session.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
     expect(result.session.stages.UNDERSTANDING.status).toBe("ACTIVE");
     expect(result.assistantMessages).toEqual(["完整答案是太阳能。", "它如何产生作用？"]);
+  });
+
+  it("文字请求答案时复用与按钮相同的答案流程", async () => {
+    const agent = vi
+      .fn()
+      .mockResolvedValueOnce({ responseMode: "REVEAL_ANSWER" })
+      .mockResolvedValueOnce({ assistantMessage: "完整答案是太阳能。" })
+      .mockResolvedValueOnce({ question: "它如何产生作用？" });
+
+    const result = await respondToUser(
+      { ...turnContext(), userMessage: "这题我不会，直接告诉我答案。" },
+      agent,
+    );
+
+    expect(result.session.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
+    expect(result.session.stages.UNDERSTANDING.status).toBe("ACTIVE");
+    expect(result.assistantMessages).toEqual(["完整答案是太阳能。", "它如何产生作用？"]);
+    expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
+      "RESPOND_TO_USER",
+      "CREATE_STAGE_ANSWER",
+      "CREATE_STAGE_QUESTION",
+    ]);
   });
 });
