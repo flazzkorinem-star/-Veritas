@@ -178,6 +178,47 @@ describe("Agent 服务", () => {
     expect(request.user).toContain("服务于后续理解");
   });
 
+  it("通用对话提示词以用户当前意图和学习上下文为中心", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      responseMode: "CONVERSATION",
+      learningGoalUpdate: null,
+      assistantMessage: "ETF 联接基金主要通过场外渠道申购，适合没有股票账户的人。",
+    });
+
+    await runAgentOperation(
+      {
+        operation: "RESPOND_TO_USER",
+        input: {
+          materialContext: {
+            title: "基金列表",
+            modules: knowledgeMap.modules,
+            knowledgeItems: knowledgeMap.knowledgeItems,
+            nodes: knowledgeMap.nodes,
+          },
+          node: knowledgeMap.nodes[0],
+          knowledgeItems: knowledgeMap.knowledgeItems,
+          learningGoal: "理解 ETF 产品差异",
+          recentMessages: [],
+          diagnostic: {
+            status: "ACTIVE",
+            stage: "MEMORY",
+            mainQuestion: "ETF 与 ETF 联接基金有什么区别？",
+          },
+          userMessage: "先别考我，解释一下没有股票账户时怎么选。",
+        },
+      },
+      "server-key",
+      callModel,
+    );
+
+    const request = callModel.mock.calls[0]![0];
+    expect(request.system).toContain("通用 AI");
+    expect(request.system).toContain("当前主问题是上下文");
+    expect(request.system).not.toContain("当然可以");
+    expect(request.user).toContain("理解 ETF 产品差异");
+    expect(request.user).toContain("没有股票账户时怎么选");
+  });
+
   it("Zod 拒绝模型输出的未知字段", async () => {
     const callModel = vi.fn().mockResolvedValue({ ...extraction, systemPrompt: "泄露" });
 

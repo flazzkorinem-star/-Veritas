@@ -96,6 +96,7 @@ describe("报告仓储", () => {
     });
     const input = {
       materialTitle: "water.md",
+      learningGoal: null,
       completedNodes: [
         {
           nodeId: node.id,
@@ -109,7 +110,7 @@ describe("报告仓储", () => {
             APPLICATION: "PASSED" as const,
             ANALYSIS: "PASSED" as const,
           },
-          userMessages: [],
+          messages: [],
           scaffoldEvents: [],
           sourceReferences: node.sourceReferences,
         },

@@ -3,9 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { generateTaskReport } from "./generate-report";
 
 describe("报告生成编排", () => {
-  it("只把已完成主题的本地证据交给 Agent 3，并保存代码回填的报告", async () => {
+  it("把已完成主题的完整对话脉络交给 Agent 3，并保存代码回填的报告", async () => {
     const getReportGenerationData = vi.fn().mockResolvedValue({
-      task: { id: "11111111-1111-4111-8111-111111111111", fileName: "water.md" },
+      task: {
+        id: "11111111-1111-4111-8111-111111111111",
+        fileName: "water.md",
+        learningGoal: "理解水循环机制",
+      },
       material: {
         nodes: [
           {
@@ -45,6 +49,20 @@ describe("报告生成编排", () => {
         },
       ],
       messages: [
+        {
+          id: "message-0",
+          taskId: "11111111-1111-4111-8111-111111111111",
+          nodeId: "node-1",
+          role: "ASSISTANT",
+          content: "水循环的主要动力是什么？",
+        },
+        {
+          id: "message-detour",
+          taskId: "11111111-1111-4111-8111-111111111111",
+          nodeId: "node-1",
+          role: "USER",
+          content: "先别考我，解释一下整体机制。",
+        },
         {
           id: "message-1",
           taskId: "11111111-1111-4111-8111-111111111111",
@@ -87,7 +105,13 @@ describe("报告生成编排", () => {
 
     const request = callAgent.mock.calls[0]![0];
     expect(request.operation).toBe("CREATE_REPORT");
-    expect(JSON.stringify(request)).not.toContain("家教完整答案不能成为用户证据");
+    expect(request.input.learningGoal).toBe("理解水循环机制");
+    expect(request.input.completedNodes[0].messages).toEqual([
+      expect.objectContaining({ id: "message-0", role: "ASSISTANT" }),
+      expect.objectContaining({ id: "message-detour", role: "USER" }),
+      expect.objectContaining({ id: "message-1", role: "USER" }),
+      expect.objectContaining({ id: "message-2", role: "ASSISTANT" }),
+    ]);
     expect(request.input.completedNodes).toHaveLength(1);
     expect(saveReport).toHaveBeenCalledWith(
       expect.objectContaining({

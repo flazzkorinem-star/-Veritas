@@ -8,6 +8,7 @@ import {
 
 const input = reportAgentInputSchema.parse({
   materialTitle: "水循环.md",
+  learningGoal: "理解水循环机制",
   completedNodes: [
     {
       nodeId: "node-1",
@@ -21,7 +22,10 @@ const input = reportAgentInputSchema.parse({
         APPLICATION: "PASSED_WITH_ANSWER",
         ANALYSIS: "PASSED",
       },
-      userMessages: [{ id: "message-1", content: "太阳能让水蒸发。" }],
+      messages: [
+        { id: "assistant-1", role: "ASSISTANT", content: "水循环的动力是什么？" },
+        { id: "message-1", role: "USER", content: "太阳能让水蒸发。" },
+      ],
       scaffoldEvents: [
         {
           id: "scaffold-1",
@@ -66,6 +70,7 @@ describe("Agent 3 报告契约", () => {
 
   it.each([
     ["伪造用户原话", { userEvidenceMessageIds: ["missing-message"] }],
+    ["把助理消息当成用户证据", { userEvidenceMessageIds: ["assistant-1"] }],
     [
       "伪造支架",
       { scaffoldNotes: [{ scaffoldEventId: "missing", learningEffect: "无" }] },

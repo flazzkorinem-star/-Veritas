@@ -258,8 +258,8 @@ describe("工作区诊断交互", () => {
         >[0],
       ) => {
         const node = request.input.completedNodes[0]!;
-        const evidenceMessage = node.userMessages.find((message) =>
-          message.content.includes("层回答"),
+        const evidenceMessage = node.messages.find(
+          (message) => message.role === "USER" && message.content.includes("层回答"),
         )!;
         return {
           summary: "已经能解释水循环的主要动力。",

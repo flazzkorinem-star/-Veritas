@@ -141,7 +141,11 @@ export function buildReportDocument(options: {
     summary: output.summary,
     nodes: options.input.completedNodes.map((node) => {
       const insight = insightByNode.get(node.nodeId)!;
-      const messages = new Map(node.userMessages.map((message) => [message.id, message]));
+      const messages = new Map(
+        node.messages
+          .filter((message) => message.role === "USER")
+          .map((message) => [message.id, message]),
+      );
       const scaffolds = new Map(node.scaffoldEvents.map((event) => [event.id, event]));
       return {
         nodeId: node.nodeId,

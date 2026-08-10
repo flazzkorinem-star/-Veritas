@@ -12,7 +12,7 @@ import type {
 } from "@/storage/types";
 
 interface ReportGenerationData {
-  task: Pick<StoredTask, "id" | "fileName">;
+  task: Pick<StoredTask, "id" | "fileName" | "learningGoal">;
   material: Pick<StoredMaterial, "nodes" | "knowledgeItems" | "coverageAssignments">;
   sessions: {
     nodeId: string;
@@ -51,6 +51,7 @@ export async function generateTaskReport(
     .toSorted((left, right) => left.order - right.order);
   const input = {
     materialTitle: data.task.fileName,
+    learningGoal: data.task.learningGoal ?? null,
     completedNodes: nodes.map((node) => {
       const stored = completed.find((candidate) => candidate.nodeId === node.id)!;
       return {
@@ -65,9 +66,9 @@ export async function generateTaskReport(
           APPLICATION: stored.session.stages.APPLICATION.status,
           ANALYSIS: stored.session.stages.ANALYSIS.status,
         },
-        userMessages: data.messages
-          .filter((message) => message.nodeId === node.id && message.role === "USER")
-          .map(({ id, content }) => ({ id, content })),
+        messages: data.messages
+          .filter((message) => message.nodeId === node.id)
+          .map(({ id, role, content }) => ({ id, role, content })),
         scaffoldEvents: (stored.scaffoldEvents ?? []).map(
           ({ id, stage, type, reason }) => ({ id, stage, type, reason }),
         ),

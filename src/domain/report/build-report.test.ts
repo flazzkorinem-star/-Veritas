@@ -5,6 +5,7 @@ import type { ReportAgentInput, ReportAgentOutput } from "./contracts";
 
 const input: ReportAgentInput = {
   materialTitle: "水循环.md",
+  learningGoal: "理解水循环机制",
   completedNodes: [
     {
       nodeId: "node-1",
@@ -18,7 +19,9 @@ const input: ReportAgentInput = {
         APPLICATION: "PASSED_WITH_ANSWER",
         ANALYSIS: "PASSED",
       },
-      userMessages: [{ id: "message-1", content: "太阳能让水蒸发。" }],
+      messages: [
+        { id: "message-1", role: "USER", content: "太阳能让水蒸发。" },
+      ],
       scaffoldEvents: [],
       sourceReferences: [{ label: "第 1 段", excerpt: "太阳驱动蒸发。" }],
     },
@@ -93,7 +96,7 @@ describe("任务级报告构建", () => {
     hostileInput.materialTitle =
       "<img src=x onerror=alert(1)> [点我](javascript:alert(1))";
     hostileInput.completedNodes[0]!.title = "# <script>alert(1)</script>";
-    hostileInput.completedNodes[0]!.userMessages[0]!.content =
+    hostileInput.completedNodes[0]!.messages[0]!.content =
       "> [危险链接](javascript:alert(1))";
     const hostileOutput = structuredClone(output);
     hostileOutput.summary = "<svg onload=alert(1)> [链接](javascript:alert(1))";

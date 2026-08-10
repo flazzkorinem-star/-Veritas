@@ -9,10 +9,12 @@ const completedStageStatusSchema = z.enum([
 ]);
 const identifierSchema = z.string().trim().min(1).max(120);
 const shortTextSchema = z.string().trim().min(1).max(1_200);
+const messageContentSchema = z.string().trim().min(1).max(12_000);
 
 export const reportAgentInputSchema = z
   .object({
     materialTitle: z.string().trim().min(1).max(255),
+    learningGoal: z.string().trim().min(1).max(500).nullable(),
     completedNodes: z
       .array(
         z
@@ -28,11 +30,17 @@ export const reportAgentInputSchema = z
               APPLICATION: completedStageStatusSchema,
               ANALYSIS: completedStageStatusSchema,
             }),
-            userMessages: z
+            messages: z
               .array(
-                z.object({ id: identifierSchema, content: shortTextSchema }).strict(),
+                z
+                  .object({
+                    id: identifierSchema,
+                    role: z.enum(["USER", "ASSISTANT"]),
+                    content: messageContentSchema,
+                  })
+                  .strict(),
               )
-              .max(80),
+              .max(160),
             scaffoldEvents: z
               .array(
                 z
@@ -135,7 +143,11 @@ export function validateReportEvidence(
 
   for (const insight of output.nodeInsights) {
     const node = nodeInputs.get(insight.nodeId)!;
-    const messageIds = new Set(node.userMessages.map((message) => message.id));
+    const messageIds = new Set(
+      node.messages
+        .filter((message) => message.role === "USER")
+        .map((message) => message.id),
+    );
     const scaffoldIds = new Set(node.scaffoldEvents.map((event) => event.id));
     const hasInvalidEvidence =
       insight.understood.some((item) => !messageIds.has(item.userMessageId)) ||
