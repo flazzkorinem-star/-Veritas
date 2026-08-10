@@ -6,6 +6,7 @@ async function createReport(request: APIRequestContext) {
       operation: "CREATE_REPORT",
       input: {
         materialTitle: "光合作用讲义.md",
+        learningGoal: "理解光合作用的能量转化",
         completedNodes: [
           {
             nodeId: "node-1",
@@ -19,9 +20,10 @@ async function createReport(request: APIRequestContext) {
               APPLICATION: "PASSED_WITH_ANSWER",
               ANALYSIS: "PASSED",
             },
-            userMessages: [
+            messages: [
               {
                 id: "message-1",
+                role: "USER",
                 content: "植物把光能转成储存在葡萄糖里的化学能。",
               },
             ],

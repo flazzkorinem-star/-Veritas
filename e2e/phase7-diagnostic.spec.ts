@@ -45,7 +45,7 @@ function mockAgent(route: Route) {
       diagnostic?: { status: string };
       completedNodes?: Array<{
         nodeId: string;
-        userMessages: Array<{ id: string; content: string }>;
+        messages: Array<{ id: string; role: "USER" | "ASSISTANT"; content: string }>;
       }>;
     };
   };
@@ -116,21 +116,26 @@ function mockAgent(route: Route) {
     case "CREATE_REPORT":
       return fulfill(route, {
         summary: "已经能解释太阳能怎样推动水循环，应用环节仍依赖了完整答案。",
-        nodeInsights: request.input.completedNodes!.map((completedNode) => ({
-          nodeId: completedNode.nodeId,
-          understood: [
-            {
-              statement: "能指出太阳能是水循环的主要动力。",
-              userMessageId: completedNode.userMessages[1]!.id,
-            },
-          ],
-          blindSpots: ["应用到新情境时依赖了家教完整答案。"],
-          userEvidenceMessageIds: [completedNode.userMessages[1]!.id],
-          scaffoldNotes: [],
-          learnedOrCorrected: [],
-          nextSteps: ["换一个天气情境独立解释能量变化。"],
-          sourceReferenceIndexes: [0],
-        })),
+        nodeInsights: request.input.completedNodes!.map((completedNode) => {
+          const evidence = completedNode.messages.find(
+            (message) => message.role === "USER" && message.content.includes("太阳能"),
+          )!;
+          return {
+            nodeId: completedNode.nodeId,
+            understood: [
+              {
+                statement: "能指出太阳能是水循环的主要动力。",
+                userMessageId: evidence.id,
+              },
+            ],
+            blindSpots: ["应用到新情境时依赖了家教完整答案。"],
+            userEvidenceMessageIds: [evidence.id],
+            scaffoldNotes: [],
+            learnedOrCorrected: [],
+            nextSteps: ["换一个天气情境独立解释能量变化。"],
+            sourceReferenceIndexes: [0],
+          };
+        }),
       });
     default:
       throw new Error(`未处理的 Agent 操作：${request.operation}`);
@@ -170,10 +175,8 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
   });
 
   await expect(
-    page.getByText("这份材料的重点是循环动力", { exact: false }),
+    page.getByText("这份材料真正值得抓的是循环动力", { exact: false }),
   ).toBeVisible();
-  await page.getByLabel("消息输入").fill("出题考考我");
-  await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
   await page.getByRole("button", { name: "给我提示" }).click();
   await expect(page.getByText("想想晒湿衣服时", { exact: false })).toBeVisible();
@@ -301,10 +304,8 @@ test("桌面端网络失败后保留输入并可重试当前回合", async ({ pa
     buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发。"),
   });
   await expect(
-    page.getByText("这份材料的重点是循环动力", { exact: false }),
+    page.getByText("这份材料真正值得抓的是循环动力", { exact: false }),
   ).toBeVisible();
-  await page.getByLabel("消息输入").fill("出题考考我");
-  await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
   await page.getByLabel("消息输入").fill("主要动力是太阳能。");
   await page.getByRole("button", { name: "发送消息" }).click();

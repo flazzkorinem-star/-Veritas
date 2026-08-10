@@ -45,7 +45,53 @@ test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request 
     process.env.RUN_REAL_DEEPSEEK !== "1" || testInfo.project.name !== "desktop-edge",
     "仅在显式启用时调用本地服务端配置的真实 DeepSeek。",
   );
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
+
+  const turnContext = {
+    node,
+    knowledgeItems,
+    materialContext: {
+      title: "光合作用",
+      modules: [{ id: "module-1", title: "光合作用", sourceRange: "第 1 段" }],
+      knowledgeItems,
+      nodes: [node],
+    },
+    learningGoal: "检验对光合作用能量转化的理解",
+    diagnostic: {
+      status: "ACTIVE",
+      stage: "MEMORY",
+      mainQuestion: "光合作用把光能转化成了什么形式的能量？",
+    },
+    recentMessages: [],
+  } as const;
+
+  const conversation = await operation(request, {
+    operation: "RESPOND_TO_USER",
+    input: {
+      ...turnContext,
+      userMessage: "先不答题，解释一下为什么这里强调能量转化。",
+    },
+  });
+  expect(conversation.responseMode).toBe("CONVERSATION");
+  expect(String(conversation.assistantMessage).length).toBeGreaterThan(20);
+
+  const semanticHint = await operation(request, {
+    operation: "RESPOND_TO_USER",
+    input: {
+      ...turnContext,
+      userMessage: "给我一点方向，但先别把答案说出来。",
+    },
+  });
+  expect(semanticHint.responseMode).toBe("REQUEST_HINT");
+
+  const semanticAnswer = await operation(request, {
+    operation: "RESPOND_TO_USER",
+    input: {
+      ...turnContext,
+      userMessage: "这题我想直接看完整答案。",
+    },
+  });
+  expect(semanticAnswer.responseMode).toBe("REVEAL_ANSWER");
 
   const question = await operation(request, {
     operation: "CREATE_STAGE_QUESTION",
@@ -56,15 +102,7 @@ test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request 
   const evaluation = await operation(request, {
     operation: "RESPOND_TO_USER",
     input: {
-      node,
-      knowledgeItems,
-      materialContext: {
-        title: "光合作用",
-        modules: [{ id: "module-1", title: "光合作用", sourceRange: "第 1 段" }],
-        knowledgeItems,
-        nodes: [node],
-      },
-      learningGoal: "检验对光合作用能量转化的理解",
+      ...turnContext,
       diagnostic: {
         status: "ACTIVE",
         stage: "MEMORY",

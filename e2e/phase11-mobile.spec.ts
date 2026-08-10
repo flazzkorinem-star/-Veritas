@@ -64,7 +64,7 @@ function mockAgent(route: Route) {
       diagnostic?: { status: string };
       completedNodes?: Array<{
         nodeId: string;
-        userMessages: Array<{ id: string; content: string }>;
+        messages: Array<{ id: string; role: "USER" | "ASSISTANT"; content: string }>;
       }>;
     };
   };
@@ -121,21 +121,26 @@ function mockAgent(route: Route) {
     case "CREATE_REPORT":
       return reply(route, {
         summary: "已经完成第一个主题，能够说明太阳能与蒸发的关系。",
-        nodeInsights: request.input.completedNodes!.map((completedNode) => ({
-          nodeId: completedNode.nodeId,
-          understood: [
-            {
-              statement: "能指出水循环的主要动力。",
-              userMessageId: completedNode.userMessages[1]!.id,
-            },
-          ],
-          blindSpots: [],
-          userEvidenceMessageIds: [completedNode.userMessages[1]!.id],
-          scaffoldNotes: [],
-          learnedOrCorrected: [],
-          nextSteps: ["继续学习降水回流。"],
-          sourceReferenceIndexes: [0],
-        })),
+        nodeInsights: request.input.completedNodes!.map((completedNode) => {
+          const evidence = completedNode.messages.find(
+            (message) => message.role === "USER" && message.content.includes("太阳能"),
+          )!;
+          return {
+            nodeId: completedNode.nodeId,
+            understood: [
+              {
+                statement: "能指出水循环的主要动力。",
+                userMessageId: evidence.id,
+              },
+            ],
+            blindSpots: [],
+            userEvidenceMessageIds: [evidence.id],
+            scaffoldNotes: [],
+            learnedOrCorrected: [],
+            nextSteps: ["继续学习降水回流。"],
+            sourceReferenceIndexes: [0],
+          };
+        }),
       });
     default:
       throw new Error(`未处理的 Agent 操作：${request.operation}`);
@@ -177,9 +182,7 @@ test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", as
   await expect(
     page.getByText("这份材料的重点是水循环动力", { exact: false }),
   ).toBeVisible();
-  await page.getByLabel("消息输入").fill("出题考考我");
-  await page.getByRole("button", { name: "发送消息" }).click();
-  await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
+  await expect(page.getByText("水循环最基本的动力来源是什么？")).toBeVisible();
 
   await page.getByRole("button", { name: "打开主题" }).click();
   await expect(page.locator('.topic-sidebar[data-mobile-open="true"]')).toBeVisible();

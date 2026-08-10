@@ -93,7 +93,10 @@ function mockAgentResult(route: Route) {
   return route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({
-      result: { assistantMessage: "这份材料主要讲水循环中的关键过程。" },
+      result: {
+        opening: "这份材料主要讲水循环中的关键过程。",
+        question: "太阳能在水循环中起什么作用？",
+      },
     }),
   });
 }

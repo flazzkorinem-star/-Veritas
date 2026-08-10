@@ -13,6 +13,7 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
   const browserProblems: string[] = [];
   const operations: string[] = [];
   const agentStatuses: number[] = [];
+  const agentResponses: Array<{ operation: string; status: number }> = [];
   page.on("console", (message) => {
     if (["error", "warning"].includes(message.type())) {
       browserProblems.push(`${message.type()}: ${message.text()}`);
@@ -26,7 +27,12 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
     if (operation) operations.push(operation);
   });
   page.on("response", (response) => {
-    if (response.url().endsWith("/api/agents")) agentStatuses.push(response.status());
+    if (!response.url().endsWith("/api/agents")) return;
+    const operation = (
+      response.request().postDataJSON() as { operation?: string } | null
+    )?.operation;
+    agentStatuses.push(response.status());
+    agentResponses.push({ operation: operation ?? "UNKNOWN", status: response.status() });
   });
 
   await page.goto("/");
@@ -70,23 +76,32 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
   const totalTopics = await page.locator(".topic-item").count();
   expect(totalTopics).toBeGreaterThan(1);
   await expect(page.locator(".score-line strong")).toHaveText("0");
+  await expect(page.getByRole("button", { name: "给我提示" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "看答案" })).toBeEnabled();
 
   let messageCount = await assistantMessages.count();
-  await page.getByLabel("消息输入").fill("请按记忆、理解、应用、分析四层考考我。");
+  await page
+    .getByLabel("消息输入")
+    .fill("先别考我。请用两三句话解释这份材料真正想说明的整体机制。");
   await page.getByRole("button", { name: "发送消息" }).click();
   await waitForAssistantAfter(messageCount);
-  messageCount = await assistantMessages.count();
-  await page.getByLabel("消息输入").fill("我完全不知道，也说不出这里的原理。");
-  await page.getByRole("button", { name: "发送消息" }).click();
-  await waitForAssistantAfter(messageCount);
-  messageCount = await assistantMessages.count();
-  const tutorFeedback = await assistantMessages.last().innerText();
-  expect(tutorFeedback.length).toBeGreaterThan(20);
-  expect(tutorFeedback).not.toMatch(/回答得很好|继续加油|再想一想[。！]?$/);
+  expect((await assistantMessages.last().innerText()).length).toBeGreaterThan(20);
   await expect(page.locator(".score-line strong")).toHaveText("0");
+  await expect(page.getByRole("button", { name: "给我提示" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "看答案" })).toBeEnabled();
 
-  await page.getByRole("button", { name: "给我提示" }).click();
+  messageCount = await assistantMessages.count();
+  const hintOperationsBefore = operations.filter(
+    (operation) => operation === "CREATE_HINT",
+  ).length;
+  await page
+    .getByLabel("消息输入")
+    .fill("这道题先给我一点方向，不要直接揭晓答案。");
+  await page.getByRole("button", { name: "发送消息" }).click();
   await waitForAssistantAfter(messageCount);
+  expect(operations.filter((operation) => operation === "CREATE_HINT")).toHaveLength(
+    hintOperationsBefore + 1,
+  );
   messageCount = await assistantMessages.count();
   expect((await assistantMessages.last().innerText()).length).toBeGreaterThan(12);
 
@@ -101,8 +116,22 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
     timeout: 120_000,
   });
 
+  messageCount = await assistantMessages.count();
+  const answerOperationsBefore = operations.filter(
+    (operation) => operation === "CREATE_STAGE_ANSWER",
+  ).length;
+  await page
+    .getByLabel("消息输入")
+    .fill("当前这一题我想直接看完整答案，然后继续下一层。");
+  await page.getByRole("button", { name: "发送消息" }).click();
+  await waitForAssistantAfter(messageCount);
+  expect(
+    operations.filter((operation) => operation === "CREATE_STAGE_ANSWER"),
+  ).toHaveLength(answerOperationsBefore + 1);
+
   for (let stage = 0; stage < 4; stage += 1) {
     if ((await page.getByRole("button", { name: "看答案" }).count()) === 0) break;
+    if (!(await page.getByRole("button", { name: "看答案" }).isEnabled())) break;
     const beforeReveal = await assistantMessages.count();
     await page.getByRole("button", { name: "看答案" }).click({ timeout: 10_000 });
     await waitForAssistantAfter(beforeReveal);
@@ -143,7 +172,10 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
     expect(operations).toContain(operation);
   }
   expect(agentStatuses.length).toBeGreaterThanOrEqual(10);
-  expect(agentStatuses.every((status) => status === 200)).toBe(true);
+  expect(
+    agentResponses.filter((response) => response.status !== 200),
+    `真实 Agent 非 200 响应：${JSON.stringify(agentResponses)}`,
+  ).toEqual([]);
   expect(browserProblems).toEqual([]);
   await page.screenshot({
     path: testInfo.outputPath("real-complete-journey-report.png"),

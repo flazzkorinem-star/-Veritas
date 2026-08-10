@@ -63,6 +63,10 @@ export const evaluationDecisionSchema = z
   .superRefine(validateEvaluation);
 
 const learningGoalUpdateSchema = z.string().trim().min(1).max(500).nullable();
+const actionIntentFields = {
+  learningGoalUpdate: learningGoalUpdateSchema.optional(),
+  assistantMessage: assistantMessageSchema.optional(),
+} as const;
 
 export const userTurnDecisionSchema = z
   .discriminatedUnion("responseMode", [
@@ -89,8 +93,12 @@ export const userTurnDecisionSchema = z
         assistantMessage: assistantMessageSchema,
       })
       .strict(),
-    z.object({ responseMode: z.literal("REQUEST_HINT") }).strict(),
-    z.object({ responseMode: z.literal("REVEAL_ANSWER") }).strict(),
+    z
+      .object({ responseMode: z.literal("REQUEST_HINT"), ...actionIntentFields })
+      .strict(),
+    z
+      .object({ responseMode: z.literal("REVEAL_ANSWER"), ...actionIntentFields })
+      .strict(),
   ])
   .superRefine((value, context) => {
     if (value.responseMode === "EVALUATE_DIAGNOSTIC") {

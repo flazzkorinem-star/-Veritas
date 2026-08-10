@@ -134,6 +134,19 @@ describe("Agent 2 结构化输出契约", () => {
     },
   );
 
+  it.each(["REQUEST_HINT", "REVEAL_ANSWER"] as const)(
+    "%s 可携带模型惯常返回的对话字段，由编排层忽略",
+    (responseMode) => {
+      expect(
+        userTurnDecisionSchema.parse({
+          responseMode,
+          learningGoalUpdate: null,
+          assistantMessage: "我按你的选择继续。",
+        }),
+      ).toMatchObject({ responseMode });
+    },
+  );
+
   it("拒绝普通对话夹带分数或层级状态", () => {
     expect(
       userTurnDecisionSchema.safeParse({
