@@ -49,13 +49,14 @@ const map = {
 };
 
 describe("文本材料处理编排", () => {
-  it("依次完成读取、分块提取、覆盖审计和主题开场生成", async () => {
+  it("依次完成读取、分块提取、覆盖审计和有意义的首问生成", async () => {
     const callAgent = vi
       .fn()
       .mockResolvedValueOnce(extraction)
       .mockResolvedValueOnce(map)
       .mockResolvedValueOnce({
-        assistantMessage: "这份材料的重点是水循环动力。你想先讨论，还是检验理解？",
+        opening: "这份材料真正值得抓的是水循环的动力机制。",
+        question: "水循环最基本的动力来源是什么？",
       });
     const onProgress = vi.fn();
     const controller = new AbortController();
@@ -72,14 +73,15 @@ describe("文本材料处理编排", () => {
     expect(result).toMatchObject({
       parsedText: "# 水循环\n\n太阳驱动蒸发。",
       knowledgeMap: map,
-      topicOpening: {
-        assistantMessage: "这份材料的重点是水循环动力。你想先讨论，还是检验理解？",
+      firstQuestion: {
+        opening: "这份材料真正值得抓的是水循环的动力机制。",
+        question: "水循环最基本的动力来源是什么？",
       },
     });
     expect(callAgent.mock.calls.map(([request]) => request.operation)).toEqual([
       "EXTRACT_KNOWLEDGE",
       "AUDIT_KNOWLEDGE_MAP",
-      "CREATE_TOPIC_OPENING",
+      "CREATE_FIRST_QUESTION",
     ]);
     const agentSignals = callAgent.mock.calls.map(
       ([, dependencies]) => dependencies?.signal,

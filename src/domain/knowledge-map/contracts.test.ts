@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { knowledgeMapSchema, topicOpeningSchema, type KnowledgeMap } from "./contracts";
+import { firstQuestionSchema, knowledgeMapSchema, type KnowledgeMap } from "./contracts";
 
 function validMap(): KnowledgeMap {
   const source = { label: "第 1 节，第 1 段", excerpt: "太阳提供能量。" };
@@ -96,24 +96,23 @@ describe("完整知识地图契约", () => {
   });
 });
 
-describe("主题开场契约", () => {
-  it("接收材料判断与自然对话，不要求诊断问题", () => {
+describe("首个问题契约", () => {
+  it("同时接收材料判断和唯一主问题", () => {
     expect(
-      topicOpeningSchema.parse({
-        assistantMessage:
-          "这份材料把水循环分成自然过程和城市影响两部分。你如果是为了复习考试，我会先抓动力和径流这两个容易混的点。",
+      firstQuestionSchema.parse({
+        opening: "这份材料真正值得抓的是水循环的动力和回流机制。",
+        question: "水循环最基本的动力来源是什么？",
       }),
     ).toEqual({
-      assistantMessage:
-        "这份材料把水循环分成自然过程和城市影响两部分。你如果是为了复习考试，我会先抓动力和径流这两个容易混的点。",
+      opening: "这份材料真正值得抓的是水循环的动力和回流机制。",
+      question: "水循环最基本的动力来源是什么？",
     });
   });
 
-  it("拒绝旧的强制首题结构", () => {
+  it("拒绝缺少主问题的纯开场", () => {
     expect(
-      topicOpeningSchema.safeParse({
-        opening: "我们从水循环开始。",
-        question: "主要动力是什么？",
+      firstQuestionSchema.safeParse({
+        opening: "这份材料主要解释水循环。",
       }).success,
     ).toBe(false);
   });

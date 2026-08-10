@@ -143,16 +143,16 @@ describe("Agent 服务", () => {
     ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
   });
 
-  it("主题开场判断材料价值但不默认开始测验", async () => {
+  it("首个问题先判断材料价值，再提出一项有意义的理解任务", async () => {
     const callModel = vi.fn().mockResolvedValue({
-      assistantMessage:
-        "这份材料真正值得掌握的是硬化路面怎样改变雨水去向。你准备用它复习考试，还是解决一个具体问题？",
+      opening: "这份材料真正值得掌握的是硬化路面怎样改变雨水去向。",
+      question: "硬化路面最直接改变了雨水的哪条去向？",
     });
 
     await expect(
       runAgentOperation(
         {
-          operation: "CREATE_TOPIC_OPENING",
+          operation: "CREATE_FIRST_QUESTION",
           input: {
             materialContext: {
               title: "城市水循环",
@@ -169,14 +169,13 @@ describe("Agent 服务", () => {
         callModel,
       ),
     ).resolves.toEqual({
-      assistantMessage:
-        "这份材料真正值得掌握的是硬化路面怎样改变雨水去向。你准备用它复习考试，还是解决一个具体问题？",
+      opening: "这份材料真正值得掌握的是硬化路面怎样改变雨水去向。",
+      question: "硬化路面最直接改变了雨水的哪条去向？",
     });
 
     const request = callModel.mock.calls[0]![0];
     expect(request.system).toContain("通用 AI");
-    expect(request.user).toContain("不默认开始测验");
-    expect(request.system).toContain("当然可以");
+    expect(request.user).toContain("服务于后续理解");
   });
 
   it("Zod 拒绝模型输出的未知字段", async () => {

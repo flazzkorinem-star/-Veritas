@@ -10,8 +10,8 @@ import {
   chunkExtractionSchema,
   type KnowledgeMap,
   knowledgeMapSchema,
-  type TopicOpening,
-  topicOpeningSchema,
+  type FirstQuestion,
+  firstQuestionSchema,
 } from "@/domain/knowledge-map/contracts";
 import {
   type HintResponse,
@@ -55,7 +55,7 @@ type ExtractionRequest = Extract<
 type AuditRequest = Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>;
 type QuestionRequest = Extract<
   AgentOperationRequest,
-  { operation: "CREATE_TOPIC_OPENING" }
+  { operation: "CREATE_FIRST_QUESTION" }
 >;
 type StageQuestionRequest = Extract<
   AgentOperationRequest,
@@ -72,8 +72,8 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
       return chunkExtractionSchema;
     case "AUDIT_KNOWLEDGE_MAP":
       return knowledgeMapSchema;
-    case "CREATE_TOPIC_OPENING":
-      return topicOpeningSchema;
+    case "CREATE_FIRST_QUESTION":
+      return firstQuestionSchema;
     case "CREATE_STAGE_QUESTION":
       return stageQuestionSchema;
     case "RESPOND_TO_USER":
@@ -98,7 +98,7 @@ export function callAgent(
 export function callAgent(
   request: QuestionRequest,
   dependencies?: AgentClientDependencies,
-): Promise<TopicOpening>;
+): Promise<FirstQuestion>;
 export function callAgent(
   request: StageQuestionRequest,
   dependencies?: AgentClientDependencies,
@@ -125,7 +125,7 @@ export function callAgent(
 ): Promise<
   | ChunkExtraction
   | KnowledgeMap
-  | TopicOpening
+  | FirstQuestion
   | StageQuestion
   | UserTurnDecision
   | HintResponse

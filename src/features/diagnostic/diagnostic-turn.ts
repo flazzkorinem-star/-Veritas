@@ -5,7 +5,7 @@ import {
   userTurnDecisionSchema,
   type ScaffoldType,
 } from "@/domain/diagnostic/agent-contracts";
-import { topicOpeningSchema } from "@/domain/knowledge-map/contracts";
+import { firstQuestionSchema } from "@/domain/knowledge-map/contracts";
 import type { AgentOperationRequest } from "@/domain/agents/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import { diagnosticReducer } from "@/domain/diagnostic/reducer";
@@ -16,7 +16,7 @@ type DiagnosticRequest = Extract<
   AgentOperationRequest,
   {
     operation:
-      | "CREATE_TOPIC_OPENING"
+      | "CREATE_FIRST_QUESTION"
       | "CREATE_STAGE_QUESTION"
       | "RESPOND_TO_USER"
       | "CREATE_HINT"
@@ -58,17 +58,17 @@ export interface DiagnosticTurnResult {
 const defaultAgentCall: DiagnosticAgentCall = (request, dependencies) =>
   callAgent(request, dependencies);
 
-export async function createTopicOpening(
+export async function createFirstQuestion(
   input: Pick<
     TurnContext,
     "node" | "knowledgeItems" | "materialContext" | "learningGoal" | "signal"
   >,
   agent: DiagnosticAgentCall = defaultAgentCall,
 ) {
-  return topicOpeningSchema.parse(
+  return firstQuestionSchema.parse(
     await agent(
       {
-        operation: "CREATE_TOPIC_OPENING",
+        operation: "CREATE_FIRST_QUESTION",
         input: {
           node: input.node,
           knowledgeItems: input.knowledgeItems,

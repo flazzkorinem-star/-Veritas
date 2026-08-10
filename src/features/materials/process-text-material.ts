@@ -1,4 +1,4 @@
-import type { KnowledgeMap, TopicOpening } from "@/domain/knowledge-map/contracts";
+import type { FirstQuestion, KnowledgeMap } from "@/domain/knowledge-map/contracts";
 import {
   EXTRACTION_CONCURRENCY,
   MATERIAL_PROCESSING_MAX_MS,
@@ -42,7 +42,7 @@ export class TextProcessingError extends Error {
 export interface TextProcessingResult {
   parsedText: string;
   knowledgeMap: KnowledgeMap;
-  topicOpening: TopicOpening;
+  firstQuestion: FirstQuestion;
 }
 
 interface ProcessingDependencies {
@@ -144,9 +144,9 @@ export async function processTextMaterial(
 
       const nodeItemIds = new Set(firstNode.knowledgeItemIds);
       onProgress({ stage: "PREPARING_CONTEXT", startedAt });
-      const topicOpening = await runAgent(
+      const firstQuestion = await runAgent(
         {
-          operation: "CREATE_TOPIC_OPENING",
+          operation: "CREATE_FIRST_QUESTION",
           input: {
             materialContext: {
               title: material.fileName,
@@ -163,7 +163,7 @@ export async function processTextMaterial(
         },
         { signal: modelSignal },
       );
-      return { parsedText: material.text, knowledgeMap, topicOpening };
+      return { parsedText: material.text, knowledgeMap, firstQuestion };
     } catch (error) {
       operationController.abort();
       if (dependencies.signal?.aborted) throw error;

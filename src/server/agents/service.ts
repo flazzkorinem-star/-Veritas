@@ -7,7 +7,7 @@ import {
 import {
   chunkExtractionSchema,
   knowledgeMapSchema,
-  topicOpeningSchema,
+  firstQuestionSchema,
 } from "@/domain/knowledge-map/contracts";
 import {
   hintResponseSchema,
@@ -135,10 +135,10 @@ ${JSON.stringify(input.chunks)}
 </UNTRUSTED_EXTRACTIONS>`;
 }
 
-function topicOpeningPrompt(
-  input: Extract<AgentOperationRequest, { operation: "CREATE_TOPIC_OPENING" }>["input"],
+function firstQuestionPrompt(
+  input: Extract<AgentOperationRequest, { operation: "CREATE_FIRST_QUESTION" }>["input"],
 ) {
-  return `根据材料概览和当前主题写第一次回复。简短指出这份材料的质量、重点或学习价值；只有目标确实会改变帮助方式时，才自然问一个目标问题。不默认开始测验，不生成诊断题，不宣读处理流程、主题数量或教学模式。只输出 {"assistantMessage":"..."}。
+  return `根据材料概览和当前主题生成第一次回复。opening 用一句陈述简短判断材料质量、重点或学习价值；question 提出一道服务于后续理解、只要求一个动作的首个主问题。不要考查仅因容易提取而出现的代码、编号、名单或孤立数字，除非学习目标确实要求掌握它。不要批量出题，不宣读处理流程、主题数量或教学模式。只输出 {"opening":"...","question":"..."}。
 
 <UNTRUSTED_VERIFIED_CONTEXT>
 ${JSON.stringify(input)}
@@ -267,19 +267,19 @@ export async function runAgentOperation(
       );
       return knowledgeMap;
     }
-    case "CREATE_TOPIC_OPENING":
+    case "CREATE_FIRST_QUESTION":
       return callValidated(
         callModel,
         {
           apiKey,
           system: VITA_SYSTEM,
-          user: topicOpeningPrompt(request.data.input),
+          user: firstQuestionPrompt(request.data.input),
           thinking: false,
           maxTokens: 1_500,
           timeoutMs: 30_000,
           signal,
         },
-        (output) => parseOutput(topicOpeningSchema, output, "CREATE_TOPIC_OPENING"),
+        (output) => parseOutput(firstQuestionSchema, output, "CREATE_FIRST_QUESTION"),
       );
     case "CREATE_STAGE_QUESTION":
       return callValidated(

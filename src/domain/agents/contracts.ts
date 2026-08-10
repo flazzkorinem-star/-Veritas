@@ -72,7 +72,7 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
     .strict(),
   z
     .object({
-      operation: z.literal("CREATE_TOPIC_OPENING"),
+      operation: z.literal("CREATE_FIRST_QUESTION"),
       input: z
         .object({
           ...materialContext,

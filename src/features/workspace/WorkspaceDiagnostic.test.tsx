@@ -74,10 +74,19 @@ function result() {
         },
       ],
     },
-    topicOpening: {
-      assistantMessage: "这份材料的重点是循环动力。你想先讨论，还是检验理解？",
+    firstQuestion: {
+      opening: "这份材料真正值得抓的是循环动力。",
+      question: "水循环最基本的动力来源是什么？",
     },
   };
+}
+
+async function expectLatestVitaMessage(...parts: string[]) {
+  await waitFor(() => {
+    const latestMessage = screen.getAllByLabelText("维塔的消息").at(-1);
+    expect(latestMessage).toBeDefined();
+    for (const part of parts) expect(latestMessage).toHaveTextContent(part);
+  });
 }
 
 afterEach(async () => {
@@ -85,7 +94,7 @@ afterEach(async () => {
 });
 
 describe("工作区诊断交互", () => {
-  it("上传后先开放通用对话，普通消息不启动四层或显示提示按钮", async () => {
+  it("上传后保留首问和提示答案入口，普通对话完整回应且不推进四层", async () => {
     const name = `veritas-conversation-ui-${crypto.randomUUID()}`;
     names.push(name);
     const database = createVeritasDatabase(name);
@@ -111,7 +120,8 @@ describe("工作区诊断交互", () => {
 
     const input = await screen.findByLabelText("消息输入");
     await waitFor(() => expect(input).toBeEnabled());
-    expect(screen.queryByRole("button", { name: "给我提示" })).toBeNull();
+    expect(screen.getByRole("button", { name: "给我提示" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "看答案" })).toBeEnabled();
     fireEvent.change(input, { target: { value: "先解释整体机制，不要考我。" } });
     fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
 
@@ -124,7 +134,10 @@ describe("工作区诊断交互", () => {
     const learning = await repository.getTaskLearningData(
       (await repository.listTasks())[0]!.id,
     );
-    expect(learning.session?.session.stages.MEMORY.status).toBe("LOCKED");
+    expect(learning.session?.session.stages.MEMORY).toMatchObject({
+      status: "ACTIVE",
+      mainQuestion: "水循环最基本的动力来源是什么？",
+    });
     expect(learning.task.learningGoal).toBe("先理解水循环的整体机制");
     database.close();
   });
@@ -229,8 +242,11 @@ describe("工作区诊断交互", () => {
             assistantMessage: "这一步已经说清楚了。",
           };
         }
-        if (request.operation === "CREATE_TOPIC_OPENING") {
-          return { assistantMessage: "这个主题讲降水如何回到地表。" };
+        if (request.operation === "CREATE_FIRST_QUESTION") {
+          return {
+            opening: "这个主题真正值得抓的是降水回流。",
+            question: "降水主要通过什么作用回到地表？",
+          };
         }
         return { question: "请继续用一个新情境说明这个机制。" };
       },
@@ -284,9 +300,10 @@ describe("工作区诊断交互", () => {
 
     const startInput = await screen.findByLabelText("消息输入");
     await waitFor(() => expect(startInput).toBeEnabled());
-    fireEvent.change(startInput, { target: { value: "出题考考我" } });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("水循环的主要动力是什么？")).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
 
     for (let index = 1; index <= 4; index += 1) {
       await waitFor(() => expect(screen.getByLabelText("消息输入")).toBeEnabled());
@@ -314,7 +331,10 @@ describe("工作区诊断交互", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开“water-cycle”的任务菜单" }));
     expect(screen.getByRole("menuitem", { name: "分享" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "学习下一个主题：降水回流" }));
-    expect(await screen.findByText("这个主题讲降水如何回到地表。")).toBeVisible();
+    await expectLatestVitaMessage(
+      "这个主题真正值得抓的是降水回流。",
+      "降水主要通过什么作用回到地表？",
+    );
     database.close();
   });
 
@@ -355,12 +375,6 @@ describe("工作区诊断交互", () => {
     const agent = vi
       .fn()
       .mockResolvedValueOnce({
-        responseMode: "START_DIAGNOSTIC",
-        learningGoalUpdate: "检验自己是否理解水循环",
-        assistantMessage: "可以，先从核心机制开始。",
-        question: "水循环的主要动力是什么？",
-      })
-      .mockResolvedValueOnce({
         hintLevel: 1,
         assistantMessage: "先想一想蒸发需要的能量来自哪里。",
       })
@@ -394,9 +408,10 @@ describe("工作区诊断交互", () => {
 
     const startInput = await screen.findByLabelText("消息输入");
     await waitFor(() => expect(startInput).toBeEnabled());
-    fireEvent.change(startInput, { target: { value: "出题考考我" } });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("水循环的主要动力是什么？")).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "给我提示" }));
     expect(await screen.findByText("先想一想蒸发需要的能量来自哪里。")).toBeVisible();
@@ -423,7 +438,6 @@ describe("工作区诊断交互", () => {
     expect(screen.getByText("25", { selector: ".score-line strong" })).toBeVisible();
     expect(input).toHaveValue("");
     expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
-      "RESPOND_TO_USER",
       "CREATE_HINT",
       "RESPOND_TO_USER",
       "CREATE_STAGE_QUESTION",
@@ -438,12 +452,6 @@ describe("工作区诊断交互", () => {
     const repository = createTaskRepository(database);
     const agent = vi
       .fn()
-      .mockResolvedValueOnce({
-        responseMode: "START_DIAGNOSTIC",
-        learningGoalUpdate: null,
-        assistantMessage: "好，我先问一个核心问题。",
-        question: "水循环的主要动力是什么？",
-      })
       .mockResolvedValueOnce({
         responseMode: "EVALUATE_DIAGNOSTIC",
         learningGoalUpdate: null,
@@ -473,16 +481,17 @@ describe("工作区诊断交互", () => {
     });
     const startInput = await screen.findByLabelText("消息输入");
     await waitFor(() => expect(startInput).toBeEnabled());
-    fireEvent.change(startInput, { target: { value: "出题考考我" } });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("水循环的主要动力是什么？")).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
 
     await waitFor(() => expect(screen.getByLabelText("消息输入")).toBeEnabled());
     const input = screen.getByLabelText("消息输入");
     fireEvent.change(input, { target: { value: "主要动力是太阳能。" } });
 
     fireEvent.keyDown(input, { key: "Enter", code: "Enter", shiftKey: true });
-    expect(agent).toHaveBeenCalledOnce();
+    expect(agent).not.toHaveBeenCalled();
     expect(input).toHaveValue("主要动力是太阳能。");
 
     fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
@@ -497,7 +506,8 @@ describe("工作区诊断交互", () => {
     const database = createVeritasDatabase(name);
     const repository = createTaskRepository(database);
     const agent = vi.fn().mockResolvedValue({
-      assistantMessage: "这个主题讲降水如何回到地表。",
+      opening: "这个主题真正值得抓的是降水回流。",
+      question: "降水主要通过什么作用回到地表？",
     });
     render(
       <WorkspaceApp
@@ -518,7 +528,10 @@ describe("工作区诊断交互", () => {
     await waitFor(() => expect(input).toHaveValue("第一个主题的草稿"));
 
     fireEvent.click(screen.getByRole("button", { name: /降水回流/ }));
-    expect(await screen.findByText("这个主题讲降水如何回到地表。")).toBeVisible();
+    await expectLatestVitaMessage(
+      "这个主题真正值得抓的是降水回流。",
+      "降水主要通过什么作用回到地表？",
+    );
     const secondInput = screen.getByLabelText("消息输入");
     fireEvent.change(secondInput, { target: { value: "第二个主题的草稿" } });
     await waitFor(() => expect(secondInput).toHaveValue("第二个主题的草稿"));
@@ -527,9 +540,10 @@ describe("工作区诊断交互", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("消息输入")).toHaveValue("第一个主题的草稿"),
     );
-    expect(
-      screen.getByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？"),
-    ).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
     expect(agent).toHaveBeenCalledTimes(1);
     database.close();
   });
@@ -545,12 +559,6 @@ describe("工作区诊断交互", () => {
     });
     const agent = vi
       .fn()
-      .mockResolvedValueOnce({
-        responseMode: "START_DIAGNOSTIC",
-        learningGoalUpdate: null,
-        assistantMessage: "可以，先从核心机制开始。",
-        question: "水循环的主要动力是什么？",
-      })
       .mockReturnValueOnce(firstAttempt)
       .mockResolvedValueOnce({
         responseMode: "EVALUATE_DIAGNOSTIC",
@@ -581,9 +589,10 @@ describe("工作区诊断交互", () => {
     });
     const startInput = await screen.findByLabelText("消息输入");
     await waitFor(() => expect(startInput).toBeEnabled());
-    fireEvent.change(startInput, { target: { value: "出题考考我" } });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
-    expect(await screen.findByText("水循环的主要动力是什么？")).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
 
     await waitFor(() => expect(screen.getByLabelText("消息输入")).toBeEnabled());
     const input = screen.getByLabelText("消息输入");
@@ -599,7 +608,7 @@ describe("工作区诊断交互", () => {
     expect(screen.queryByRole("button", { name: "先停一下" })).toBeNull();
     expect(screen.getByRole("button", { name: "给我提示" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "看答案" })).toBeDisabled();
-    await waitFor(() => expect(agent).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(agent).toHaveBeenCalledTimes(1));
     rejectFirst(new Error("模拟网络失败"));
 
     expect(await screen.findByRole("button", { name: "重试本轮" })).toBeVisible();
@@ -609,7 +618,7 @@ describe("工作区诊断交互", () => {
     expect(await screen.findByText("对，太阳能是关键动力。")).toBeVisible();
     expect(screen.getByText("太阳能怎样推动蒸发？")).toBeVisible();
     expect(input).toHaveValue("");
-    expect(agent).toHaveBeenCalledTimes(4);
+    expect(agent).toHaveBeenCalledTimes(3);
     database.close();
   });
 });

@@ -80,10 +80,19 @@ function processingResult() {
         },
       ],
     },
-    topicOpening: {
-      assistantMessage: "这份材料的重点是循环动力。你想先讨论，还是检验理解？",
+    firstQuestion: {
+      opening: "这份材料真正值得抓的是循环动力。",
+      question: "水循环最基本的动力来源是什么？",
     },
   };
+}
+
+async function expectLatestVitaMessage(...parts: string[]) {
+  await waitFor(() => {
+    const latestMessage = screen.getAllByLabelText("维塔的消息").at(-1);
+    expect(latestMessage).toBeDefined();
+    for (const part of parts) expect(latestMessage).toHaveTextContent(part);
+  });
 }
 
 afterEach(async () => {
@@ -220,7 +229,7 @@ describe("主工作区", () => {
     expect(await screen.findByRole("heading", { name: "水循环复习" })).toBeVisible();
   });
 
-  it("上传文本后显示完整主题入口和自然开场", async () => {
+  it("上传文本后显示完整主题入口、材料判断和首个问题", async () => {
     const { repository } = setup();
     const processor: TextMaterialProcessor = async (_file, onProgress) => {
       onProgress({ stage: "AUDITING", startedAt: Date.now() });
@@ -239,9 +248,10 @@ describe("主工作区", () => {
       },
     });
 
-    expect(
-      await screen.findByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？"),
-    ).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
     expect(screen.getByText("自然水循环")).toBeVisible();
     expect(screen.getAllByText("循环动力").length).toBeGreaterThan(0);
     expect(screen.getAllByText("学习中").length).toBeGreaterThan(0);
@@ -343,7 +353,7 @@ describe("主工作区", () => {
       existing.id,
       existingResult.parsedText,
       existingResult.knowledgeMap,
-      existingResult.topicOpening,
+      existingResult.firstQuestion,
     );
     let finishProcessing!: (result: ReturnType<typeof processingResult>) => void;
     const processor: TextMaterialProcessor = async (_file, onProgress) => {
@@ -354,7 +364,10 @@ describe("主工作区", () => {
     };
 
     render(<WorkspaceApp processor={processor} repository={repository} />);
-    await screen.findByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？");
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
     fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
       target: {
         files: [new File(["新材料"], "new.md", { type: "text/markdown" })],
@@ -363,12 +376,15 @@ describe("主工作区", () => {
     await screen.findByText("正在核对整份材料");
 
     fireEvent.click(screen.getByRole("button", { name: `打开任务 ${existing.title}` }));
-    await screen.findByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？");
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
     finishProcessing(processingResult());
 
     await waitFor(async () =>
       expect(await repository.listTasks()).toContainEqual(
-        expect.objectContaining({ fileName: "new.md", status: "READY" }),
+        expect.objectContaining({ fileName: "new.md", status: "IN_PROGRESS" }),
       ),
     );
     await waitFor(() =>
@@ -376,8 +392,9 @@ describe("主工作区", () => {
         document.querySelector<HTMLInputElement>("#workspace-upload"),
       ).not.toBeDisabled(),
     );
-    expect(
-      screen.getByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？"),
-    ).toBeVisible();
+    await expectLatestVitaMessage(
+      "这份材料真正值得抓的是循环动力。",
+      "水循环最基本的动力来源是什么？",
+    );
   });
 });

@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentClientError } from "@/features/materials/agent-client";
 import {
-  createTopicOpening,
+  createFirstQuestion,
   requestHint as runHintTurn,
   respondToUser,
   revealStageAnswer,
   type DiagnosticAgentCall,
 } from "@/features/diagnostic/diagnostic-turn";
 import { MaterialFileError } from "@/features/materials/material-file";
+import type { FirstQuestion } from "@/domain/knowledge-map/contracts";
 import { MaterialParseError } from "@/features/materials/parsed-material";
 import {
   processTextMaterial,
@@ -248,7 +249,7 @@ export function useWorkspace(
         task.id,
         result.parsedText,
         result.knowledgeMap,
-        result.topicOpening,
+        result.firstQuestion,
       );
     } catch (reason) {
       await repository.failTaskProcessing(
@@ -506,7 +507,7 @@ export function useWorkspace(
     try {
       await draftWrite.current;
       const existing = learningData.sessions.some((stored) => stored.nodeId === nodeId);
-      let question: string | undefined;
+      let question: FirstQuestion | undefined;
       if (!existing) {
         const itemIds = new Set(node.knowledgeItemIds);
         const input = {
@@ -523,9 +524,9 @@ export function useWorkspace(
           learningGoal: learningData.task.learningGoal ?? null,
         };
         const output = diagnosticAgent
-          ? await createTopicOpening(input, diagnosticAgent)
-          : await createTopicOpening(input);
-        question = output.assistantMessage;
+          ? await createFirstQuestion(input, diagnosticAgent)
+          : await createFirstQuestion(input);
+        question = output;
       }
       await repository.openNode(learningData.task.id, nodeId, question);
       await reloadTasks();

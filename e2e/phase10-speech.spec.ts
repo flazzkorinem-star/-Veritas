@@ -60,9 +60,10 @@ function mockAgent(route: Route) {
           },
         ],
       });
-    case "CREATE_TOPIC_OPENING":
+    case "CREATE_FIRST_QUESTION":
       return reply(route, {
-        assistantMessage: "这份材料主要讲太阳能如何驱动水循环。",
+        opening: "这份材料主要讲太阳能如何驱动水循环。",
+        question: "水循环最基本的动力来源是什么？",
       });
     case "RESPOND_TO_USER":
       expect(request.input?.userMessage).toBe("太阳能驱动水蒸发并进入大气");

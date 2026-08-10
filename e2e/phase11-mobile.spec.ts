@@ -87,9 +87,10 @@ function mockAgent(route: Route) {
           },
         ],
       });
-    case "CREATE_TOPIC_OPENING":
+    case "CREATE_FIRST_QUESTION":
       return reply(route, {
-        assistantMessage: `这份材料的重点是水循环动力。${"移动端长文本".repeat(16)}。`,
+        opening: `这份材料的重点是水循环动力。${"移动端长文本".repeat(16)}。`,
+        question: "水循环最基本的动力来源是什么？",
       });
     case "RESPOND_TO_USER":
       if (request.input.diagnostic?.status === "NOT_STARTED") {

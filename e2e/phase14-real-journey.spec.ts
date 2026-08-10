@@ -133,7 +133,7 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
   for (const operation of [
     "EXTRACT_KNOWLEDGE",
     "AUDIT_KNOWLEDGE_MAP",
-    "CREATE_TOPIC_OPENING",
+    "CREATE_FIRST_QUESTION",
     "RESPOND_TO_USER",
     "CREATE_HINT",
     "CREATE_STAGE_ANSWER",

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-import { knowledgeMapSchema, topicOpeningSchema } from "@/domain/knowledge-map/contracts";
-import { createNodeSession } from "@/domain/diagnostic/reducer";
+import { firstQuestionSchema, knowledgeMapSchema } from "@/domain/knowledge-map/contracts";
+import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
+import type { FirstQuestion } from "@/domain/knowledge-map/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
 import type { StageKey } from "@/domain/types";
@@ -242,20 +243,20 @@ export function createTaskRepository(database: VeritasDatabase) {
       taskId: string,
       parsedText: string,
       mapValue: unknown,
-      openingValue: unknown,
+      questionValue: unknown,
     ) {
       return run(async () => {
         const task = await getExistingTask(taskId);
         const material = await database.materials.get(taskId);
         const knowledgeMap = knowledgeMapSchema.safeParse(mapValue);
-        const topicOpening = topicOpeningSchema.safeParse(openingValue);
+        const firstQuestion = firstQuestionSchema.safeParse(questionValue);
         if (
           task.status !== "PROCESSING" ||
           !material ||
           !parsedText.trim() ||
           parsedText.length > 300_000 ||
           !knowledgeMap.success ||
-          !topicOpening.success
+          !firstQuestion.success
         ) {
           throw new LocalStoreError(
             "RELATION_MISMATCH",
@@ -269,10 +270,13 @@ export function createTaskRepository(database: VeritasDatabase) {
           throw new LocalStoreError("RELATION_MISMATCH", "材料中没有可保存的学习主题。");
         }
         const now = new Date().toISOString();
-        const session = createNodeSession(firstNode.id);
+        const session = diagnosticReducer(createNodeSession(firstNode.id), {
+          type: "START_STAGE",
+          question: firstQuestion.data.question,
+        });
         const updatedTask = parseTask({
           ...task,
-          status: "READY",
+          status: "IN_PROGRESS",
           currentNodeId: firstNode.id,
           failureReason: undefined,
           updatedAt: now,
@@ -306,7 +310,7 @@ export function createTaskRepository(database: VeritasDatabase) {
               taskId,
               nodeId: firstNode.id,
               role: "ASSISTANT",
-              content: topicOpening.data.assistantMessage,
+              content: `${firstQuestion.data.opening}\n\n${firstQuestion.data.question}`,
               createdAt: now,
             });
             await database.uiStates.put({
@@ -580,7 +584,7 @@ export function createTaskRepository(database: VeritasDatabase) {
       );
     },
 
-    openNode(taskId: string, nodeId: string, assistantMessage?: string) {
+    openNode(taskId: string, nodeId: string, firstQuestion?: FirstQuestion) {
       return run(() =>
         database.transaction(
           "rw",
@@ -600,17 +604,20 @@ export function createTaskRepository(database: VeritasDatabase) {
             const now = new Date().toISOString();
             let session = await database.sessions.get([taskId, nodeId]);
             if (!session) {
-              const opening = assistantMessage?.trim();
-              if (!opening || opening.length > 2_000) {
+              const parsedQuestion = firstQuestionSchema.safeParse(firstQuestion);
+              if (!parsedQuestion.success) {
                 throw new LocalStoreError(
                   "RELATION_MISMATCH",
-                  "新主题需要一条有效的开场消息。",
+                  "新主题需要一条有效的首问。",
                 );
               }
               session = {
                 taskId,
                 nodeId,
-                session: createNodeSession(nodeId),
+                session: diagnosticReducer(createNodeSession(nodeId), {
+                  type: "START_STAGE",
+                  question: parsedQuestion.data.question,
+                }),
                 scaffoldEvents: [],
               };
               await database.sessions.put(session);
@@ -619,7 +626,7 @@ export function createTaskRepository(database: VeritasDatabase) {
                 taskId,
                 nodeId,
                 role: "ASSISTANT",
-                content: opening,
+                content: `${parsedQuestion.data.opening}\n\n${parsedQuestion.data.question}`,
                 createdAt: now,
               });
             }

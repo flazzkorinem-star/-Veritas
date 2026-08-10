@@ -87,19 +87,20 @@ describe("材料处理仓储", () => {
     database.close();
   });
 
-  it("一次事务保存知识地图、主题开场、未启动诊断会话和选中主题", async () => {
+  it("一次事务保存知识地图、首问、活动诊断会话和选中主题", async () => {
     const { database, repository } = setup();
     const task = await repository.createProcessingTask(
       new File(["材料"], "notes.txt", { type: "text/plain" }),
     );
 
     await repository.completeTextProcessing(task.id, "材料", knowledgeMap, {
-      assistantMessage: "这份材料的重点是循环动力。你想先讨论，还是检验一下理解？",
+      opening: "这份材料真正值得抓的是循环动力。",
+      question: "水循环最基本的动力来源是什么？",
     });
     const learning = await repository.getTaskLearningData(task.id);
 
     expect(learning.task).toMatchObject({
-      status: "READY",
+      status: "IN_PROGRESS",
       currentNodeId: "node-1",
     });
     expect(learning.material).toMatchObject({
@@ -107,13 +108,14 @@ describe("材料处理仓储", () => {
       nodes: knowledgeMap.nodes,
     });
     expect(learning.session?.session.stages.MEMORY).toMatchObject({
-      status: "LOCKED",
-      mainQuestion: null,
+      status: "ACTIVE",
+      mainQuestion: "水循环最基本的动力来源是什么？",
     });
     expect(learning.messages).toHaveLength(1);
     expect(learning.messages[0]).toMatchObject({
       role: "ASSISTANT",
-      content: "这份材料的重点是循环动力。你想先讨论，还是检验一下理解？",
+      content:
+        "这份材料真正值得抓的是循环动力。\n\n水循环最基本的动力来源是什么？",
     });
     await expect(database.uiStates.get(task.id)).resolves.toMatchObject({
       selectedNodeId: "node-1",

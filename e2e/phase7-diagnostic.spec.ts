@@ -68,9 +68,10 @@ function mockAgent(route: Route) {
           },
         ],
       });
-    case "CREATE_TOPIC_OPENING":
+    case "CREATE_FIRST_QUESTION":
       return fulfill(route, {
-        assistantMessage: "这份材料的重点是循环动力。你可以先问我，也可以让我考考你。",
+        opening: "这份材料真正值得抓的是循环动力。",
+        question: "水循环的主要动力是什么？",
       });
     case "CREATE_HINT":
       return fulfill(route, {

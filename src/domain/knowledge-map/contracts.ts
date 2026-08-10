@@ -150,10 +150,18 @@ export const knowledgeMapSchema = z
     }
   });
 
-export const topicOpeningSchema = z
-  .object({ assistantMessage: z.string().trim().min(1).max(2_000) })
+export const firstQuestionSchema = z
+  .object({
+    opening: z
+      .string()
+      .trim()
+      .min(1)
+      .max(600)
+      .refine((value) => !/[?？]/.test(value), "开场必须是陈述句。"),
+    question: z.string().trim().min(1).max(600),
+  })
   .strict();
 
 export type KnowledgeMap = z.infer<typeof knowledgeMapSchema>;
 export type ChunkExtraction = z.infer<typeof chunkExtractionSchema>;
-export type TopicOpening = z.infer<typeof topicOpeningSchema>;
+export type FirstQuestion = z.infer<typeof firstQuestionSchema>;
