@@ -50,6 +50,8 @@ export function WorkspaceApp({
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [dialogReturnFocus, setDialogReturnFocus] = useState<HTMLElement | null>(null);
+  const uploadDisabled = workspace.isImporting;
 
   useEffect(() => {
     const close = () => {
@@ -58,6 +60,10 @@ export function WorkspaceApp({
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (openMenuId) {
+          setOpenMenuId(null);
+          return;
+        }
         close();
         if (window.history.state?.veritasOverlay) window.history.back();
       }
@@ -68,7 +74,7 @@ export function WorkspaceApp({
       window.removeEventListener("popstate", close);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [openMenuId]);
 
   function openOverlay(panel: Exclude<MobilePanel, null> | "REPORT") {
     if (!mobilePanel && !reportOpen) {
@@ -100,11 +106,13 @@ export function WorkspaceApp({
   }
 
   function openRename(task: StoredTask) {
+    setDialogReturnFocus(document.activeElement as HTMLElement | null);
     setOpenMenuId(null);
     setRenameTask(task);
   }
 
   function openDelete(task: StoredTask) {
+    setDialogReturnFocus(document.activeElement as HTMLElement | null);
     setOpenMenuId(null);
     setDeleteTask(task);
   }
@@ -142,21 +150,25 @@ export function WorkspaceApp({
         reportTaskIds={workspace.reportTaskIds}
         search={workspace.search}
         tasks={workspace.tasks}
-        uploadDisabled={workspace.isImporting}
+        uploadDisabled={uploadDisabled}
       />
       <LearningPanels
         key={`${workspace.activeTask?.id ?? "empty"}:${workspace.activeTask?.currentNodeId ?? "none"}`}
         activeTask={workspace.activeTask}
+        canCancelProcessing={workspace.canCancelProcessing}
         learningData={workspace.learningData}
         mobilePanel={mobilePanel}
         onClosePanel={closeOverlay}
-        onCancelProcessing={workspace.cancelProcessing}
-        onCancelTurn={workspace.cancelDiagnosticTurn}
+        onCancelProcessing={() => {
+          if (workspace.activeTask) {
+            workspace.cancelProcessing(workspace.activeTask.id);
+          }
+        }}
         onOpenPanel={openOverlay}
         onRequestHint={() => void workspace.requestHint()}
         onRevealAnswer={() => void workspace.revealAnswer()}
         onSelectNode={(nodeId) => void workspace.selectNode(nodeId)}
-        onSendAnswer={(content) => void workspace.sendAnswer(content)}
+        onSendMessage={(content) => void workspace.sendMessage(content)}
         onDraftChange={(content) => void workspace.saveDraft(content)}
         onRetry={() => {
           if (workspace.activeTask) {
@@ -168,7 +180,7 @@ export function WorkspaceApp({
         isResponding={workspace.isResponding}
         isGeneratingReport={workspace.isGeneratingReport}
         pendingUserMessage={workspace.pendingUserMessage}
-        uploadDisabled={workspace.isImporting}
+        uploadDisabled={uploadDisabled}
         onOpenReport={() => openOverlay("REPORT")}
         speechRecognitionFactory={speechRecognitionFactory}
       />
@@ -226,6 +238,7 @@ export function WorkspaceApp({
             void workspace.renameTask(renameTask.id, title);
             setRenameTask(null);
           }}
+          returnFocus={dialogReturnFocus}
           task={renameTask}
         />
       ) : null}
@@ -236,6 +249,7 @@ export function WorkspaceApp({
             void workspace.deleteTask(deleteTask.id);
             setDeleteTask(null);
           }}
+          returnFocus={dialogReturnFocus}
           task={deleteTask}
         />
       ) : null}

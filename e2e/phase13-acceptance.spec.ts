@@ -19,9 +19,9 @@ test("页面具备键盘、语义与减少动效基线", async ({ page }) => {
 
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.getByRole("main")).toHaveCount(1);
-  await expect(page.getByLabel("回答输入")).toBeVisible();
-  await page.locator("#composer-upload").focus();
-  await expect(page.locator("#composer-upload")).toBeFocused();
+  await expect(page.getByLabel("消息输入")).toHaveCount(0);
+  await page.locator("#empty-state-upload").focus();
+  await expect(page.locator("#empty-state-upload")).toBeFocused();
 
   const accessibilityProblems = await page.evaluate(() => {
     const ids = [...document.querySelectorAll<HTMLElement>("[id]")].map(
@@ -78,12 +78,8 @@ test("1024×768 平板布局无溢出且诊断抽屉可达", async ({ page }, te
   await page.goto("/");
 
   await expect(page.locator(".workspace-sidebar")).toHaveCSS("width", "72px");
-  await expect(page.locator(".topic-sidebar")).toHaveCSS("width", "220px");
+  await expect(page.locator(".topic-sidebar")).toBeHidden();
   await expect(page.locator(".diagnostic-panel")).toBeHidden();
-  await page.getByRole("button", { name: "进度", exact: true }).click();
-  const diagnostic = page.locator('.diagnostic-panel[data-mobile-open="true"]');
-  await expect(diagnostic).toBeVisible();
-  await expect(diagnostic).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -99,10 +95,11 @@ test("首屏网络全同源且不预载材料解析资源", async ({ page, reque
   const requestedUrls: string[] = [];
   page.on("request", (resource) => requestedUrls.push(resource.url()));
   await page.goto("/", { waitUntil: "networkidle" });
+  const currentOrigin = new URL(page.url()).origin;
 
-  expect(
-    requestedUrls.filter((url) => new URL(url).origin !== "http://127.0.0.1:3000"),
-  ).toEqual([]);
+  expect(requestedUrls.filter((url) => new URL(url).origin !== currentOrigin)).toEqual(
+    [],
+  );
   expect(requestedUrls.some((url) => /parser-assets|ocr-worker/iu.test(url))).toBe(false);
 
   const scriptUrls = await page

@@ -23,17 +23,21 @@
 - `SECURITY.md`：安全实现与测试底线。
 - `归档文件/`：只保存历史探索、首版实施过程和早期参考；日常开发不得读取、搜索或引用。
 - `docs/acceptance/first-e2e.md`：首条纵向验收材料的预期行为。
-- `docs/brand/vita-assets.md`：记录维塔原创身份锁、七态动作与透明资产处理方式。
+- `docs/brand/vita-assets.md`：记录维塔最终身份锁、七态动作、聊天头像与资产来源。
 - `tests/fixtures/end-to-end/water-cycle.md`：首条纵向验收用 Markdown 材料。
-- `public/vita/*.png`：维塔默认、等待上传、处理中、给提示、鼓励、展示答案和错误七态透明图片。
+- `public/vita/*-final.png`、`*-avatar-final.png`：从最终维塔母版直接提取的七态动作与聊天近景头像。
+- `public/vita/waiting-hd.png`：空任务状态使用的高清欢迎动作，避免放大小尺寸裁图造成模糊。
+- `public/vita/error-full.png`：失败状态使用的完整全身扩展稿，避免近景源素材在空状态中呈现为裁切角色。
+- `public/brand/veritas-book-sprout-final.png`：从最终维塔母版直接提取的“打开的书 + 小芽”品牌符号。
 - `public/ocr-worker.js`：启动同源 Tesseract Worker，并只过滤官方语言数据产生的已知无害参数警告。
 
 ## 源代码
 
 - `src/app/layout.tsx`：全局 HTML 外壳与页面元数据。
 - `src/app/page.tsx`：挂载本地学习工作区。
-- `src/app/globals.css`：全局令牌、四列工作区、语音状态、报告与打印页面，以及含安全区、横竖屏、软键盘边界和长列表离屏渲染优化的移动端布局。
+- `src/app/globals.css`：全局令牌、两区工作区、固定视口内的消息滚动与输入区、按需主题/进度浮层、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
+- `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、路由总并发数、材料处理总预算、模型阶段预算和 Agent 1 分块并发数。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
@@ -41,10 +45,10 @@
 - `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约。
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
-- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属与首问。
-- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、诊断教学与报告操作。
-- `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验回答分类、证据、误解、教学动作、支架、问题、提示与答案。
-- `src/domain/report/contracts.ts`：校验 Agent 3 输入与洞察结构，并拒绝伪造用户原话、支架和来源引用。
+- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属与自然主题开场。
+- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助与报告操作，并为通用对话提供完整材料上下文。
+- `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、学习目标更新、诊断模式、回答分类、证据、误解、教学动作、问题、提示与答案。
+- `src/domain/report/contracts.ts`：校验 Agent 3 输入与洞察结构，并拒绝伪造用户原话、支架、来源引用和用户可见文案中的内部实现术语。
 - `src/domain/report/build-report.ts`：由本地确定性证据回填任务级报告，并生成转义后的 Markdown 下载文本。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
@@ -59,43 +63,45 @@
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
-- `src/features/materials/process-text-material.ts`：顺序编排多格式解析、来源分块、覆盖审计和首问生成，并传播取消信号。
-- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 回答、提示与答案回合，把所有状态转移交给唯一 reducer，并生成下一层主问题。
+- `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、覆盖审计和自然主题开场，按实际完成数报告进度、保持原文顺序并传播取消信号。
+- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；普通消息保持状态不变，诊断决策才交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时、有限重试与外部取消信号。
-- `src/server/agents/service.ts`：组装材料处理、诊断教学与报告的隔离提示，独立校验输出并只重试受影响操作。
+- `src/server/agents/service.ts`：组装材料处理、通用 Vita 对话、诊断辅助与报告的隔离提示，独立校验输出、对话模式、提示级别和报告文案，并只重试受影响操作。
 - `src/features/report/generate-report.ts`：在主题完成后只汇集本任务的已验证证据，调用 Agent 3 并保存任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。
-- `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、四个可见区域、报告页面、移动抽屉、遮罩、返回行为与任务对话框。
-- `src/features/workspace/use-workspace.ts`：协调仓储读取、任务交互、诊断与报告重试，以及草稿和报告写入队列，不承载视图结构。
-- `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索、任务列表，以及含报告分享状态的单任务菜单。
-- `src/features/workspace/LearningPanels.tsx`：显示可折叠主题、节点历史、文字与语音回答、提示与答案、生成中状态、回到最新消息、下一主题入口，以及实时进度、分数和报告入口。
-- `src/features/workspace/TaskDialogs.tsx`：提供重命名与单任务删除确认对话框。
+- `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、两区主界面、按需主题/进度浮层、报告页面、移动抽屉、返回行为与任务对话框。
+- `src/features/workspace/use-workspace.ts`：协调仓储读取、通用对话、按需诊断与报告重试，以及学习目标、草稿和报告写入队列；异步处理结束前核对当前任务，避免覆盖用户已切换到的学习数据。
+- `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索和任务列表；单任务菜单通过视口级浮层避开滚动裁剪，并处理外部点击、Esc 与焦点归还。
+- `src/features/workspace/LearningPanels.tsx`：显示精简页头、白色核心对话、按需主题/进度、节点历史、通用文字与语音消息、Enter/Shift+Enter 键盘行为，以及只在诊断题激活时出现的提示与答案操作。
+- `src/features/workspace/TaskDialogs.tsx`：提供带焦点约束、Esc 关闭和焦点归还的重命名与单任务删除确认模态框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
 - `src/ui/components.css`：实现按钮、表面、消息气泡、进度条与状态标签的公共外观。
 - `src/ui/Icon.tsx`：提供当前流程需要的原创线性 SVG 图标。
+- `src/ui/BrandSymbol.tsx`：提供与 Vita 胸前一致的“打开的书 + 小芽”品牌符号。
 - `src/ui/Button.tsx`、`Card.tsx`：提供保留原生语义的基础交互与表面组件。
 - `src/ui/MessageBubble.tsx`、`ProgressBar.tsx`、`StatusBadge.tsx`：提供诊断对话与反馈基础组件。
-- `src/ui/Vita.tsx`：将七种角色状态映射到固定本地资产与替代文本。
+- `src/ui/Vita.tsx`：将七种角色状态映射到最终全身图、聊天近景头像与替代文本。
 
 ## 测试
 
-- `e2e/smoke.spec.ts`：在桌面与移动 Edge 验证区域宽度、抽屉、控制台、溢出和 IndexedDB 刷新恢复。
+- `e2e/smoke.spec.ts`：在桌面与移动 Edge 验证区域宽度、抽屉、长任务列表底部菜单完整可见、重命名模态键盘操作、控制台、溢出和 IndexedDB 刷新恢复。
 - `src/domain/diagnostic/reducer.test.ts`：固定四层顺序、计分、提示、答案、停滞与非法转移测试。
 - `src/domain/diagnostic/selectors.test.ts`：任务完成与材料主题进度的确定性派生测试。
 - `src/storage/task-repository.test.ts`：验证 schema 迁移、任务操作、跨表删除/撤销和隔离错误。
-- `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复和任务菜单交互。
+- `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复、处理中断恢复、取消和任务菜单交互。
 - `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
-- `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏与有限重试。
+- `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、有限重试与调用方取消传播。
 - `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝和操作级重试。
 - `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
-- `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首问、核心覆盖、双端布局与刷新恢复。
+- `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至自然主题开场、核心覆盖、双端布局与刷新恢复。
+- `e2e/phase5-processing-control.spec.ts`：在双端生产 Edge 中验证模型请求进行中取消可立即重试，以及处理中刷新后恢复为明确中断状态。
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
 - `src/features/diagnostic/diagnostic-turn.test.ts`：验证同题追问、答对推进、三轮停滞、三级提示与主动答案的确定性编排。
 - `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和诊断完成等待报告的事务性持久化。
@@ -111,3 +117,4 @@
 - `e2e/phase11-mobile.spec.ts`：在 390×844 生产 Edge 中从上传走到报告，并验证移动浮层、返回、软键盘、长内容、下一主题、横屏和溢出。
 - `e2e/phase12-security.spec.ts`：在双端生产 Edge 验证生产 CSP、安全响应头、API 错误脱敏、客户端静态分块秘密隔离和恶意文本纯文本渲染。
 - `e2e/phase13-acceptance.spec.ts`：在生产 Edge 验证键盘与语义基线、减少动效偏好、1024×768 平板断点、全同源首屏网络和初始 JavaScript 资源预算。
+- `e2e/phase14-real-journey.spec.ts`：显式启用时在同一个生产 Edge 任务中调用真实 DeepSeek，连续验收上传、知识地图、不知道后的家教支架、提示、四层推进、未诊断范围和报告。

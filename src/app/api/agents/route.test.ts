@@ -34,10 +34,18 @@ describe("同源 Agent API", () => {
   });
 
   it("只把通过边界校验的操作交给服务端 Agent", async () => {
-    runAgentOperation.mockResolvedValue({ opening: "材料开场", question: "问题？" });
+    runAgentOperation.mockResolvedValue({ assistantMessage: "材料开场" });
     const body = JSON.stringify({
-      operation: "CREATE_FIRST_QUESTION",
-      input: { materialTitle: "材料", node: {}, knowledgeItems: [] },
+      operation: "CREATE_TOPIC_OPENING",
+      input: {
+        materialTitle: "材料",
+        modules: [],
+        knowledgeItems: [],
+        nodes: [],
+        node: {},
+        nodeKnowledgeItems: [],
+        learningGoal: null,
+      },
     });
 
     const response = await POST(request(body));
@@ -45,7 +53,7 @@ describe("同源 Agent API", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
-      result: { opening: "材料开场", question: "问题？" },
+      result: { assistantMessage: "材料开场" },
     });
     expect(runAgentOperation).toHaveBeenCalledWith(
       JSON.parse(body),

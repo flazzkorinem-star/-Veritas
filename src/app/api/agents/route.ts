@@ -1,4 +1,5 @@
 import { readServerEnv } from "@/lib/env/server";
+import { AGENT_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import { createPublicError } from "@/lib/errors/public-error";
 import { AgentServiceError, runAgentOperation } from "@/server/agents/service";
 import {
@@ -6,8 +7,6 @@ import {
   AgentRequestGuardError,
 } from "@/server/agents/request-guard";
 import { DeepSeekError } from "@/server/deepseek/client";
-
-const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
 
 function json(body: unknown, status: number) {
   return Response.json(body, {
@@ -58,12 +57,12 @@ export async function POST(request: Request) {
     return errorResponse("VALIDATION_ERROR", "请求格式必须是 JSON。", 415);
   }
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_REQUEST_BYTES) {
+  if (declaredLength > AGENT_REQUEST_MAX_BYTES) {
     return errorResponse("VALIDATION_ERROR", "请求内容过大。", 413);
   }
 
   const rawBody = await request.text();
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_REQUEST_BYTES) {
+  if (new TextEncoder().encode(rawBody).byteLength > AGENT_REQUEST_MAX_BYTES) {
     return errorResponse("VALIDATION_ERROR", "请求内容过大。", 413);
   }
 

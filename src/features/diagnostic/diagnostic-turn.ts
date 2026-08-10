@@ -1,10 +1,11 @@
 import {
-  evaluationDecisionSchema,
   hintResponseSchema,
   stageAnswerSchema,
   stageQuestionSchema,
+  userTurnDecisionSchema,
   type ScaffoldType,
 } from "@/domain/diagnostic/agent-contracts";
+import { topicOpeningSchema } from "@/domain/knowledge-map/contracts";
 import type { AgentOperationRequest } from "@/domain/agents/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import { diagnosticReducer } from "@/domain/diagnostic/reducer";
@@ -15,7 +16,11 @@ type DiagnosticRequest = Extract<
   AgentOperationRequest,
   {
     operation:
-      "CREATE_STAGE_QUESTION" | "EVALUATE_ANSWER" | "CREATE_HINT" | "CREATE_STAGE_ANSWER";
+      | "CREATE_TOPIC_OPENING"
+      | "CREATE_STAGE_QUESTION"
+      | "RESPOND_TO_USER"
+      | "CREATE_HINT"
+      | "CREATE_STAGE_ANSWER";
   }
 >;
 
@@ -27,6 +32,11 @@ export type DiagnosticAgentCall = (
 interface TurnContext {
   node: DiagnosticNode;
   knowledgeItems: KnowledgeItem[];
+  materialContext: Extract<
+    AgentOperationRequest,
+    { operation: "RESPOND_TO_USER" }
+  >["input"]["materialContext"];
+  learningGoal: string | null;
   session: NodeSession;
   recentMessages: Pick<Message, "role" | "content">[];
   signal?: AbortSignal;
@@ -42,23 +52,28 @@ export interface DiagnosticTurnResult {
   session: NodeSession;
   assistantMessages: string[];
   scaffold: ScaffoldRecord | null;
+  learningGoalUpdate: string | null;
 }
 
 const defaultAgentCall: DiagnosticAgentCall = (request, dependencies) =>
   callAgent(request, dependencies);
 
-export async function createInitialStageQuestion(
-  input: { node: DiagnosticNode; knowledgeItems: KnowledgeItem[]; signal?: AbortSignal },
+export async function createTopicOpening(
+  input: Pick<
+    TurnContext,
+    "node" | "knowledgeItems" | "materialContext" | "learningGoal" | "signal"
+  >,
   agent: DiagnosticAgentCall = defaultAgentCall,
 ) {
-  return stageQuestionSchema.parse(
+  return topicOpeningSchema.parse(
     await agent(
       {
-        operation: "CREATE_STAGE_QUESTION",
+        operation: "CREATE_TOPIC_OPENING",
         input: {
           node: input.node,
           knowledgeItems: input.knowledgeItems,
-          stage: "MEMORY",
+          materialContext: input.materialContext,
+          learningGoal: input.learningGoal,
         },
       },
       { signal: input.signal },
@@ -78,7 +93,8 @@ function commonInput(context: TurnContext) {
   return {
     node: context.node,
     knowledgeItems: context.knowledgeItems,
-    recentMessages: context.recentMessages.slice(-12),
+    learningGoal: context.learningGoal,
+    recentMessages: context.recentMessages.slice(-20),
   };
 }
 
@@ -97,6 +113,7 @@ async function startNextStage(
         input: {
           node: context.node,
           knowledgeItems: context.knowledgeItems,
+          learningGoal: context.learningGoal,
           stage: session.currentStage,
         },
       },
@@ -112,25 +129,59 @@ async function startNextStage(
   };
 }
 
-export async function submitDiagnosticAnswer(
-  context: TurnContext & { userAnswer: string },
+export async function respondToUser(
+  context: TurnContext & { userMessage: string },
   agent: DiagnosticAgentCall = defaultAgentCall,
 ): Promise<DiagnosticTurnResult> {
-  const current = activeQuestion(context.session);
-  const decision = evaluationDecisionSchema.parse(
+  const currentStage = context.session.stages[context.session.currentStage];
+  const diagnosticStatus =
+    context.session.status === "COMPLETED"
+      ? "COMPLETED"
+      : currentStage.status === "ACTIVE"
+        ? "ACTIVE"
+        : "NOT_STARTED";
+  const decision = userTurnDecisionSchema.parse(
     await agent(
       {
-        operation: "EVALUATE_ANSWER",
+        operation: "RESPOND_TO_USER",
         input: {
           ...commonInput(context),
-          stage: current.stage,
-          mainQuestion: current.question,
-          userAnswer: context.userAnswer,
+          materialContext: context.materialContext,
+          diagnostic: {
+            status: diagnosticStatus,
+            stage: context.session.currentStage,
+            mainQuestion:
+              currentStage.status === "ACTIVE" ? currentStage.mainQuestion : null,
+          },
+          userMessage: context.userMessage,
         },
       },
       { signal: context.signal },
     ),
   );
+
+  if (decision.responseMode === "CONVERSATION") {
+    return {
+      session: context.session,
+      assistantMessages: [decision.assistantMessage],
+      scaffold: null,
+      learningGoalUpdate: decision.learningGoalUpdate,
+    };
+  }
+
+  if (decision.responseMode === "START_DIAGNOSTIC") {
+    return {
+      session: diagnosticReducer(context.session, {
+        type: "START_STAGE",
+        question: decision.question,
+      }),
+      assistantMessages: [decision.assistantMessage, decision.question],
+      scaffold: null,
+      learningGoalUpdate: decision.learningGoalUpdate,
+    };
+  }
+
+  const current = activeQuestion(context.session);
   let session = diagnosticReducer(context.session, {
     type: "ANSWER_EVALUATED",
     outcome: decision,
@@ -158,7 +209,11 @@ export async function submitDiagnosticAnswer(
   }
 
   if (session.currentStage !== current.stage) {
-    const next = await startNextStage(context, session, agent);
+    const next = await startNextStage(
+      { ...context, learningGoal: decision.learningGoalUpdate ?? context.learningGoal },
+      session,
+      agent,
+    );
     session = next.session;
     if (next.question) assistantMessages.push(next.question);
   }
@@ -167,6 +222,7 @@ export async function submitDiagnosticAnswer(
     session,
     assistantMessages,
     scaffold: decision.scaffold ? { stage: current.stage, ...decision.scaffold } : null,
+    learningGoalUpdate: decision.learningGoalUpdate,
   };
 }
 
@@ -193,7 +249,12 @@ export async function requestHint(
     ),
   );
   if (hint.hintLevel !== hintLevel) throw new Error("模型返回了错误的提示级别。");
-  return { session, assistantMessages: [hint.assistantMessage], scaffold: null };
+  return {
+    session,
+    assistantMessages: [hint.assistantMessage],
+    scaffold: null,
+    learningGoalUpdate: null,
+  };
 }
 
 export async function revealStageAnswer(
@@ -219,5 +280,5 @@ export async function revealStageAnswer(
   const next = await startNextStage(context, session, agent);
   session = next.session;
   if (next.question) assistantMessages.push(next.question);
-  return { session, assistantMessages, scaffold: null };
+  return { session, assistantMessages, scaffold: null, learningGoalUpdate: null };
 }

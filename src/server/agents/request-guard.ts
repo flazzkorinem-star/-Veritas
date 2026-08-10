@@ -1,6 +1,7 @@
+import { AGENT_MAX_CONCURRENT_REQUESTS } from "@/config/agent-limits";
+
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
-const MAX_CONCURRENT_REQUESTS = 2;
 
 const requestTimes = new Map<string, number[]>();
 let activeRequests = 0;
@@ -19,7 +20,7 @@ export function acquireAgentRequest(clientId: string, now = Date.now()) {
   if (recent.length >= MAX_REQUESTS_PER_WINDOW) {
     throw new AgentRequestGuardError("RATE_LIMITED");
   }
-  if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
+  if (activeRequests >= AGENT_MAX_CONCURRENT_REQUESTS) {
     throw new AgentRequestGuardError("CONCURRENCY_LIMITED");
   }
   recent.push(now);

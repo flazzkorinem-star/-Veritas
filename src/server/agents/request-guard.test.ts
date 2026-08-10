@@ -5,19 +5,23 @@ import { acquireAgentRequest, resetAgentRequestGuardForTests } from "./request-g
 describe("Agent 请求保护", () => {
   beforeEach(resetAgentRequestGuardForTests);
 
-  it("全局最多允许两个并发请求，释放后恢复容量", () => {
+  it("允许两路提取与报告、诊断同时运行，并在第五个请求时保护容量", () => {
     const releaseFirst = acquireAgentRequest("client-a", 1_000);
     const releaseSecond = acquireAgentRequest("client-b", 1_000);
+    const releaseThird = acquireAgentRequest("client-c", 1_000);
+    const releaseFourth = acquireAgentRequest("client-d", 1_000);
 
-    expect(() => acquireAgentRequest("client-c", 1_000)).toThrow(
+    expect(() => acquireAgentRequest("client-e", 1_000)).toThrow(
       expect.objectContaining({ code: "CONCURRENCY_LIMITED" }),
     );
     releaseFirst();
     releaseFirst();
-    const releaseThird = acquireAgentRequest("client-c", 1_001);
+    const releaseFifth = acquireAgentRequest("client-e", 1_001);
 
     releaseSecond();
     releaseThird();
+    releaseFourth();
+    releaseFifth();
   });
 
   it("单客户端一分钟内最多提交三十次，并在窗口后恢复", () => {

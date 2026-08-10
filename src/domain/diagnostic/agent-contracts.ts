@@ -23,33 +23,76 @@ export const SCAFFOLD_TYPES = [
 
 const evidenceSchema = z.string().trim().min(1).max(600);
 const evidenceListSchema = z.array(evidenceSchema).max(12);
-const assistantMessageSchema = z.string().trim().min(1).max(2_000);
+const assistantMessageSchema = z.string().trim().min(1).max(8_000);
+
+const evaluationFields = {
+  classification: z.enum(ANSWER_CLASSIFICATIONS),
+  isCorrect: z.boolean(),
+  progress: z.enum(["ADVANCING", "STALLED"]),
+  correctEvidence: evidenceListSchema,
+  missingPoints: evidenceListSchema,
+  misconceptions: evidenceListSchema,
+  teachingMove: z.enum(TEACHING_MOVES),
+  scaffold: z
+    .object({
+      type: z.enum(SCAFFOLD_TYPES),
+      reason: evidenceSchema,
+    })
+    .strict()
+    .nullable(),
+} as const;
+
+function validateEvaluation(
+  value: { classification: string; isCorrect: boolean; progress: string },
+  context: z.core.$RefinementCtx,
+) {
+  if (value.isCorrect !== (value.classification === "CORRECT")) {
+    context.addIssue({ code: "custom", message: "正确性与回答分类矛盾。" });
+  }
+  if (value.isCorrect && value.progress !== "ADVANCING") {
+    context.addIssue({ code: "custom", message: "正确回答必须代表有进展。" });
+  }
+}
 
 export const evaluationDecisionSchema = z
   .object({
-    classification: z.enum(ANSWER_CLASSIFICATIONS),
-    isCorrect: z.boolean(),
-    progress: z.enum(["ADVANCING", "STALLED"]),
-    correctEvidence: evidenceListSchema,
-    missingPoints: evidenceListSchema,
-    misconceptions: evidenceListSchema,
-    teachingMove: z.enum(TEACHING_MOVES),
-    scaffold: z
-      .object({
-        type: z.enum(SCAFFOLD_TYPES),
-        reason: evidenceSchema,
-      })
-      .strict()
-      .nullable(),
+    ...evaluationFields,
     assistantMessage: assistantMessageSchema,
   })
   .strict()
+  .superRefine(validateEvaluation);
+
+const learningGoalUpdateSchema = z.string().trim().min(1).max(500).nullable();
+
+export const userTurnDecisionSchema = z
+  .discriminatedUnion("responseMode", [
+    z
+      .object({
+        responseMode: z.literal("CONVERSATION"),
+        learningGoalUpdate: learningGoalUpdateSchema,
+        assistantMessage: assistantMessageSchema,
+      })
+      .strict(),
+    z
+      .object({
+        responseMode: z.literal("START_DIAGNOSTIC"),
+        learningGoalUpdate: learningGoalUpdateSchema,
+        assistantMessage: assistantMessageSchema,
+        question: z.string().trim().min(1).max(600),
+      })
+      .strict(),
+    z
+      .object({
+        responseMode: z.literal("EVALUATE_DIAGNOSTIC"),
+        learningGoalUpdate: learningGoalUpdateSchema,
+        ...evaluationFields,
+        assistantMessage: assistantMessageSchema,
+      })
+      .strict(),
+  ])
   .superRefine((value, context) => {
-    if (value.isCorrect !== (value.classification === "CORRECT")) {
-      context.addIssue({ code: "custom", message: "正确性与回答分类矛盾。" });
-    }
-    if (value.isCorrect && value.progress !== "ADVANCING") {
-      context.addIssue({ code: "custom", message: "正确回答必须代表有进展。" });
+    if (value.responseMode === "EVALUATE_DIAGNOSTIC") {
+      validateEvaluation(value, context);
     }
   });
 
@@ -71,6 +114,7 @@ export const stageAnswerSchema = z
 export type TeachingMove = (typeof TEACHING_MOVES)[number];
 export type ScaffoldType = (typeof SCAFFOLD_TYPES)[number];
 export type EvaluationDecision = z.infer<typeof evaluationDecisionSchema>;
+export type UserTurnDecision = z.infer<typeof userTurnDecisionSchema>;
 export type StageQuestion = z.infer<typeof stageQuestionSchema>;
 export type HintResponse = z.infer<typeof hintResponseSchema>;
 export type StageAnswer = z.infer<typeof stageAnswerSchema>;

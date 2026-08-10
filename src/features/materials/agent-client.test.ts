@@ -81,4 +81,24 @@ describe("浏览器 Agent 客户端", () => {
       message: "请求较多，请稍等片刻再试。",
     });
   });
+
+  it("请求体超过同源 API 上限时不发送网络请求", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.json({ result: extraction }, { status: 200 }));
+
+    await expect(
+      callAgent(
+        {
+          operation: "EXTRACT_KNOWLEDGE",
+          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
+        },
+        { fetchImpl, maxRequestBytes: 10 },
+      ),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "提交给模型的内容过大，请拆分材料后重试。",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

@@ -39,7 +39,7 @@ function reply(route: Route, result: unknown) {
 function mockAgent(route: Route) {
   const request = route.request().postDataJSON() as {
     operation: string;
-    input?: { userAnswer?: string };
+    input?: { userMessage?: string };
   };
   switch (request.operation) {
     case "EXTRACT_KNOWLEDGE":
@@ -60,26 +60,17 @@ function mockAgent(route: Route) {
           },
         ],
       });
-    case "CREATE_FIRST_QUESTION":
+    case "CREATE_TOPIC_OPENING":
       return reply(route, {
-        opening: "先从循环的动力看。",
-        question: "水循环的主要动力是什么？",
+        assistantMessage: "这份材料主要讲太阳能如何驱动水循环。",
       });
-    case "EVALUATE_ANSWER":
-      expect(request.input?.userAnswer).toBe("太阳能驱动水蒸发并进入大气");
+    case "RESPOND_TO_USER":
+      expect(request.input?.userMessage).toBe("太阳能驱动水蒸发并进入大气");
       return reply(route, {
-        classification: "CORRECT",
-        isCorrect: true,
-        progress: "ADVANCING",
-        correctEvidence: ["说出太阳能与蒸发"],
-        missingPoints: [],
-        misconceptions: [],
-        teachingMove: "AFFIRM_AND_ADVANCE",
-        scaffold: null,
+        responseMode: "CONVERSATION",
+        learningGoalUpdate: null,
         assistantMessage: "对，你已经把动力和蒸发联系起来了。",
       });
-    case "CREATE_STAGE_QUESTION":
-      return reply(route, { question: "太阳能怎样推动蒸发？" });
     default:
       throw new Error(`未处理的 Agent 操作：${request.operation}`);
   }
@@ -170,11 +161,11 @@ test("桌面与移动 Edge 通过语音转写完成一次回答", async ({ page 
       "太阳能驱动水蒸发",
     );
   });
-  await expect(page.getByLabel("回答输入")).toHaveValue("太阳能驱动水蒸发");
+  await expect(page.getByLabel("消息输入")).toHaveValue("太阳能驱动水蒸发");
   await page.getByRole("button", { name: "停止语音输入" }).click();
   await expect(page.getByRole("button", { name: "开始语音输入" })).toBeVisible();
-  await page.getByLabel("回答输入").fill("太阳能驱动水蒸发并进入大气");
-  await page.getByRole("button", { name: "发送回答" }).click();
+  await page.getByLabel("消息输入").fill("太阳能驱动水蒸发并进入大气");
+  await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.getByText("对，你已经把动力和蒸发联系起来了。")).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath(`phase10-speech-${testInfo.project.name}.png`),
@@ -192,8 +183,8 @@ test("麦克风权限被拒绝时保留文字输入", async ({ page }, testInfo)
     mimeType: "text/markdown",
     buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发。"),
   });
-  await page.getByLabel("回答输入").fill("已经写好的回答");
+  await page.getByLabel("消息输入").fill("已经写好的回答");
   await page.getByRole("button", { name: "开始语音输入" }).click();
   await expect(page.locator(".speech-error")).toContainText("没有获得麦克风权限");
-  await expect(page.getByLabel("回答输入")).toHaveValue("已经写好的回答");
+  await expect(page.getByLabel("消息输入")).toHaveValue("已经写好的回答");
 });

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { AGENT_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import {
   type AgentOperationRequest,
   agentOperationRequestSchema,
@@ -7,20 +8,20 @@ import {
 import {
   type ChunkExtraction,
   chunkExtractionSchema,
-  type FirstQuestion,
-  firstQuestionSchema,
   type KnowledgeMap,
   knowledgeMapSchema,
+  type TopicOpening,
+  topicOpeningSchema,
 } from "@/domain/knowledge-map/contracts";
 import {
-  type EvaluationDecision,
-  evaluationDecisionSchema,
   type HintResponse,
   hintResponseSchema,
   type StageAnswer,
   stageAnswerSchema,
   type StageQuestion,
   stageQuestionSchema,
+  type UserTurnDecision,
+  userTurnDecisionSchema,
 } from "@/domain/diagnostic/agent-contracts";
 import {
   type ReportAgentOutput,
@@ -43,6 +44,7 @@ export class AgentClientError extends Error {
 
 interface AgentClientDependencies {
   fetchImpl?: typeof fetch;
+  maxRequestBytes?: number;
   signal?: AbortSignal;
 }
 
@@ -53,13 +55,13 @@ type ExtractionRequest = Extract<
 type AuditRequest = Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>;
 type QuestionRequest = Extract<
   AgentOperationRequest,
-  { operation: "CREATE_FIRST_QUESTION" }
+  { operation: "CREATE_TOPIC_OPENING" }
 >;
 type StageQuestionRequest = Extract<
   AgentOperationRequest,
   { operation: "CREATE_STAGE_QUESTION" }
 >;
-type EvaluationRequest = Extract<AgentOperationRequest, { operation: "EVALUATE_ANSWER" }>;
+type UserTurnRequest = Extract<AgentOperationRequest, { operation: "RESPOND_TO_USER" }>;
 type HintRequest = Extract<AgentOperationRequest, { operation: "CREATE_HINT" }>;
 type AnswerRequest = Extract<AgentOperationRequest, { operation: "CREATE_STAGE_ANSWER" }>;
 type ReportRequest = Extract<AgentOperationRequest, { operation: "CREATE_REPORT" }>;
@@ -70,12 +72,12 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
       return chunkExtractionSchema;
     case "AUDIT_KNOWLEDGE_MAP":
       return knowledgeMapSchema;
-    case "CREATE_FIRST_QUESTION":
-      return firstQuestionSchema;
+    case "CREATE_TOPIC_OPENING":
+      return topicOpeningSchema;
     case "CREATE_STAGE_QUESTION":
       return stageQuestionSchema;
-    case "EVALUATE_ANSWER":
-      return evaluationDecisionSchema;
+    case "RESPOND_TO_USER":
+      return userTurnDecisionSchema;
     case "CREATE_HINT":
       return hintResponseSchema;
     case "CREATE_STAGE_ANSWER":
@@ -96,15 +98,15 @@ export function callAgent(
 export function callAgent(
   request: QuestionRequest,
   dependencies?: AgentClientDependencies,
-): Promise<FirstQuestion>;
+): Promise<TopicOpening>;
 export function callAgent(
   request: StageQuestionRequest,
   dependencies?: AgentClientDependencies,
 ): Promise<StageQuestion>;
 export function callAgent(
-  request: EvaluationRequest,
+  request: UserTurnRequest,
   dependencies?: AgentClientDependencies,
-): Promise<EvaluationDecision>;
+): Promise<UserTurnDecision>;
 export function callAgent(
   request: HintRequest,
   dependencies?: AgentClientDependencies,
@@ -123,9 +125,9 @@ export function callAgent(
 ): Promise<
   | ChunkExtraction
   | KnowledgeMap
-  | FirstQuestion
+  | TopicOpening
   | StageQuestion
-  | EvaluationDecision
+  | UserTurnDecision
   | HintResponse
   | StageAnswer
   | ReportAgentOutput
@@ -138,13 +140,23 @@ export async function callAgent(
   if (!request.success) {
     throw new AgentClientError("VALIDATION_ERROR", "提交的学习内容无效。");
   }
+  const requestBody = JSON.stringify(request.data);
+  if (
+    new TextEncoder().encode(requestBody).byteLength >
+    (dependencies.maxRequestBytes ?? AGENT_REQUEST_MAX_BYTES)
+  ) {
+    throw new AgentClientError(
+      "VALIDATION_ERROR",
+      "提交给模型的内容过大，请拆分材料后重试。",
+    );
+  }
 
   let response: Response;
   try {
     response = await (dependencies.fetchImpl ?? fetch)("/api/agents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request.data),
+      body: requestBody,
       signal: dependencies.signal,
     });
   } catch {

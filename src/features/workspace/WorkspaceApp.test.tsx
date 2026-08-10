@@ -1,6 +1,6 @@
 import Dexie from "dexie";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MaterialFileError } from "@/features/materials/material-file";
 import { WorkspaceApp } from "@/features/workspace/WorkspaceApp";
@@ -80,9 +80,8 @@ function processingResult() {
         },
       ],
     },
-    firstQuestion: {
-      opening: "先从循环的动力看。",
-      question: "水循环的主要动力是什么？",
+    topicOpening: {
+      assistantMessage: "这份材料的重点是循环动力。你想先讨论，还是检验理解？",
     },
   };
 }
@@ -98,7 +97,7 @@ describe("主工作区", () => {
     render(<WorkspaceApp repository={repository} />);
     await screen.findByRole("heading", { name: "从一份材料开始" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^任务$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "打开任务" }));
     expect(screen.getByLabelText("任务工作区")).toHaveAttribute(
       "data-mobile-open",
       "true",
@@ -111,14 +110,14 @@ describe("主工作区", () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^主题$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "打开主题" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.getByLabelText("学习主题")).toHaveAttribute(
       "data-mobile-open",
       "false",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^进度$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "打开进度" }));
     fireEvent.popState(window);
     expect(screen.getByLabelText("诊断进度")).toHaveAttribute(
       "data-mobile-open",
@@ -126,15 +125,43 @@ describe("主工作区", () => {
     );
   });
 
-  it("无任务时显示上传入口并禁用回答输入", async () => {
+  it("无任务时只显示学习材料入口，不展示无效输入和零进度", async () => {
     const { repository } = setup();
 
     render(<WorkspaceApp repository={repository} />);
 
     expect(await screen.findByRole("heading", { name: "从一份材料开始" })).toBeVisible();
-    expect(screen.getByLabelText("回答输入")).toBeDisabled();
+    expect(screen.queryByLabelText("消息输入")).toBeNull();
+    expect(screen.queryByText("0 / 0")).toBeNull();
     expect(screen.getAllByText("上传学习材料").length).toBeGreaterThan(0);
-    expect(screen.getByText("还没有学习主题")).toBeVisible();
+    expect(screen.getByText("上传材料后显示主题")).toBeVisible();
+    expect(
+      screen.queryByText("材料文字会发送给 DeepSeek；原始文件只保存在本机"),
+    ).toBeNull();
+  });
+
+  it("本地任务恢复期间仍可选择新的学习材料", async () => {
+    const { repository } = setup();
+    let finishLoading!: (tasks: StoredTask[]) => void;
+    const delayedRepository = {
+      ...repository,
+      listTasks: vi.fn(
+        () => new Promise<StoredTask[]>((resolve) => (finishLoading = resolve)),
+      ),
+    };
+
+    render(<WorkspaceApp repository={delayedRepository} />);
+
+    expect(
+      document.querySelector<HTMLInputElement>("#workspace-upload"),
+    ).not.toBeDisabled();
+    finishLoading([]);
+    await waitFor(() =>
+      expect(document.querySelector(".veritas-shell")).toHaveAttribute(
+        "aria-busy",
+        "false",
+      ),
+    );
   });
 
   it("搜索标题和文件名，并在切换后恢复当前任务", async () => {
@@ -193,7 +220,7 @@ describe("主工作区", () => {
     expect(await screen.findByRole("heading", { name: "水循环复习" })).toBeVisible();
   });
 
-  it("上传文本后显示完整主题入口和第一个真实问题", async () => {
+  it("上传文本后显示完整主题入口和自然开场", async () => {
     const { repository } = setup();
     const processor: TextMaterialProcessor = async (_file, onProgress) => {
       onProgress({ stage: "AUDITING", startedAt: Date.now() });
@@ -213,7 +240,7 @@ describe("主工作区", () => {
     });
 
     expect(
-      await screen.findByText("水循环的主要动力是什么？", { exact: false }),
+      await screen.findByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？"),
     ).toBeVisible();
     expect(screen.getByText("自然水循环")).toBeVisible();
     expect(screen.getAllByText("循环动力").length).toBeGreaterThan(0);
@@ -222,7 +249,8 @@ describe("主工作区", () => {
 
   it("材料处理失败时保留任务并显示重试入口", async () => {
     const { repository } = setup();
-    const processor: TextMaterialProcessor = async () => {
+    const processor: TextMaterialProcessor = async (_file, onProgress) => {
+      onProgress({ stage: "AUDITING", startedAt: Date.now() });
       throw new Error("上游原始敏感错误");
     };
     render(<WorkspaceApp processor={processor} repository={repository} />);
@@ -235,11 +263,37 @@ describe("主工作区", () => {
     });
 
     expect(await screen.findByText("这份材料暂时没能准备好")).toBeVisible();
-    expect(screen.getByText("暂时无法处理这份材料，请重试。")).toBeVisible();
+    expect(
+      screen.getByText("核对整份材料时失败：暂时无法处理这份材料，请重试。"),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "重新处理" })).toBeVisible();
+    expect(screen.queryByLabelText("消息输入")).toBeNull();
+    expect(screen.queryByRole("button", { name: "发送消息" })).toBeNull();
     expect(screen.queryByText("上游原始敏感错误")).toBeNull();
     await expect(repository.listTasks()).resolves.toEqual([
       expect.objectContaining({ status: "FAILED", fileName: "notes.txt" }),
+    ]);
+  });
+
+  it("刷新后把失去执行上下文的处理中任务转成可重试状态", async () => {
+    const { repository } = setup();
+    await repository.createProcessingTask(
+      new File(["材料"], "interrupted.txt", { type: "text/plain" }),
+    );
+
+    render(<WorkspaceApp repository={repository} />);
+
+    expect(await screen.findByText("这份材料暂时没能准备好")).toBeVisible();
+    expect(screen.getByText("上次处理被中断，请重新处理。")).toBeVisible();
+    expect(screen.getByText("重新处理后显示主题")).toBeVisible();
+    expect(screen.getByRole("button", { name: "重新处理" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "取消处理" })).toBeNull();
+    await expect(repository.listTasks()).resolves.toEqual([
+      expect.objectContaining({
+        fileName: "interrupted.txt",
+        status: "FAILED",
+        failureReason: "上次处理被中断，请重新处理。",
+      }),
     ]);
   });
 
@@ -277,5 +331,53 @@ describe("主工作区", () => {
         }),
       ]),
     );
+  });
+
+  it("后台材料处理结束时不覆盖用户已经切换到的任务", async () => {
+    const { repository } = setup();
+    const existing = await repository.createProcessingTask(
+      new File(["旧材料"], "existing.md", { type: "text/markdown" }),
+    );
+    const existingResult = processingResult();
+    await repository.completeTextProcessing(
+      existing.id,
+      existingResult.parsedText,
+      existingResult.knowledgeMap,
+      existingResult.topicOpening,
+    );
+    let finishProcessing!: (result: ReturnType<typeof processingResult>) => void;
+    const processor: TextMaterialProcessor = async (_file, onProgress) => {
+      onProgress({ stage: "AUDITING", startedAt: Date.now() });
+      return new Promise((resolve) => {
+        finishProcessing = resolve;
+      });
+    };
+
+    render(<WorkspaceApp processor={processor} repository={repository} />);
+    await screen.findByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？");
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["新材料"], "new.md", { type: "text/markdown" })],
+      },
+    });
+    await screen.findByText("正在核对整份材料");
+
+    fireEvent.click(screen.getByRole("button", { name: `打开任务 ${existing.title}` }));
+    await screen.findByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？");
+    finishProcessing(processingResult());
+
+    await waitFor(async () =>
+      expect(await repository.listTasks()).toContainEqual(
+        expect.objectContaining({ fileName: "new.md", status: "READY" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector<HTMLInputElement>("#workspace-upload"),
+      ).not.toBeDisabled(),
+    );
+    expect(
+      screen.getByText("这份材料的重点是循环动力。你想先讨论，还是检验理解？"),
+    ).toBeVisible();
   });
 });

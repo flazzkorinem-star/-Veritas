@@ -13,7 +13,6 @@ describe("DeepSeek 取消", () => {
       });
     });
     const sleep = vi.fn().mockResolvedValue(undefined);
-
     const pending = callDeepSeekJson(
       {
         apiKey: "test-secret",

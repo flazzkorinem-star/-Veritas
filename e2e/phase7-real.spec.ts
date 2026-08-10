@@ -49,18 +49,28 @@ test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request 
 
   const question = await operation(request, {
     operation: "CREATE_STAGE_QUESTION",
-    input: { node, knowledgeItems, stage: "MEMORY" },
+    input: { node, knowledgeItems, learningGoal: null, stage: "MEMORY" },
   });
   expect(question.question).toEqual(expect.any(String));
 
   const evaluation = await operation(request, {
-    operation: "EVALUATE_ANSWER",
+    operation: "RESPOND_TO_USER",
     input: {
       node,
       knowledgeItems,
-      stage: "MEMORY",
-      mainQuestion: question.question,
-      userAnswer: "光能会转化成储存在葡萄糖等有机物里的化学能。",
+      materialContext: {
+        title: "光合作用",
+        modules: [{ id: "module-1", title: "光合作用", sourceRange: "第 1 段" }],
+        knowledgeItems,
+        nodes: [node],
+      },
+      learningGoal: "检验对光合作用能量转化的理解",
+      diagnostic: {
+        status: "ACTIVE",
+        stage: "MEMORY",
+        mainQuestion: question.question,
+      },
+      userMessage: "光能会转化成储存在葡萄糖等有机物里的化学能。",
       recentMessages: [],
     },
   });
@@ -74,6 +84,7 @@ test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request 
     input: {
       node,
       knowledgeItems,
+      learningGoal: null,
       stage: "UNDERSTANDING",
       mainQuestion: "植物怎样把获得的光能保存下来？",
       hintLevel: 2,
@@ -88,6 +99,7 @@ test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request 
     input: {
       node,
       knowledgeItems,
+      learningGoal: null,
       stage: "UNDERSTANDING",
       mainQuestion: "植物怎样把获得的光能保存下来？",
       recentMessages: [],

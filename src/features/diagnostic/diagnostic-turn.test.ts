@@ -2,11 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
 
-import {
-  requestHint,
-  revealStageAnswer,
-  submitDiagnosticAnswer,
-} from "./diagnostic-turn";
+import { requestHint, respondToUser, revealStageAnswer } from "./diagnostic-turn";
 
 const source = { label: "第 1 段", excerpt: "太阳能驱动蒸发。" };
 const knowledgeItems = [
@@ -38,6 +34,23 @@ const node = {
   },
   order: 1,
 };
+const materialContext = {
+  title: "水循环",
+  modules: [{ id: "module-1", title: "自然水循环", sourceRange: "第 1 节" }],
+  knowledgeItems,
+  nodes: [node],
+};
+
+function turnContext(session = activeSession()) {
+  return {
+    node,
+    knowledgeItems,
+    materialContext,
+    learningGoal: null,
+    session,
+    recentMessages: [],
+  };
+}
 
 function activeSession() {
   return diagnosticReducer(createNodeSession(node.id), {
@@ -47,6 +60,8 @@ function activeSession() {
 }
 
 const partial = {
+  responseMode: "EVALUATE_DIAGNOSTIC" as const,
+  learningGoalUpdate: null,
   classification: "PARTIAL" as const,
   isCorrect: false,
   progress: "ADVANCING" as const,
@@ -59,16 +74,58 @@ const partial = {
 };
 
 describe("诊断回合编排", () => {
+  it("普通对话保持四层状态原样", async () => {
+    const session = activeSession();
+    const agent = vi.fn().mockResolvedValue({
+      responseMode: "CONVERSATION",
+      learningGoalUpdate: null,
+      assistantMessage: "蒸发是液态水获得能量后变成水蒸气的过程。",
+    });
+
+    const result = await respondToUser(
+      {
+        ...turnContext(session),
+        userMessage: "先别考我，解释一下蒸发。",
+      },
+      agent,
+    );
+
+    expect(result.session).toEqual(session);
+    expect(result.assistantMessages).toEqual([
+      "蒸发是液态水获得能量后变成水蒸气的过程。",
+    ]);
+  });
+
+  it("用户要求检验时才启动记忆层主问题", async () => {
+    const agent = vi.fn().mockResolvedValue({
+      responseMode: "START_DIAGNOSTIC",
+      learningGoalUpdate: "检验自己是否理解水循环",
+      assistantMessage: "可以，先看最基础的动力。",
+      question: "自然水循环的主要动力是什么？",
+    });
+
+    const result = await respondToUser(
+      {
+        ...turnContext(createNodeSession(node.id)),
+        userMessage: "出题考考我。",
+      },
+      agent,
+    );
+
+    expect(result.session.stages.MEMORY).toMatchObject({
+      status: "ACTIVE",
+      mainQuestion: "自然水循环的主要动力是什么？",
+    });
+    expect(result.learningGoalUpdate).toBe("检验自己是否理解水循环");
+  });
+
   it("未通过时保留同一个主问题，只返回围绕它的反馈", async () => {
     const agent = vi.fn().mockResolvedValue(partial);
 
-    const result = await submitDiagnosticAnswer(
+    const result = await respondToUser(
       {
-        node,
-        knowledgeItems,
-        session: activeSession(),
-        recentMessages: [],
-        userAnswer: "需要能量。",
+        ...turnContext(),
+        userMessage: "需要能量。",
       },
       agent,
     );
@@ -92,13 +149,10 @@ describe("诊断回合编排", () => {
       })
       .mockResolvedValueOnce({ question: "太阳能怎样推动蒸发？" });
 
-    const result = await submitDiagnosticAnswer(
+    const result = await respondToUser(
       {
-        node,
-        knowledgeItems,
-        session: activeSession(),
-        recentMessages: [],
-        userAnswer: "太阳能。",
+        ...turnContext(),
+        userMessage: "太阳能。",
       },
       agent,
     );
@@ -134,15 +188,15 @@ describe("诊断回合编排", () => {
       .mockResolvedValueOnce({ assistantMessage: "完整答案是太阳能驱动蒸发。" })
       .mockResolvedValueOnce({ question: "太阳能怎样推动蒸发？" });
 
-    const result = await submitDiagnosticAnswer(
-      { node, knowledgeItems, session, recentMessages: [], userAnswer: "不知道。" },
+    const result = await respondToUser(
+      { ...turnContext(session), userMessage: "不知道。" },
       agent,
     );
 
     expect(result.session.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
     expect(result.assistantMessages).toHaveLength(3);
     expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
-      "EVALUATE_ANSWER",
+      "RESPOND_TO_USER",
       "CREATE_STAGE_ANSWER",
       "CREATE_STAGE_QUESTION",
     ]);
@@ -154,10 +208,7 @@ describe("诊断回合编排", () => {
       assistantMessage: "先想能量来源。",
     });
 
-    const result = await requestHint(
-      { node, knowledgeItems, session: activeSession(), recentMessages: [] },
-      agent,
-    );
+    const result = await requestHint(turnContext(), agent);
 
     expect(result.session.stages.MEMORY).toMatchObject({
       hintLevel: 1,
@@ -175,10 +226,7 @@ describe("诊断回合编排", () => {
       .mockResolvedValueOnce({ assistantMessage: "完整答案是太阳能。" })
       .mockResolvedValueOnce({ question: "它如何产生作用？" });
 
-    const result = await revealStageAnswer(
-      { node, knowledgeItems, session: activeSession(), recentMessages: [] },
-      agent,
-    );
+    const result = await revealStageAnswer(turnContext(), agent);
 
     expect(result.session.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
     expect(result.session.stages.UNDERSTANDING.status).toBe("ACTIVE");

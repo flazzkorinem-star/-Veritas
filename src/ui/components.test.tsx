@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { Button } from "@/ui/Button";
+import { BrandSymbol } from "@/ui/BrandSymbol";
 import { Card } from "@/ui/Card";
 import { Icon } from "@/ui/Icon";
 import { MessageBubble } from "@/ui/MessageBubble";
@@ -10,9 +11,19 @@ import { StatusBadge } from "@/ui/StatusBadge";
 import { VITA_STATES, Vita } from "@/ui/Vita";
 
 describe("品牌基础组件", () => {
+  it("品牌符号直接使用最终维塔设定图中的书本与小芽", () => {
+    render(<BrandSymbol />);
+
+    expect(
+      decodeURIComponent(screen.getByTestId("brand-symbol").getAttribute("src") ?? ""),
+    ).toBe("/brand/veritas-book-sprout-final.png");
+  });
+
   it("装饰图标不进入无障碍树，有名称的图标可被识别", () => {
     const { rerender } = render(<Icon name="upload" />);
     expect(document.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(document.querySelector("svg")).toHaveAttribute("data-icon", "upload");
+    expect(document.querySelector("svg")).toHaveAttribute("stroke-width", "2.6");
 
     rerender(<Icon label="上传" name="upload" />);
     expect(screen.getByRole("img", { name: "上传" })).toBeVisible();
@@ -30,7 +41,7 @@ describe("品牌基础组件", () => {
   });
 
   it("卡片和聊天气泡保留语义与角色区别", () => {
-    render(
+    const { rerender } = render(
       <Card aria-label="提示卡">
         <MessageBubble role="ASSISTANT">先说说你记得什么。</MessageBubble>
       </Card>,
@@ -40,6 +51,17 @@ describe("品牌基础组件", () => {
     expect(screen.getByRole("article", { name: "维塔的消息" })).toHaveClass(
       "message-bubble-assistant",
     );
+    expect(
+      decodeURIComponent(
+        document.querySelector(".message-avatar img")?.getAttribute("src") ?? "",
+      ),
+    ).toContain("/vita/default-avatar-final.png");
+
+    rerender(<MessageBubble role="USER">我先试着说说。</MessageBubble>);
+    expect(screen.getByRole("article", { name: "我的消息" })).toHaveClass(
+      "message-bubble-user",
+    );
+    expect(document.querySelector(".message-avatar-user")).toBeVisible();
   });
 
   it("进度条约束越界数值并暴露可读进度", () => {
@@ -56,7 +78,7 @@ describe("品牌基础组件", () => {
     expect(screen.getByText("已完成")).toHaveClass("status-badge-success");
   });
 
-  it("维塔七态都有固定本地资产与替代文本", () => {
+  it("维塔七态都使用最终角色资产与替代文本", () => {
     render(
       <div>
         {VITA_STATES.map((state) => (
@@ -68,9 +90,17 @@ describe("品牌基础组件", () => {
     expect(screen.getAllByRole("img")).toHaveLength(7);
     for (const state of VITA_STATES) {
       const source = screen.getByTestId(`vita-${state}`).getAttribute("src") ?? "";
-      expect(decodeURIComponent(source)).toContain(
-        `/vita/${state === "encourage" ? "encouragement" : state}.png`,
-      );
+      const decodedSource = decodeURIComponent(source);
+      const assetName =
+        state === "encourage"
+          ? "encouragement-final"
+          : state === "waiting"
+            ? "waiting-hd"
+            : state === "error"
+              ? "error-full"
+              : `${state}-final`;
+      expect(decodedSource).toBe(`/vita/${assetName}.png`);
     }
+    expect(screen.getByTestId("vita-error")).toHaveAttribute("loading", "eager");
   });
 });

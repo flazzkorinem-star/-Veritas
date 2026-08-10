@@ -83,6 +83,7 @@ const learnedSchema = z
     evidenceId: identifierSchema,
   })
   .strict();
+const internalReportTermPattern = /\bPASSED(?:_WITH_(?:HINT|ANSWER))?\b|确定性分数/;
 
 export const reportAgentOutputSchema = z
   .object({
@@ -105,7 +106,15 @@ export const reportAgentOutputSchema = z
       .min(1)
       .max(40),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (internalReportTermPattern.test(JSON.stringify(value))) {
+      context.addIssue({
+        code: "custom",
+        message: "用户可见报告不得包含内部实现术语。",
+      });
+    }
+  });
 
 export type ReportAgentInput = z.infer<typeof reportAgentInputSchema>;
 export type ReportAgentOutput = z.infer<typeof reportAgentOutputSchema>;

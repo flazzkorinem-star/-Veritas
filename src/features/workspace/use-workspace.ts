@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentClientError } from "@/features/materials/agent-client";
 import {
-  createInitialStageQuestion,
+  createTopicOpening,
   requestHint as runHintTurn,
+  respondToUser,
   revealStageAnswer,
-  submitDiagnosticAnswer,
   type DiagnosticAgentCall,
 } from "@/features/diagnostic/diagnostic-turn";
 import { MaterialFileError } from "@/features/materials/material-file";
@@ -29,7 +29,9 @@ export type TaskRepository = ReturnType<typeof createTaskRepository>;
 export type TextMaterialProcessor = typeof processTextMaterial;
 type TaskLearningData = Awaited<ReturnType<TaskRepository["getTaskLearningData"]>>;
 type DiagnosticAction =
-  { kind: "ANSWER"; userMessage: string } | { kind: "HINT" } | { kind: "REVEAL" };
+  { kind: "MESSAGE"; userMessage: string } | { kind: "HINT" } | { kind: "REVEAL" };
+
+const INTERRUPTED_PROCESSING_MESSAGE = "上次处理被中断，请重新处理。";
 
 function errorMessage(error: unknown) {
   return error instanceof LocalStoreError
@@ -37,14 +39,38 @@ function errorMessage(error: unknown) {
     : "本地任务暂时无法更新，请重试。";
 }
 
-function processingErrorMessage(error: unknown) {
-  return error instanceof MaterialReadError ||
+function processingStageLabel(progress: MaterialProcessingProgress) {
+  switch (progress.stage) {
+    case "READING":
+      return "读取文件";
+    case "PARSING":
+      return "解析材料";
+    case "OCR":
+      return "识别图片文字";
+    case "EXTRACTING":
+      return "整理材料内容";
+    case "AUDITING":
+      return "核对整份材料";
+    case "PREPARING_CONTEXT":
+      return "准备第一个主题";
+  }
+}
+
+function processingErrorMessage(
+  error: unknown,
+  progress: MaterialProcessingProgress,
+  wasCancelled: boolean,
+) {
+  if (wasCancelled) return "已取消处理这份材料。";
+  const message =
+    error instanceof MaterialReadError ||
     error instanceof MaterialFileError ||
     error instanceof MaterialParseError ||
     error instanceof AgentClientError ||
     error instanceof TextProcessingError
-    ? error.message
-    : "暂时无法处理这份材料，请重试。";
+      ? error.message
+      : "暂时无法处理这份材料，请重试。";
+  return `${processingStageLabel(progress)}时失败：${message}`;
 }
 
 export function useWorkspace(
@@ -76,10 +102,15 @@ export function useWorkspace(
     null,
   );
   const processingController = useRef<AbortController | null>(null);
-  const diagnosticController = useRef<AbortController | null>(null);
+  const activeTaskIdRef = useRef<string | null>(null);
   const responding = useRef(false);
   const draftWrite = useRef<Promise<void>>(Promise.resolve());
   const reportWrite = useRef<Promise<void>>(Promise.resolve());
+
+  function activateTask(taskId: string | null) {
+    activeTaskIdRef.current = taskId;
+    setActiveTaskId(taskId);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -88,7 +119,21 @@ export function useWorkspace(
       repository.getWorkspaceState(),
       repository.listReportTaskIds(),
     ])
-      .then(async ([storedTasks, workspaceState, storedReportTaskIds]) => {
+      .then(async ([loadedTasks, workspaceState, storedReportTaskIds]) => {
+        if (!mounted) return;
+        const interruptedTasks = loadedTasks.filter(
+          (task) => task.status === "PROCESSING",
+        );
+        if (interruptedTasks.length > 0) {
+          await Promise.all(
+            interruptedTasks.map((task) =>
+              repository.failTaskProcessing(task.id, INTERRUPTED_PROCESSING_MESSAGE),
+            ),
+          );
+        }
+        if (!mounted) return;
+        const storedTasks =
+          interruptedTasks.length > 0 ? await repository.listTasks() : loadedTasks;
         if (!mounted) return;
         const restoredId = storedTasks.some(
           (task) => task.id === workspaceState.activeTaskId,
@@ -97,7 +142,7 @@ export function useWorkspace(
           : (storedTasks[0]?.id ?? null);
         setTasks(storedTasks);
         setReportTaskIds(storedReportTaskIds);
-        setActiveTaskId(restoredId);
+        activateTask(restoredId);
         setWorkspaceCollapsed(workspaceState.workspaceCollapsed);
         if (restoredId !== workspaceState.activeTaskId) {
           await repository.saveWorkspaceState({
@@ -180,24 +225,41 @@ export function useWorkspace(
 
   async function runProcessing(task: StoredTask, file: File) {
     const controller = new AbortController();
+    let latestProgress: MaterialProcessingProgress = {
+      stage: "READING",
+      loadedBytes: 0,
+      totalBytes: file.size,
+    };
+    const updateProgress = (progress: MaterialProcessingProgress) => {
+      latestProgress = progress;
+      setProcessingProgress(progress);
+    };
     processingController.current = controller;
     setProcessingTaskId(task.id);
-    setProcessingProgress({ stage: "READING", loadedBytes: 0, totalBytes: file.size });
+    setProcessingProgress(latestProgress);
     try {
-      const result = await processor(file, setProcessingProgress, {
+      const result = await processor(file, updateProgress, {
         signal: controller.signal,
       });
+      if (controller.signal.aborted) {
+        throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
+      }
       await repository.completeTextProcessing(
         task.id,
         result.parsedText,
         result.knowledgeMap,
-        result.firstQuestion,
+        result.topicOpening,
       );
     } catch (reason) {
-      await repository.failTaskProcessing(task.id, processingErrorMessage(reason));
+      await repository.failTaskProcessing(
+        task.id,
+        processingErrorMessage(reason, latestProgress, controller.signal.aborted),
+      );
     } finally {
       await reloadTasks();
-      setLearningData(await repository.getTaskLearningData(task.id));
+      if (activeTaskIdRef.current === task.id) {
+        setLearningData(await repository.getTaskLearningData(task.id));
+      }
       setProcessingProgress(null);
       setProcessingTaskId(null);
       setIsImporting(false);
@@ -207,12 +269,9 @@ export function useWorkspace(
     }
   }
 
-  function cancelProcessing() {
+  function cancelProcessing(taskId: string) {
+    if (processingTaskId !== taskId) return;
     processingController.current?.abort();
-  }
-
-  function cancelDiagnosticTurn() {
-    diagnosticController.current?.abort();
   }
 
   async function importMaterial(file: File) {
@@ -222,7 +281,7 @@ export function useWorkspace(
     try {
       const task = await repository.createProcessingTask(file);
       setWorkspaceCollapsed(false);
-      setActiveTaskId(task.id);
+      activateTask(task.id);
       await reloadTasks();
       await runProcessing(task, file);
     } catch (reason) {
@@ -251,7 +310,7 @@ export function useWorkspace(
   }
 
   async function selectTask(taskId: string) {
-    setActiveTaskId(taskId);
+    activateTask(taskId);
     setFailedDiagnosticAction(null);
     setError(null);
     try {
@@ -294,7 +353,7 @@ export function useWorkspace(
       const nextActiveId =
         activeTaskId === taskId ? (remaining[0]?.id ?? null) : activeTaskId;
       setTasks(remaining);
-      setActiveTaskId(nextActiveId);
+      activateTask(nextActiveId);
       if (!nextActiveId) setLearningData(null);
       setDeletedSnapshot(snapshot);
       await repository.saveWorkspaceState({
@@ -336,6 +395,13 @@ export function useWorkspace(
       task,
       node,
       knowledgeItems: material.knowledgeItems.filter((item) => itemIds.has(item.id)),
+      materialContext: {
+        title: material.fileName,
+        modules: material.modules,
+        knowledgeItems: material.knowledgeItems,
+        nodes: material.nodes,
+      },
+      learningGoal: task.learningGoal ?? null,
       session: storedSession.session,
       recentMessages: learningData.messages
         .slice(-12)
@@ -348,7 +414,7 @@ export function useWorkspace(
     if (responding.current) return;
     const controller = new AbortController();
     responding.current = true;
-    diagnosticController.current = controller;
+    if (action.kind === "MESSAGE") saveDraft("");
     setIsResponding(true);
     setPendingDiagnosticAction(action);
     setFailedDiagnosticAction(null);
@@ -357,15 +423,15 @@ export function useWorkspace(
       await draftWrite.current;
       const context = currentDiagnosticContext(controller);
       const result =
-        action.kind === "ANSWER"
+        action.kind === "MESSAGE"
           ? diagnosticAgent
-            ? await submitDiagnosticAnswer(
-                { ...context, userAnswer: action.userMessage },
+            ? await respondToUser(
+                { ...context, userMessage: action.userMessage },
                 diagnosticAgent,
               )
-            : await submitDiagnosticAnswer({
+            : await respondToUser({
                 ...context,
-                userAnswer: action.userMessage,
+                userMessage: action.userMessage,
               })
           : action.kind === "HINT"
             ? diagnosticAgent
@@ -374,17 +440,15 @@ export function useWorkspace(
             : diagnosticAgent
               ? await revealStageAnswer(context, diagnosticAgent)
               : await revealStageAnswer(context);
-      await repository.saveDiagnosticTurn({
+      await repository.saveConversationTurn({
         taskId: context.task.id,
         nodeId: context.node.id,
         session: result.session,
-        userMessage: action.kind === "ANSWER" ? action.userMessage : undefined,
+        userMessage: action.kind === "MESSAGE" ? action.userMessage : undefined,
         assistantMessages: result.assistantMessages,
         scaffold: result.scaffold,
+        learningGoalUpdate: result.learningGoalUpdate,
       });
-      if (action.kind === "ANSWER") {
-        await repository.saveDraft(context.task.id, context.node.id, "");
-      }
       await reloadTasks();
       setLearningData(await repository.getTaskLearningData(context.task.id));
       if (
@@ -394,6 +458,7 @@ export function useWorkspace(
         queueReportUpdate(context.task.id);
       }
     } catch (reason) {
+      if (action.kind === "MESSAGE") saveDraft(action.userMessage);
       if (!controller.signal.aborted) {
         setFailedDiagnosticAction(action);
         setError(
@@ -403,19 +468,16 @@ export function useWorkspace(
         );
       }
     } finally {
-      if (diagnosticController.current === controller) {
-        diagnosticController.current = null;
-      }
       responding.current = false;
       setPendingDiagnosticAction(null);
       setIsResponding(false);
     }
   }
 
-  async function sendAnswer(content: string) {
-    const answer = content.trim();
-    if (!answer) return;
-    await runDiagnosticAction({ kind: "ANSWER", userMessage: answer });
+  async function sendMessage(content: string) {
+    const message = content.trim();
+    if (!message) return;
+    await runDiagnosticAction({ kind: "MESSAGE", userMessage: message });
   }
 
   async function requestHint() {
@@ -452,11 +514,18 @@ export function useWorkspace(
           knowledgeItems: learningData.material.knowledgeItems.filter((item) =>
             itemIds.has(item.id),
           ),
+          materialContext: {
+            title: learningData.material.fileName,
+            modules: learningData.material.modules,
+            knowledgeItems: learningData.material.knowledgeItems,
+            nodes: learningData.material.nodes,
+          },
+          learningGoal: learningData.task.learningGoal ?? null,
         };
         const output = diagnosticAgent
-          ? await createInitialStageQuestion(input, diagnosticAgent)
-          : await createInitialStageQuestion(input);
-        question = output.question;
+          ? await createTopicOpening(input, diagnosticAgent)
+          : await createTopicOpening(input);
+        question = output.assistantMessage;
       }
       await repository.openNode(learningData.task.id, nodeId, question);
       await reloadTasks();
@@ -508,11 +577,12 @@ export function useWorkspace(
     activeTask: tasks.find((task) => task.id === activeTaskId) ?? null,
     learningData: learningData?.task.id === activeTaskId ? learningData : null,
     processingProgress: processingTaskId === activeTaskId ? processingProgress : null,
+    canCancelProcessing: processingTaskId === activeTaskId,
     isImporting,
     isResponding,
     isGeneratingReport,
     pendingUserMessage:
-      pendingDiagnosticAction?.kind === "ANSWER"
+      pendingDiagnosticAction?.kind === "MESSAGE"
         ? pendingDiagnosticAction.userMessage
         : null,
     canRetryDiagnosticTurn: failedDiagnosticAction !== null,
@@ -526,8 +596,7 @@ export function useWorkspace(
     importMaterial,
     retryProcessing,
     cancelProcessing,
-    cancelDiagnosticTurn,
-    sendAnswer,
+    sendMessage,
     requestHint,
     revealAnswer,
     retryDiagnosticTurn,

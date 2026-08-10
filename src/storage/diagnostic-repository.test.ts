@@ -65,8 +65,21 @@ async function setup() {
     new File(["材料"], "notes.txt", { type: "text/plain" }),
   );
   await repository.completeTextProcessing(task.id, "材料", map, {
-    opening: "先看循环的起点。",
+    assistantMessage: "这份材料主要在解释循环动力。你想怎么用它？",
+  });
+  const learning = await repository.getTaskLearningData(task.id);
+  const session = diagnosticReducer(learning.session!.session, {
+    type: "START_STAGE",
     question: "主要动力是什么？",
+  });
+  await repository.saveConversationTurn({
+    taskId: task.id,
+    nodeId: node.id,
+    session,
+    userMessage: "出题考考我。",
+    assistantMessages: ["可以，先看最基础的动力。", "主要动力是什么？"],
+    scaffold: null,
+    learningGoalUpdate: "检验自己是否理解水循环",
   });
   return { database, repository, task };
 }
@@ -84,22 +97,27 @@ describe("诊断会话仓储", () => {
       outcome: { classification: "PARTIAL", isCorrect: false, progress: "ADVANCING" },
     });
 
-    await repository.saveDiagnosticTurn({
+    await repository.saveConversationTurn({
       taskId: task.id,
       nodeId: node.id,
       session,
       userMessage: "需要能量。",
       assistantMessages: ["方向对了，能量具体来自哪里？"],
       scaffold: { stage: "MEMORY", type: "CLARIFICATION", reason: "补足来源" },
+      learningGoalUpdate: null,
     });
 
     const restored = await repository.getTaskLearningData(task.id);
     expect(restored.messages.map((message) => message.content)).toEqual([
-      "先看循环的起点。\n\n主要动力是什么？",
+      "这份材料主要在解释循环动力。你想怎么用它？",
+      "出题考考我。",
+      "可以，先看最基础的动力。",
+      "主要动力是什么？",
       "需要能量。",
       "方向对了，能量具体来自哪里？",
     ]);
     expect(restored.session?.session).toEqual(session);
+    expect(restored.task.learningGoal).toBe("检验自己是否理解水循环");
     expect(restored.session?.scaffoldEvents).toEqual([
       expect.objectContaining({
         stage: "MEMORY",
@@ -113,13 +131,13 @@ describe("诊断会话仓储", () => {
   it("切换节点时保存各自独立会话、消息和草稿", async () => {
     const { database, repository, task } = await setup();
     await repository.saveDraft(task.id, node.id, "第一个节点的草稿");
-    await repository.openNode(task.id, secondNode.id, "降水怎样回到地表？");
+    await repository.openNode(task.id, secondNode.id, "这个主题讲降水如何回到地表。");
     await repository.saveDraft(task.id, secondNode.id, "第二个节点的草稿");
 
     let learning = await repository.getTaskLearningData(task.id);
     expect(learning.task.currentNodeId).toBe(secondNode.id);
     expect(learning.messages.map((message) => message.content)).toEqual([
-      "降水怎样回到地表？",
+      "这个主题讲降水如何回到地表。",
     ]);
     expect(learning.draft?.content).toBe("第二个节点的草稿");
 
@@ -136,13 +154,14 @@ describe("诊断会话仓储", () => {
     const learning = await repository.getTaskLearningData(task.id);
 
     await expect(
-      repository.saveDiagnosticTurn({
+      repository.saveConversationTurn({
         taskId: task.id,
         nodeId: secondNode.id,
         session: learning.session!.session,
         userMessage: "回答",
         assistantMessages: ["反馈"],
         scaffold: null,
+        learningGoalUpdate: null,
       }),
     ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
     database.close();
@@ -167,13 +186,14 @@ describe("诊断会话仓储", () => {
       return session;
     };
     const first = await repository.openNode(task.id, node.id);
-    await repository.saveDiagnosticTurn({
+    await repository.saveConversationTurn({
       taskId: task.id,
       nodeId: node.id,
       session: complete(first),
       userMessage: "完成第一个主题",
       assistantMessages: ["第一个主题完成。"],
       scaffold: null,
+      learningGoalUpdate: null,
     });
     expect((await repository.getTaskLearningData(task.id)).task.status).toBe(
       "IN_PROGRESS",
@@ -184,13 +204,14 @@ describe("诊断会话仓储", () => {
       secondNode.id,
       "降水怎样回到地表？",
     );
-    await repository.saveDiagnosticTurn({
+    await repository.saveConversationTurn({
       taskId: task.id,
       nodeId: secondNode.id,
       session: complete(second),
       userMessage: "完成第二个主题",
       assistantMessages: ["全部主题完成。"],
       scaffold: null,
+      learningGoalUpdate: null,
     });
 
     expect((await repository.getTaskLearningData(task.id)).task.status).toBe(

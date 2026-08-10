@@ -1,10 +1,7 @@
 import { z } from "zod";
 
-import {
-  firstQuestionSchema,
-  knowledgeMapSchema,
-} from "@/domain/knowledge-map/contracts";
-import { diagnosticReducer, createNodeSession } from "@/domain/diagnostic/reducer";
+import { knowledgeMapSchema, topicOpeningSchema } from "@/domain/knowledge-map/contracts";
+import { createNodeSession } from "@/domain/diagnostic/reducer";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
 import type { StageKey } from "@/domain/types";
@@ -18,13 +15,14 @@ import type {
   StoredWorkspaceState,
 } from "@/storage/types";
 
-interface DiagnosticTurnWrite {
+interface ConversationTurnWrite {
   taskId: string;
   nodeId: string;
   session: NodeSession;
   userMessage?: string;
   assistantMessages: string[];
   scaffold: { stage: StageKey; type: ScaffoldType; reason: string } | null;
+  learningGoalUpdate: string | null;
 }
 
 const storedTaskSchema = z.object({
@@ -35,6 +33,7 @@ const storedTaskSchema = z.object({
   status: z.enum(TASK_STATUSES),
   currentNodeId: z.string().min(1).nullable(),
   isPinned: z.boolean(),
+  learningGoal: z.string().trim().min(1).max(500).optional(),
   failureReason: z.string().trim().min(1).max(200).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -243,20 +242,20 @@ export function createTaskRepository(database: VeritasDatabase) {
       taskId: string,
       parsedText: string,
       mapValue: unknown,
-      questionValue: unknown,
+      openingValue: unknown,
     ) {
       return run(async () => {
         const task = await getExistingTask(taskId);
         const material = await database.materials.get(taskId);
         const knowledgeMap = knowledgeMapSchema.safeParse(mapValue);
-        const firstQuestion = firstQuestionSchema.safeParse(questionValue);
+        const topicOpening = topicOpeningSchema.safeParse(openingValue);
         if (
           task.status !== "PROCESSING" ||
           !material ||
           !parsedText.trim() ||
           parsedText.length > 300_000 ||
           !knowledgeMap.success ||
-          !firstQuestion.success
+          !topicOpening.success
         ) {
           throw new LocalStoreError(
             "RELATION_MISMATCH",
@@ -270,13 +269,10 @@ export function createTaskRepository(database: VeritasDatabase) {
           throw new LocalStoreError("RELATION_MISMATCH", "材料中没有可保存的学习主题。");
         }
         const now = new Date().toISOString();
-        const session = diagnosticReducer(createNodeSession(firstNode.id), {
-          type: "START_STAGE",
-          question: firstQuestion.data.question,
-        });
+        const session = createNodeSession(firstNode.id);
         const updatedTask = parseTask({
           ...task,
-          status: "IN_PROGRESS",
+          status: "READY",
           currentNodeId: firstNode.id,
           failureReason: undefined,
           updatedAt: now,
@@ -310,7 +306,7 @@ export function createTaskRepository(database: VeritasDatabase) {
               taskId,
               nodeId: firstNode.id,
               role: "ASSISTANT",
-              content: `${firstQuestion.data.opening}\n\n${firstQuestion.data.question}`,
+              content: topicOpening.data.assistantMessage,
               createdAt: now,
             });
             await database.uiStates.put({
@@ -498,7 +494,7 @@ export function createTaskRepository(database: VeritasDatabase) {
       );
     },
 
-    saveDiagnosticTurn(value: DiagnosticTurnWrite) {
+    saveConversationTurn(value: ConversationTurnWrite) {
       return run(() =>
         database.transaction(
           "rw",
@@ -516,10 +512,13 @@ export function createTaskRepository(database: VeritasDatabase) {
               !existing ||
               value.session.nodeId !== value.nodeId ||
               (userMessage !== undefined &&
-                (!userMessage || userMessage.length > 4_000)) ||
+                (!userMessage || userMessage.length > 12_000)) ||
               assistantMessages.length === 0 ||
               assistantMessages.length > 4 ||
-              assistantMessages.some((message) => !message || message.length > 2_000)
+              assistantMessages.some((message) => !message || message.length > 8_000) ||
+              (value.learningGoalUpdate !== null &&
+                (!value.learningGoalUpdate.trim() ||
+                  value.learningGoalUpdate.trim().length > 500))
             ) {
               throw new LocalStoreError(
                 "RELATION_MISMATCH",
@@ -570,8 +569,9 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.messages.bulkPut(messages);
             const updatedTask = parseTask({
               ...task,
-              status: "IN_PROGRESS",
+              status: task.status === "COMPLETED" ? "COMPLETED" : "IN_PROGRESS",
               currentNodeId: value.nodeId,
+              learningGoal: value.learningGoalUpdate?.trim() || task.learningGoal,
               updatedAt: new Date(baseTime).toISOString(),
             });
             await database.tasks.put(updatedTask);
@@ -580,7 +580,7 @@ export function createTaskRepository(database: VeritasDatabase) {
       );
     },
 
-    openNode(taskId: string, nodeId: string, question?: string) {
+    openNode(taskId: string, nodeId: string, assistantMessage?: string) {
       return run(() =>
         database.transaction(
           "rw",
@@ -600,20 +600,17 @@ export function createTaskRepository(database: VeritasDatabase) {
             const now = new Date().toISOString();
             let session = await database.sessions.get([taskId, nodeId]);
             if (!session) {
-              const mainQuestion = question?.trim();
-              if (!mainQuestion || mainQuestion.length > 600) {
+              const opening = assistantMessage?.trim();
+              if (!opening || opening.length > 2_000) {
                 throw new LocalStoreError(
                   "RELATION_MISMATCH",
-                  "新主题需要一个有效的首问。",
+                  "新主题需要一条有效的开场消息。",
                 );
               }
               session = {
                 taskId,
                 nodeId,
-                session: diagnosticReducer(createNodeSession(nodeId), {
-                  type: "START_STAGE",
-                  question: mainQuestion,
-                }),
+                session: createNodeSession(nodeId),
                 scaffoldEvents: [],
               };
               await database.sessions.put(session);
@@ -622,7 +619,7 @@ export function createTaskRepository(database: VeritasDatabase) {
                 taskId,
                 nodeId,
                 role: "ASSISTANT",
-                content: mainQuestion,
+                content: opening,
                 createdAt: now,
               });
             }

@@ -42,9 +42,10 @@ function mockAgent(route: Route) {
     input: {
       stage?: string;
       hintLevel?: number;
+      diagnostic?: { status: string };
       completedNodes?: Array<{
         nodeId: string;
-        userMessages: Array<{ id: string }>;
+        userMessages: Array<{ id: string; content: string }>;
       }>;
     };
   };
@@ -67,18 +68,27 @@ function mockAgent(route: Route) {
           },
         ],
       });
-    case "CREATE_FIRST_QUESTION":
+    case "CREATE_TOPIC_OPENING":
       return fulfill(route, {
-        opening: "先从循环的动力看。",
-        question: "水循环的主要动力是什么？",
+        assistantMessage: "这份材料的重点是循环动力。你可以先问我，也可以让我考考你。",
       });
     case "CREATE_HINT":
       return fulfill(route, {
         hintLevel: request.input.hintLevel,
         assistantMessage: "想想晒湿衣服时，哪一种能量让水离开衣服。",
       });
-    case "EVALUATE_ANSWER":
+    case "RESPOND_TO_USER":
+      if (request.input.diagnostic?.status === "NOT_STARTED") {
+        return fulfill(route, {
+          responseMode: "START_DIAGNOSTIC",
+          learningGoalUpdate: "检验水循环的理解",
+          assistantMessage: "可以，先从主要动力开始。",
+          question: "水循环的主要动力是什么？",
+        });
+      }
       return fulfill(route, {
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
         classification: "CORRECT",
         isCorrect: true,
         progress: "ADVANCING",
@@ -110,11 +120,11 @@ function mockAgent(route: Route) {
           understood: [
             {
               statement: "能指出太阳能是水循环的主要动力。",
-              userMessageId: completedNode.userMessages[0]!.id,
+              userMessageId: completedNode.userMessages[1]!.id,
             },
           ],
           blindSpots: ["应用到新情境时依赖了家教完整答案。"],
-          userEvidenceMessageIds: [completedNode.userMessages[0]!.id],
+          userEvidenceMessageIds: [completedNode.userMessages[1]!.id],
           scaffoldNotes: [],
           learnedOrCorrected: [],
           nextSteps: ["换一个天气情境独立解释能量变化。"],
@@ -159,20 +169,23 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
   });
 
   await expect(
-    page.getByText("水循环的主要动力是什么？", { exact: false }),
+    page.getByText("这份材料的重点是循环动力", { exact: false }),
   ).toBeVisible();
+  await page.getByLabel("消息输入").fill("出题考考我");
+  await page.getByRole("button", { name: "发送消息" }).click();
+  await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
   await page.getByRole("button", { name: "给我提示" }).click();
   await expect(page.getByText("想想晒湿衣服时", { exact: false })).toBeVisible();
-  await page.getByLabel("回答输入").fill("主要动力是太阳能。 ");
-  await page.getByRole("button", { name: "发送回答" }).click();
+  await page.getByLabel("消息输入").fill("主要动力是太阳能。 ");
+  await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.getByText("对，太阳能正是推动蒸发的关键动力。")).toBeVisible();
   await expect(page.getByText("太阳能怎样让液态水进入大气？")).toBeVisible();
   await expect(page.locator(".score-line strong")).toHaveText("25");
-  await expect(page.getByLabel("回答输入")).toHaveValue("");
+  await expect(page.getByLabel("消息输入")).toHaveValue("");
 
   await page.getByRole("button", { name: "给我提示" }).click();
-  await page.getByLabel("回答输入").fill("液态水吸收太阳能后会蒸发。 ");
-  await page.getByRole("button", { name: "发送回答" }).click();
+  await page.getByLabel("消息输入").fill("液态水吸收太阳能后会蒸发。 ");
+  await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.getByText("晒湿衣服时，水发生了什么变化？")).toBeVisible();
   await expect(page.locator(".score-line strong")).toHaveText("50");
 
@@ -181,11 +194,16 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
   await expect(page.getByText("如果没有阳光，蒸发环节会怎样变化？")).toBeVisible();
   await expect(page.locator(".score-line strong")).toHaveText("50");
 
-  await page.getByLabel("回答输入").fill("蒸发会明显变慢。 ");
-  await page.getByRole("button", { name: "发送回答" }).click();
+  await page.getByLabel("消息输入").fill("蒸发会明显变慢。 ");
+  await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.locator(".score-line strong")).toHaveText("75");
-  await expect(page.getByLabel("回答输入")).toBeDisabled();
+  await expect(page.getByLabel("消息输入")).toBeEnabled();
   await expect(page.locator(".chat-heading .status-badge")).toHaveText("已完成");
+  const composerBox = await page.locator(".composer-shell").boundingBox();
+  const viewport = page.viewportSize();
+  expect(composerBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -196,9 +214,12 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
     fullPage: false,
   });
 
-  if (testInfo.project.name === "mobile-edge") {
-    await page.getByRole("button", { name: "进度" }).click();
-  }
+  await page
+    .getByRole("button", {
+      name: testInfo.project.name === "mobile-edge" ? "打开进度" : "进度",
+      exact: true,
+    })
+    .click();
   await page.getByRole("button", { name: "查看学习报告" }).click();
   const report = page.getByRole("dialog", { name: "学习诊断报告" });
   await expect(report).toBeVisible();
@@ -250,8 +271,15 @@ test("桌面端网络失败后保留输入并可重试当前回合", async ({ pa
     problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
   );
   await page.route("**/api/agents", (route) => {
-    const operation = (route.request().postDataJSON() as { operation: string }).operation;
-    if (operation === "EVALUATE_ANSWER" && evaluationAttempts++ === 0) {
+    const request = route.request().postDataJSON() as {
+      operation: string;
+      input?: { diagnostic?: { status: string } };
+    };
+    if (
+      request.operation === "RESPOND_TO_USER" &&
+      request.input?.diagnostic?.status === "ACTIVE" &&
+      evaluationAttempts++ === 0
+    ) {
       return route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -272,18 +300,21 @@ test("桌面端网络失败后保留输入并可重试当前回合", async ({ pa
     buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发。"),
   });
   await expect(
-    page.getByText("水循环的主要动力是什么？", { exact: false }),
+    page.getByText("这份材料的重点是循环动力", { exact: false }),
   ).toBeVisible();
-  await page.getByLabel("回答输入").fill("主要动力是太阳能。");
-  await page.getByRole("button", { name: "发送回答" }).click();
+  await page.getByLabel("消息输入").fill("出题考考我");
+  await page.getByRole("button", { name: "发送消息" }).click();
+  await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
+  await page.getByLabel("消息输入").fill("主要动力是太阳能。");
+  await page.getByRole("button", { name: "发送消息" }).click();
 
   await expect(page.getByRole("button", { name: "重试本轮" })).toBeVisible();
-  await expect(page.getByLabel("回答输入")).toHaveValue("主要动力是太阳能。");
+  await expect(page.getByLabel("消息输入")).toHaveValue("主要动力是太阳能。");
   await page.screenshot({ path: testInfo.outputPath("phase8-retry-error.png") });
   await page.getByRole("button", { name: "重试本轮" }).click();
 
   await expect(page.getByText("对，太阳能正是推动蒸发的关键动力。")).toBeVisible();
-  await expect(page.getByLabel("回答输入")).toHaveValue("");
+  await expect(page.getByLabel("消息输入")).toHaveValue("");
   await page.screenshot({ path: testInfo.outputPath("phase8-retry-recovered.png") });
   expect(evaluationAttempts).toBe(2);
   expect(problems).toEqual([]);

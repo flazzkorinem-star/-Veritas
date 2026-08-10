@@ -76,6 +76,7 @@ describe("DeepSeek 服务端客户端", () => {
       .fn()
       .mockResolvedValueOnce(response(null, 429))
       .mockResolvedValueOnce(response('{"ok":true}'));
+
     const sleep = vi.fn().mockResolvedValue(undefined);
 
     await callDeepSeekJson(request(), { fetchImpl, sleep, random: () => 0 });
@@ -98,5 +99,28 @@ describe("DeepSeek 服务端客户端", () => {
     });
     await expect(promise).rejects.toMatchObject({ code });
     await expect(promise).rejects.not.toThrow(/敏感错误正文|test-secret/);
+  });
+
+  it("调用方取消时中止尚未完成的上游请求", async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(
+      (_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    const pending = callDeepSeekJson(
+      { ...request(), signal: controller.signal },
+      { fetchImpl },
+    );
+
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: "REQUEST_ABORTED" });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

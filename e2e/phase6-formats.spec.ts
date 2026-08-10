@@ -93,7 +93,7 @@ function mockAgentResult(route: Route) {
   return route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({
-      result: { opening: "先从材料中的关键过程想起。", question: "水循环包含哪些过程？" },
+      result: { assistantMessage: "这份材料主要讲水循环中的关键过程。" },
     }),
   });
 }
@@ -341,7 +341,9 @@ test("移动端图片 OCR 后仍保持完整主流程布局", async ({ page, bro
     },
     problems,
   );
-  await expect(page.getByLabel("维塔的消息")).toContainText("水循环包含哪些过程");
+  await expect(page.getByLabel("维塔的消息")).toContainText(
+    "这份材料主要讲水循环中的关键过程",
+  );
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

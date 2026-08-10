@@ -6,7 +6,7 @@ test.skip(
   "仅在显式真实模型验收时调用 DeepSeek。",
 );
 
-test("真实 Markdown 经 DeepSeek 生成完整主题与首问", async ({ page }, testInfo) => {
+test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ page }, testInfo) => {
   test.setTimeout(240_000);
   const browserProblems: string[] = [];
   const agentStatuses: number[] = [];
@@ -124,7 +124,7 @@ test("真实 Markdown 经 DeepSeek 生成完整主题与首问", async ({ page }
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     ),
   ).toBe(false);
-  await page.screenshot({ path: testInfo.outputPath("phase5-first-question.png") });
+  await page.screenshot({ path: testInfo.outputPath("phase5-topic-opening.png") });
 
   await page.reload();
   await expect(page.getByLabel("维塔的消息")).toContainText(firstMessage);

@@ -86,4 +86,18 @@ describe("Agent 3 报告契约", () => {
       "报告主题与已完成主题不匹配。",
     );
   });
+
+  it("拒绝把内部阶段枚举写进用户可见报告", () => {
+    const invalid = structuredClone(output);
+    invalid.summary = "四个层级均为 PASSED_WITH_ANSWER。";
+
+    expect(reportAgentOutputSchema.safeParse(invalid).success).toBe(false);
+  });
+
+  it("拒绝把实现术语写进用户可见报告", () => {
+    const invalid = structuredClone(output);
+    invalid.summary = "本报告采用确定性分数汇总学习情况。";
+
+    expect(reportAgentOutputSchema.safeParse(invalid).success).toBe(false);
+  });
 });

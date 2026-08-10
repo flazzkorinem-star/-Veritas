@@ -5,6 +5,7 @@ import {
   hintResponseSchema,
   stageAnswerSchema,
   stageQuestionSchema,
+  userTurnDecisionSchema,
 } from "./agent-contracts";
 
 describe("Agent 2 结构化输出契约", () => {
@@ -84,5 +85,56 @@ describe("Agent 2 结构化输出契约", () => {
         assistantMessage: "太阳提供能量，使液态水蒸发为水蒸气。",
       }),
     ).toMatchObject({ assistantMessage: expect.stringContaining("太阳") });
+  });
+
+  it("普通对话只返回自然回复，不伪造回答分类", () => {
+    expect(
+      userTurnDecisionSchema.parse({
+        responseMode: "CONVERSATION",
+        learningGoalUpdate: "理解 ETF 与 ETF 联接基金的区别",
+        assistantMessage:
+          "这些代码不用背。这里真正值得弄清的是 ETF 在场内交易，而 ETF 联接基金主要通过场外渠道申购。",
+      }),
+    ).toMatchObject({ responseMode: "CONVERSATION" });
+  });
+
+  it("开始诊断时把自然过渡与唯一主问题分开", () => {
+    expect(
+      userTurnDecisionSchema.parse({
+        responseMode: "START_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        assistantMessage: "可以，先测最基础但确实有用的区别。",
+        question: "ETF 和 ETF 联接基金在交易渠道上有什么不同？",
+      }),
+    ).toMatchObject({ responseMode: "START_DIAGNOSTIC" });
+  });
+
+  it("只有继续诊断时才接收评分所需的语义判断", () => {
+    expect(
+      userTurnDecisionSchema.parse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        correctEvidence: ["说明了场内与场外渠道的区别"],
+        missingPoints: [],
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        scaffold: null,
+        assistantMessage: "对，交易渠道的区别你已经说清楚了。",
+      }),
+    ).toMatchObject({ responseMode: "EVALUATE_DIAGNOSTIC" });
+  });
+
+  it("拒绝普通对话夹带分数或层级状态", () => {
+    expect(
+      userTurnDecisionSchema.safeParse({
+        responseMode: "CONVERSATION",
+        learningGoalUpdate: null,
+        assistantMessage: "先解释这个概念。",
+        score: 100,
+      }).success,
+    ).toBe(false);
   });
 });

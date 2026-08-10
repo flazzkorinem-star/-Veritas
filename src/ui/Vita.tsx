@@ -11,24 +11,54 @@ export const VITA_STATES = [
 ] as const;
 export type VitaState = (typeof VITA_STATES)[number];
 
-const assets: Record<VitaState, { src: string; alt: string }> = {
-  default: { src: "/vita/default.png", alt: "维塔安静地陪在这里" },
-  waiting: { src: "/vita/waiting.png", alt: "维塔等你递来学习材料" },
-  processing: { src: "/vita/processing.png", alt: "维塔正在认真整理材料" },
-  hint: { src: "/vita/hint.png", alt: "维塔递来一条小提示" },
-  encourage: { src: "/vita/encouragement.png", alt: "维塔在为你的进步鼓掌" },
-  answer: { src: "/vita/answer.png", alt: "维塔打开答案供你核对" },
-  error: { src: "/vita/error.png", alt: "维塔准备和你一起重试" },
+const assets: Record<VitaState, { src: string; avatarSrc: string; alt: string }> = {
+  default: {
+    src: "/vita/default-final.png",
+    avatarSrc: "/vita/default-avatar-final.png",
+    alt: "维塔安静地陪在这里",
+  },
+  waiting: {
+    src: "/vita/waiting-hd.png",
+    avatarSrc: "/vita/waiting-avatar-final.png",
+    alt: "维塔挥手欢迎你开始学习",
+  },
+  processing: {
+    src: "/vita/processing-final.png",
+    avatarSrc: "/vita/processing-avatar-final.png",
+    alt: "维塔正在认真整理材料",
+  },
+  hint: {
+    src: "/vita/hint-final.png",
+    avatarSrc: "/vita/hint-avatar-final.png",
+    alt: "维塔举起手给出一条提示",
+  },
+  encourage: {
+    src: "/vita/encouragement-final.png",
+    avatarSrc: "/vita/encouragement-avatar-final.png",
+    alt: "维塔竖起拇指肯定你的进步",
+  },
+  answer: {
+    src: "/vita/answer-final.png",
+    avatarSrc: "/vita/answer-avatar-final.png",
+    alt: "维塔打开书陪你核对答案",
+  },
+  error: {
+    src: "/vita/error-full.png",
+    avatarSrc: "/vita/error-avatar-final.png",
+    alt: "维塔准备和你一起重试",
+  },
 };
 
 export function Vita({
   state = "default",
   size = 180,
   className = "",
+  avatar = false,
 }: {
   state?: VitaState;
   size?: number;
   className?: string;
+  avatar?: boolean;
 }) {
   const asset = assets[state];
   return (
@@ -37,9 +67,10 @@ export function Vita({
       className={className}
       data-testid={`vita-${state}`}
       height={size}
-      priority={state === "waiting"}
+      loading={avatar ? "lazy" : "eager"}
       sizes={`${size}px`}
-      src={asset.src}
+      src={avatar ? asset.avatarSrc : asset.src}
+      unoptimized
       width={size}
     />
   );

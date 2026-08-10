@@ -13,6 +13,7 @@ import type {
 export interface StoredTask extends Task {
   fileName: string;
   isPinned: boolean;
+  learningGoal?: string;
   failureReason?: string;
 }
 
