@@ -7,9 +7,19 @@ import {
 } from "@/domain/diagnostic/agent-contracts";
 import { firstQuestionSchema } from "@/domain/knowledge-map/contracts";
 import type { AgentOperationRequest } from "@/domain/agents/contracts";
+import {
+  buildBudgetedMaterialRequest,
+  buildBudgetedRecentRequest,
+} from "@/domain/agents/context-budget";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import { diagnosticReducer } from "@/domain/diagnostic/reducer";
-import type { DiagnosticNode, KnowledgeItem, Message, StageKey } from "@/domain/types";
+import type {
+  DiagnosticNode,
+  KnowledgeItem,
+  MaterialModule,
+  Message,
+  StageKey,
+} from "@/domain/types";
 import { callAgent } from "@/features/materials/agent-client";
 
 type DiagnosticRequest = Extract<
@@ -32,10 +42,11 @@ export type DiagnosticAgentCall = (
 interface TurnContext {
   node: DiagnosticNode;
   knowledgeItems: KnowledgeItem[];
-  materialContext: Extract<
-    AgentOperationRequest,
-    { operation: "RESPOND_TO_USER" }
-  >["input"]["materialContext"];
+  materialContext: {
+    title: string;
+    modules: MaterialModule[];
+    knowledgeItems: KnowledgeItem[];
+  };
   learningGoal: string | null;
   session: NodeSession;
   recentMessages: Pick<Message, "role" | "content">[];
@@ -65,19 +76,24 @@ export async function createFirstQuestion(
   >,
   agent: DiagnosticAgentCall = defaultAgentCall,
 ) {
-  return firstQuestionSchema.parse(
-    await agent(
-      {
-        operation: "CREATE_FIRST_QUESTION",
-        input: {
-          node: input.node,
-          knowledgeItems: input.knowledgeItems,
-          materialContext: input.materialContext,
-          learningGoal: input.learningGoal,
-        },
+  const request = buildBudgetedMaterialRequest({
+    materialTitle: input.materialContext.title,
+    modules: input.materialContext.modules,
+    knowledgeItems: input.materialContext.knowledgeItems,
+    currentKnowledgeItemIds: new Set(input.knowledgeItems.map((item) => item.id)),
+    recentMessages: [],
+    createRequest: (materialContext) => ({
+      operation: "CREATE_FIRST_QUESTION" as const,
+      input: {
+        node: input.node,
+        knowledgeItems: input.knowledgeItems,
+        materialContext,
+        learningGoal: input.learningGoal,
       },
-      { signal: input.signal },
-    ),
+    }),
+  });
+  return firstQuestionSchema.parse(
+    await agent(request, { signal: input.signal }),
   );
 }
 
@@ -89,12 +105,11 @@ function activeQuestion(session: NodeSession) {
   return { stage: session.currentStage, question: stage.mainQuestion };
 }
 
-function commonInput(context: TurnContext) {
+function coreInput(context: TurnContext) {
   return {
     node: context.node,
     knowledgeItems: context.knowledgeItems,
     learningGoal: context.learningGoal,
-    recentMessages: context.recentMessages.slice(-20),
   };
 }
 
@@ -134,19 +149,24 @@ export async function respondToUser(
   agent: DiagnosticAgentCall = defaultAgentCall,
 ): Promise<DiagnosticTurnResult> {
   const currentStage = context.session.stages[context.session.currentStage];
-  const diagnosticStatus =
+  const diagnosticStatus: "NOT_STARTED" | "ACTIVE" | "COMPLETED" =
     context.session.status === "COMPLETED"
       ? "COMPLETED"
       : currentStage.status === "ACTIVE"
         ? "ACTIVE"
         : "NOT_STARTED";
-  const decision = userTurnDecisionSchema.parse(
-    await agent(
-      {
-        operation: "RESPOND_TO_USER",
-        input: {
-          ...commonInput(context),
-          materialContext: context.materialContext,
+  const request = buildBudgetedMaterialRequest({
+    materialTitle: context.materialContext.title,
+    modules: context.materialContext.modules,
+    knowledgeItems: context.materialContext.knowledgeItems,
+    currentKnowledgeItemIds: new Set(context.knowledgeItems.map((item) => item.id)),
+    recentMessages: context.recentMessages,
+    createRequest: (materialContext, recentMessages) => ({
+      operation: "RESPOND_TO_USER" as const,
+      input: {
+          ...coreInput(context),
+          materialContext,
+          recentMessages,
           diagnostic: {
             status: diagnosticStatus,
             stage: context.session.currentStage,
@@ -155,9 +175,10 @@ export async function respondToUser(
           },
           userMessage: context.userMessage,
         },
-      },
-      { signal: context.signal },
-    ),
+    }),
+  });
+  const decision = userTurnDecisionSchema.parse(
+    await agent(request, { signal: context.signal }),
   );
 
   if (decision.responseMode === "CONVERSATION") {
@@ -200,18 +221,20 @@ export async function respondToUser(
     session.stages[current.stage].status === "PASSED_WITH_ANSWER";
 
   if (automaticallyRevealed) {
-    const answer = stageAnswerSchema.parse(
-      await agent(
-        {
-          operation: "CREATE_STAGE_ANSWER",
-          input: {
-            ...commonInput(context),
-            stage: current.stage,
-            mainQuestion: current.question,
-          },
+    const answerRequest = buildBudgetedRecentRequest({
+      recentMessages: context.recentMessages,
+      createRequest: (recentMessages) => ({
+        operation: "CREATE_STAGE_ANSWER" as const,
+        input: {
+          ...coreInput(context),
+          recentMessages,
+          stage: current.stage,
+          mainQuestion: current.question,
         },
-        { signal: context.signal },
-      ),
+      }),
+    });
+    const answer = stageAnswerSchema.parse(
+      await agent(answerRequest, { signal: context.signal }),
     );
     assistantMessages.push(answer.assistantMessage);
   }
@@ -242,19 +265,21 @@ export async function requestHint(
   const session = diagnosticReducer(context.session, { type: "REQUEST_HINT" });
   const hintLevel = session.stages[current.stage].hintLevel;
   if (hintLevel === 0) throw new Error("提示级别无效。");
-  const hint = hintResponseSchema.parse(
-    await agent(
-      {
-        operation: "CREATE_HINT",
-        input: {
-          ...commonInput(context),
-          stage: current.stage,
-          mainQuestion: current.question,
-          hintLevel,
-        },
+  const request = buildBudgetedRecentRequest({
+    recentMessages: context.recentMessages,
+    createRequest: (recentMessages) => ({
+      operation: "CREATE_HINT" as const,
+      input: {
+        ...coreInput(context),
+        recentMessages,
+        stage: current.stage,
+        mainQuestion: current.question,
+        hintLevel,
       },
-      { signal: context.signal },
-    ),
+    }),
+  });
+  const hint = hintResponseSchema.parse(
+    await agent(request, { signal: context.signal }),
   );
   if (hint.hintLevel !== hintLevel) throw new Error("模型返回了错误的提示级别。");
   return {
@@ -270,18 +295,20 @@ export async function revealStageAnswer(
   agent: DiagnosticAgentCall = defaultAgentCall,
 ): Promise<DiagnosticTurnResult> {
   const current = activeQuestion(context.session);
-  const answer = stageAnswerSchema.parse(
-    await agent(
-      {
-        operation: "CREATE_STAGE_ANSWER",
-        input: {
-          ...commonInput(context),
-          stage: current.stage,
-          mainQuestion: current.question,
-        },
+  const request = buildBudgetedRecentRequest({
+    recentMessages: context.recentMessages,
+    createRequest: (recentMessages) => ({
+      operation: "CREATE_STAGE_ANSWER" as const,
+      input: {
+        ...coreInput(context),
+        recentMessages,
+        stage: current.stage,
+        mainQuestion: current.question,
       },
-      { signal: context.signal },
-    ),
+    }),
+  });
+  const answer = stageAnswerSchema.parse(
+    await agent(request, { signal: context.signal }),
   );
   let session = diagnosticReducer(context.session, { type: "REVEAL_ANSWER" });
   const assistantMessages = [answer.assistantMessage];

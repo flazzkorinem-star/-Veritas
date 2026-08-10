@@ -83,6 +83,11 @@ describe("文本材料处理编排", () => {
       "AUDIT_KNOWLEDGE_MAP",
       "CREATE_FIRST_QUESTION",
     ]);
+    expect(callAgent.mock.calls[2]![0].input.materialContext).toEqual({
+      title: "water.md",
+      modules: [{ id: "module-1", title: "模块" }],
+      itemIndex: [{ id: "item-1", title: "循环动力", kind: "CORE" }],
+    });
     const agentSignals = callAgent.mock.calls.map(
       ([, dependencies]) => dependencies?.signal,
     );
@@ -144,13 +149,24 @@ describe("文本材料处理编排", () => {
     expect(maxActiveExtractions).toBe(2);
     const auditRequest = callAgent.mock.calls.find(
       ([request]) => request.operation === "AUDIT_KNOWLEDGE_MAP",
-    )?.[0] as { input: { chunks: Array<{ chunkId: string }> } } | undefined;
+    )?.[0] as
+      | {
+          input: {
+            chunks: Array<{ chunkId: string; extraction: typeof extraction }>;
+          };
+        }
+      | undefined;
     expect(auditRequest?.input.chunks.map(({ chunkId }) => chunkId)).toEqual([
       "chunk-1",
       "chunk-2",
       "chunk-3",
       "chunk-4",
     ]);
+    expect(
+      auditRequest?.input.chunks.flatMap(({ extraction }) =>
+        extraction.knowledgeItems.map((item) => item.id),
+      ),
+    ).toEqual(["c1-i1", "c2-i1", "c3-i1", "c4-i1"]);
   });
 
   it("只按实际完成的分块数量上报提取进度", async () => {

@@ -1,4 +1,6 @@
 import type { FirstQuestion, KnowledgeMap } from "@/domain/knowledge-map/contracts";
+import { namespaceChunkExtraction } from "@/domain/knowledge-map/stable-extraction-ids";
+import { buildBudgetedMaterialRequest } from "@/domain/agents/context-budget";
 import {
   EXTRACTION_CONCURRENCY,
   MATERIAL_PROCESSING_MAX_MS,
@@ -32,7 +34,7 @@ export class TextProcessingError extends Error {
       code === "NO_RELIABLE_NODE"
         ? "没有从材料中找到可靠的学习主题，请检查内容后重试。"
         : code === "MODEL_PROCESSING_TIMEOUT"
-          ? "整理材料超过 3 分钟，请重试或拆分材料。"
+          ? "整理材料超过 4 分钟，请重试或拆分材料。"
           : "整份材料处理超过 5 分钟，请重试或拆分材料。",
     );
     this.name = "TextProcessingError";
@@ -122,7 +124,7 @@ export async function processTextMaterial(
             });
             return {
               chunkId: chunk.chunkId,
-              extraction,
+              extraction: namespaceChunkExtraction(chunk.chunkId, extraction),
             };
           }),
         );
@@ -144,25 +146,27 @@ export async function processTextMaterial(
 
       const nodeItemIds = new Set(firstNode.knowledgeItemIds);
       onProgress({ stage: "PREPARING_CONTEXT", startedAt });
-      const firstQuestion = await runAgent(
-        {
+      const firstQuestionRequest = buildBudgetedMaterialRequest({
+        materialTitle: material.fileName,
+        modules: knowledgeMap.modules,
+        knowledgeItems: knowledgeMap.knowledgeItems,
+        currentKnowledgeItemIds: nodeItemIds,
+        recentMessages: [],
+        createRequest: (materialContext) => ({
           operation: "CREATE_FIRST_QUESTION",
           input: {
-            materialContext: {
-              title: material.fileName,
-              modules: knowledgeMap.modules,
-              knowledgeItems: knowledgeMap.knowledgeItems,
-              nodes: knowledgeMap.nodes,
-            },
+            materialContext,
             node: firstNode,
             knowledgeItems: knowledgeMap.knowledgeItems.filter((item) =>
               nodeItemIds.has(item.id),
             ),
             learningGoal: null,
           },
-        },
-        { signal: modelSignal },
-      );
+        } as const),
+      });
+      const firstQuestion = await runAgent(firstQuestionRequest, {
+        signal: modelSignal,
+      });
       return { parsedText: material.text, knowledgeMap, firstQuestion };
     } catch (error) {
       operationController.abort();

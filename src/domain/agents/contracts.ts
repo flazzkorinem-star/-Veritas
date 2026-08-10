@@ -21,9 +21,19 @@ const materialContext = {
   materialContext: z
     .object({
       title: z.string().trim().min(1).max(255),
-      modules: z.array(materialModuleSchema).min(1).max(500),
-      knowledgeItems: z.array(knowledgeItemSchema).min(1).max(2_000),
-      nodes: z.array(diagnosticNodeSchema).min(1).max(1_000),
+      modules: z
+        .array(materialModuleSchema.pick({ id: true, title: true }).strict())
+        .min(1)
+        .max(500),
+      itemIndex: z
+        .array(
+          knowledgeItemSchema
+            .pick({ id: true, title: true, kind: true, summary: true })
+            .partial({ summary: true })
+            .strict(),
+        )
+        .min(1)
+        .max(2_000),
     })
     .strict(),
 };

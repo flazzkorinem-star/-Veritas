@@ -1,14 +1,22 @@
 import { z } from "zod";
 
 import {
+  AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES,
+  AUDIT_OPERATION_MAX_MS,
+} from "@/config/agent-limits";
+import {
   type AgentOperationRequest,
   agentOperationRequestSchema,
 } from "@/domain/agents/contracts";
 import {
   chunkExtractionSchema,
-  knowledgeMapSchema,
   firstQuestionSchema,
 } from "@/domain/knowledge-map/contracts";
+import {
+  assembleKnowledgeAudit,
+  KnowledgeAuditAssemblyError,
+  knowledgeAuditSchema,
+} from "@/domain/knowledge-map/audit-assembly";
 import {
   hintResponseSchema,
   stageAnswerSchema,
@@ -25,22 +33,6 @@ import {
   DeepSeekError,
   type DeepSeekJsonRequest,
 } from "@/server/deepseek/client";
-
-const auditResultSchema = z
-  .object({
-    knowledgeMap: knowledgeMapSchema,
-    sourceCoverage: z
-      .array(
-        z
-          .object({
-            chunkId: z.string().regex(/^chunk-[1-9][0-9]*$/),
-            knowledgeItemIds: z.array(z.string().min(1)).min(1),
-          })
-          .strict(),
-      )
-      .min(1),
-  })
-  .strict();
 
 export type AgentServiceErrorCode = "INVALID_REQUEST" | "INVALID_MODEL_OUTPUT";
 
@@ -126,6 +118,16 @@ function operationMaxAttempts(operation: AgentOperationRequest["operation"]) {
     operation === "CREATE_STAGE_ANSWER"
     ? 2
     : 3;
+}
+
+function usesAgentTwoRequestBudget(operation: AgentOperationRequest["operation"]) {
+  return (
+    operation === "CREATE_FIRST_QUESTION" ||
+    operation === "CREATE_STAGE_QUESTION" ||
+    operation === "RESPOND_TO_USER" ||
+    operation === "CREATE_HINT" ||
+    operation === "CREATE_STAGE_ANSWER"
+  );
 }
 
 function sanitizeDetails(details: string[]) {
@@ -231,6 +233,12 @@ async function callValidated<T>(
   try {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (controller.signal.aborted) throw abortError(abortState.reason);
+      if (
+        usesAgentTwoRequestBudget(operation) &&
+        deepSeekRequestBodyBytes(finalRequest) > AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES
+      ) {
+        throw new AgentServiceError("INVALID_REQUEST");
+      }
       attempts += 1;
       try {
         const output = await raceWithSignal(
@@ -321,14 +329,14 @@ ${input.text}
 function auditPrompt(
   input: Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>["input"],
 ) {
-  return `整理、去重并审计所有分块提取结果。每个 chunk 是一个必须保留的来源章节；不得把不同 chunk 的材料模块合并成一个模块，最终每个 chunk 至少对应一个模块和一个知识条目。每个核心条目必须且只能进入一个主要诊断主题；辅助条目必须绑定主题或给出仅作参考的理由。每个来源块都必须出现在 sourceCoverage，且关联至少一个最终知识条目。主题通常聚合 2—5 个高度相关核心条目，独立概念不得强并。
+  return `整理、去重并审计所有分块提取结果。输入 ID 已由代码加上分块命名空间。不得复述 modules、knowledgeItems、sourceReferences 或来源覆盖；代码会从原始提取和你的合并谱系确定性组装它们。每个原始知识条目必须且只能出现在一个 mergeGroup，每个 mergeGroup 必须且只能有一个 assignment。主题通常聚合 2—5 个高度相关核心条目，独立概念不得强并。
 
 先判断学习价值，再设计四层目标。代码、编号、产品名名单和随时可查询的孤立事实默认归为 SUPPORTING 与 REFERENCE_ONLY；除非它们本身影响概念判断，否则不得拿来做记忆测试。memory 只检验后续理解真正需要调用的核心定义或关系；understanding、application、analysis 必须逐步检验解释、迁移和机制，不能只是换一种方式复述材料。
 
-只输出符合下列完整骨架的 json，不得改字段名、不得增加字段。modules 和 knowledgeItems 使用输入中的相同字段结构；所有 id 只用英文字母、数字、连字符或下划线：
-{"knowledgeMap":{"modules":[{"id":"module-1","title":"...","sourceRange":"..."}],"knowledgeItems":[{"id":"item-1","moduleId":"module-1","title":"...","summary":"...","kind":"CORE","diagnosticRationale":"...","sourceReferences":[{"label":"...","excerpt":"..."}],"commonMisconceptions":[]}],"nodes":[{"id":"node-1","moduleId":"module-1","title":"...","objective":"...","knowledgeItemIds":["item-1"],"sourceReferences":[{"label":"...","excerpt":"..."}],"canonicalUnderstanding":"...","commonMisconceptions":[],"bloomTargets":{"memory":"...","understanding":"...","application":"...","analysis":"..."},"order":1}],"coverageAssignments":[{"knowledgeItemId":"item-1","disposition":"DIAGNOSED_IN_NODE","nodeId":"node-1"}]},"sourceCoverage":[{"chunkId":"chunk-1","knowledgeItemIds":["item-1"]}]}
+只输出符合下列精简骨架的 json，不得改字段名、不得增加字段。canonical 仅在合并后确实需要规范化时填写必要字段；不得复制来源：
+{"mergeGroups":[{"id":"group-1","sourceKnowledgeItemIds":["c1-i1"],"diagnosticRationale":"...","canonical":{"title":"...","summary":"...","commonMisconceptions":[]}}],"nodes":[{"id":"draft-node-1","title":"...","objective":"...","canonicalUnderstanding":"...","commonMisconceptions":[],"bloomTargets":{"memory":"...","understanding":"...","application":"...","analysis":"..."},"order":1}],"assignments":[{"groupId":"group-1","disposition":"DIAGNOSED_IN_NODE","nodeId":"draft-node-1"}]}
 
-kind 只能是 CORE 或 SUPPORTING。disposition 只能是 DIAGNOSED_IN_NODE、SUPPORTING_IN_NODE 或 REFERENCE_ONLY；前两种必须有 nodeId，REFERENCE_ONLY 必须有非空 reason 且不能有 nodeId。节点 order 从 1 开始且不重复。
+diagnosticRationale 必须说明合并条目的最终学习价值。disposition 只能是 DIAGNOSED_IN_NODE、SUPPORTING_IN_NODE 或 REFERENCE_ONLY；前两种必须有 nodeId，REFERENCE_ONLY 必须有非空 reason 且不能有 nodeId。每个诊断主题至少有一个 DIAGNOSED_IN_NODE 合并组；节点 order 从 1 开始且不重复。最终 kind 由代码根据 disposition 推导。
 
 <UNTRUSTED_EXTRACTIONS>
 ${JSON.stringify(input.chunks)}
@@ -424,26 +432,6 @@ ${JSON.stringify(input)}
 </UNTRUSTED_REPORT_EVIDENCE>`;
 }
 
-function verifyCoverage(
-  input: Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>["input"],
-  output: z.infer<typeof auditResultSchema>,
-) {
-  const expectedChunks = new Set(input.chunks.map((chunk) => chunk.chunkId));
-  const coveredChunks = new Set(output.sourceCoverage.map((item) => item.chunkId));
-  const finalItemIds = new Set(output.knowledgeMap.knowledgeItems.map((item) => item.id));
-  if (
-    coveredChunks.size !== output.sourceCoverage.length ||
-    expectedChunks.size !== coveredChunks.size ||
-    output.knowledgeMap.modules.length < expectedChunks.size ||
-    [...expectedChunks].some((id) => !coveredChunks.has(id)) ||
-    output.sourceCoverage.some((entry) =>
-      entry.knowledgeItemIds.some((id) => !finalItemIds.has(id)),
-    )
-  ) {
-    invalidModelOutput(["AUDIT_KNOWLEDGE_MAP:sourceCoverage:custom"]);
-  }
-}
-
 export async function runAgentOperation(
   value: unknown,
   apiKey: string,
@@ -483,13 +471,24 @@ export async function runAgentOperation(
           thinking: true,
           reasoningEffort: "low",
           maxTokens: 24_000,
-          timeoutMs: 120_000,
+          timeoutMs: AUDIT_OPERATION_MAX_MS,
           signal,
         },
         (value) => {
-          const output = parseOutput(auditResultSchema, value, "AUDIT_KNOWLEDGE_MAP");
-          verifyCoverage(auditInput, output);
-          return output.knowledgeMap;
+          const audit = parseOutput(
+            knowledgeAuditSchema,
+            value,
+            "AUDIT_KNOWLEDGE_MAP",
+          );
+          try {
+            return assembleKnowledgeAudit(auditInput.chunks, audit).knowledgeMap;
+          } catch (error) {
+            return invalidModelOutput(
+              error instanceof KnowledgeAuditAssemblyError
+                ? error.details
+                : ["AUDIT_KNOWLEDGE_MAP:lineage:custom"],
+            );
+          }
         },
         dependencies,
       );

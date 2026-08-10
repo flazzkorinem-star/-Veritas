@@ -94,6 +94,14 @@ describe("诊断回合编排", () => {
     expect(result.assistantMessages).toEqual([
       "蒸发是液态水获得能量后变成水蒸气的过程。",
     ]);
+    const request = agent.mock.calls[0]![0];
+    expect(request.input.materialContext).toEqual({
+      title: "水循环",
+      modules: [{ id: "module-1", title: "自然水循环" }],
+      itemIndex: [{ id: "item-1", title: "循环动力", kind: "CORE" }],
+    });
+    expect(request.input.materialContext).not.toHaveProperty("nodes");
+    expect(request.input.materialContext).not.toHaveProperty("knowledgeItems");
   });
 
   it("用户要求检验时才启动记忆层主问题", async () => {

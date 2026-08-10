@@ -37,7 +37,7 @@
 - `src/app/page.tsx`：挂载本地学习工作区。
 - `src/app/globals.css`：全局令牌、两区工作区、固定视口内的消息滚动与输入区、按需主题/进度浮层、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
-- `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、路由总并发数、材料处理总预算、模型阶段预算和 Agent 1 分块并发数。
+- `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、Agent 2 浏览器与上游整包字节预算、最近消息预算、路由总并发数、材料处理总预算、模型阶段预算和 Agent 1 分块并发数。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
@@ -45,8 +45,11 @@
 - `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约。
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
-- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问。
-- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助与报告操作，并为通用对话提供完整材料上下文。
+- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；单个分块内的模块与条目 ID 必须唯一。
+- `src/domain/knowledge-map/stable-extraction-ids.ts`：按分块和原始顺序为抽取结果重分配稳定命名空间 ID，并同步条目到模块的引用。
+- `src/domain/knowledge-map/audit-assembly.ts`：校验只含合并谱系、诊断主题和条目归属的精简审计；由代码确定性组装最终知识地图、条目类型、节点顺序和来源覆盖。
+- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助与报告操作；Agent 2 的线上材料上下文只接受精简目录。
+- `src/domain/agents/context-budget.ts`：按整包 JSON 字节预算确定性组装 Agent 2 请求，优先保留当前主题、最新消息和模块/条目目录，剩余空间再加入摘要。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
 - `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话输入与洞察结构，并拒绝引用助理消息、伪造用户原话、支架、来源或在用户文案中暴露内部术语。
 - `src/domain/report/build-report.ts`：由本地确定性证据回填任务级报告，并生成转义后的 Markdown 下载文本。
@@ -63,11 +66,11 @@
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
-- `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、覆盖审计和首个有意义问题，按实际完成数报告进度、保持原文顺序并传播取消信号。
-- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；普通消息保持状态不变，文字提示/答案请求复用按钮流程，状态变化只交给唯一 reducer。
+- `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、稳定 ID 重分配、精简覆盖审计和首个有意义问题，按实际完成数报告进度、保持原文顺序并传播取消信号。
+- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；发送前应用整包字节预算，普通消息保持状态不变，文字提示/答案请求复用按钮流程，状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
-- `src/server/agents/service.ts`：组装材料处理、通用 Vita 对话、诊断辅助与报告的隔离提示，作为唯一重试所有者统一限制尝试次数和绝对截止时间，反馈脱敏校验路径、剥离白名单空字段、校验业务状态，并记录不含材料与模型正文的操作元数据。
+- `src/server/agents/service.ts`：组装材料处理、精简知识审计、通用 Vita 对话、诊断辅助与报告的隔离提示，确定性恢复最终知识地图；作为唯一重试所有者统一限制尝试次数和绝对截止时间，限制 Agent 2 上游整包字节数，反馈脱敏校验路径、剥离白名单空字段、校验业务状态，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话和已验证状态，调用 Agent 3 并保存任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
@@ -96,7 +99,9 @@
 - `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
 - `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、单次物理请求与调用方取消传播。
-- `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝、单一重试预算、共享截止时间、定向结构修复、白名单归一化与日志脱敏。
+- `src/domain/agents/context-budget.test.ts`：验证 Agent 2 整包 JSON 字节上限、确定性裁剪、当前主题完整保留、最新消息优先和目录先于摘要。
+- `src/domain/knowledge-map/stable-extraction-ids.test.ts`、`audit-assembly.test.ts`：验证多分块重复 ID 隔离，以及精简审计到完整知识地图、类型、节点顺序和来源覆盖的确定性恢复。
+- `src/server/agents/service.test.ts`：验证提示隔离、精简审计、覆盖完整性、Zod 拒绝、单一重试预算、共享截止时间、定向结构修复、白名单归一化与日志脱敏。
 - `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
@@ -118,3 +123,4 @@
 - `e2e/phase12-security.spec.ts`：在双端生产 Edge 验证生产 CSP、安全响应头、API 错误脱敏、客户端静态分块秘密隔离和恶意文本纯文本渲染。
 - `e2e/phase13-acceptance.spec.ts`：在生产 Edge 验证键盘与语义基线、减少动效偏好、1024×768 平板断点、全同源首屏网络和初始 JavaScript 资源预算。
 - `e2e/phase14-real-journey.spec.ts`：显式启用时在同一个生产 Edge 任务中调用真实 DeepSeek，连续验收上传、知识地图、默认首问、通用对话绕行、语义提示/答案、四层推进、未诊断范围和报告。
+- `e2e/phase15-performance-real.spec.ts`：仅显式启用时串行生成并处理 10、50、200 KiB 合成 Markdown，记录端到端耗时、同源请求字节数、调用数、状态和主题数，不进入普通 CI 的真实模型调用。

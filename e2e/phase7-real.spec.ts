@@ -52,9 +52,10 @@ test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request 
     knowledgeItems,
     materialContext: {
       title: "光合作用",
-      modules: [{ id: "module-1", title: "光合作用", sourceRange: "第 1 段" }],
-      knowledgeItems,
-      nodes: [node],
+      modules: [{ id: "module-1", title: "光合作用" }],
+      itemIndex: [
+        { id: "item-1", title: "光合作用的能量转化", kind: "CORE" },
+      ],
     },
     learningGoal: "检验对光合作用能量转化的理解",
     diagnostic: {

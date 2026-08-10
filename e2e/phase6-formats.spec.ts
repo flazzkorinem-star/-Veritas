@@ -2,9 +2,15 @@ import { expect, test, type Browser, type Page, type Route } from "@playwright/t
 import JSZip from "jszip";
 
 interface MockExtraction {
-  modules: Array<Record<string, unknown>>;
+  modules: Array<{
+    id: string;
+    title: string;
+    sourceRange: string;
+    [key: string]: unknown;
+  }>;
   knowledgeItems: Array<{
     id: string;
+    moduleId: string;
     sourceReferences: Array<{ label: string; excerpt: string }>;
     [key: string]: unknown;
   }>;
@@ -19,7 +25,6 @@ function mockAgentResult(route: Route) {
       chunks?: Array<{ extraction?: MockExtraction }>;
     };
   };
-  const fallbackSource = { label: "材料来源", excerpt: "水循环学习材料" };
   if (request.operation === "EXTRACT_KNOWLEDGE") {
     const source = {
       label: String(request.input.sourceLabel),
@@ -47,13 +52,18 @@ function mockAgentResult(route: Route) {
     });
   }
   if (request.operation === "AUDIT_KNOWLEDGE_MAP") {
-    const extraction = request.input.chunks?.[0]?.extraction;
-    const source =
-      extraction?.knowledgeItems?.[0]?.sourceReferences?.[0] ?? fallbackSource;
-    const modules = extraction?.modules ?? [
-      { id: "module-1", title: "水循环", sourceRange: source.label },
-    ];
-    const knowledgeItems = extraction?.knowledgeItems ?? [];
+    const extractions =
+      request.input.chunks?.flatMap((chunk) =>
+        chunk.extraction ? [chunk.extraction] : [],
+      ) ?? [];
+    const modules = extractions.flatMap((extraction) => extraction.modules);
+    const knowledgeItems = extractions.flatMap(
+      (extraction) => extraction.knowledgeItems,
+    );
+    const knowledgeItemIds = knowledgeItems.map((item) => item.id);
+    const sourceReferences = knowledgeItems.flatMap(
+      (item) => item.sourceReferences,
+    );
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -63,11 +73,11 @@ function mockAgentResult(route: Route) {
           nodes: [
             {
               id: "node-1",
-              moduleId: "module-1",
+              moduleId: modules[0]!.id,
               title: "水循环过程",
               objective: "解释水循环的主要过程。",
-              knowledgeItemIds: ["item-1"],
-              sourceReferences: [source],
+              knowledgeItemIds,
+              sourceReferences,
               canonicalUnderstanding: "水在太阳能作用下发生蒸发、凝结和降水。",
               commonMisconceptions: [],
               bloomTargets: {
@@ -79,13 +89,11 @@ function mockAgentResult(route: Route) {
               order: 1,
             },
           ],
-          coverageAssignments: [
-            {
-              knowledgeItemId: "item-1",
+          coverageAssignments: knowledgeItemIds.map((knowledgeItemId) => ({
+              knowledgeItemId,
               disposition: "DIAGNOSED_IN_NODE",
               nodeId: "node-1",
-            },
-          ],
+            })),
         },
       }),
     });

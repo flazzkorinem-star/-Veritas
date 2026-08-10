@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES } from "@/config/agent-limits";
+import { deepSeekRequestBodyBytes } from "@/server/deepseek/client";
+
 import { runAgentOperation } from "./service";
 
 const source = { label: "第 1 节，第 1 段", excerpt: "太阳驱动蒸发。" };
@@ -34,9 +37,8 @@ const node = {
 };
 const materialContext = {
   title: "水循环",
-  modules: [{ id: "module-1", title: "自然水循环", sourceRange: "第 1 节" }],
-  knowledgeItems,
-  nodes: [node],
+  modules: [{ id: "module-1", title: "自然水循环" }],
+  itemIndex: knowledgeItems.map(({ id, title, kind }) => ({ id, title, kind })),
 };
 
 describe("Agent 2 服务", () => {
@@ -114,6 +116,45 @@ describe("Agent 2 服务", () => {
     expect(callModel).toHaveBeenCalledWith(
       expect.objectContaining({ thinking: false, timeoutMs: 30_000 }),
     );
+    expect(deepSeekRequestBodyBytes(callModel.mock.calls[0]![0])).toBeLessThanOrEqual(
+      AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES,
+    );
+  });
+
+  it("在调用模型前拒绝超过 Agent 2 最终上游总字节预算的请求", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      responseMode: "CONVERSATION",
+      learningGoalUpdate: null,
+      assistantMessage: "不应调用到这里。",
+    });
+    const oversizedContext = {
+      ...materialContext,
+      itemIndex: Array.from({ length: 500 }, (_, index) => ({
+        id: `index-${index + 1}`,
+        title: "超长目录标题".repeat(50),
+        kind: "SUPPORTING" as const,
+      })),
+    };
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext: oversizedContext,
+            learningGoal: null,
+            diagnostic: { status: "NOT_STARTED", stage: "MEMORY", mainQuestion: null },
+            userMessage: "解释一下。",
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(callModel).not.toHaveBeenCalled();
   });
 
   it("拒绝浏览器夹带分数或下一层", async () => {

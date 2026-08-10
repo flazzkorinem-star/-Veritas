@@ -51,6 +51,44 @@ const knowledgeMap = {
   ],
 };
 
+const compactAudit = {
+  mergeGroups: [
+    {
+      id: "group-1",
+      sourceKnowledgeItemIds: ["item-1"],
+      diagnosticRationale: "是理解循环机制的基础。",
+    },
+  ],
+  nodes: [
+    {
+      id: "draft-node",
+      title: "循环动力",
+      objective: "解释太阳能怎样推动循环。",
+      canonicalUnderstanding: "太阳能驱动水蒸发进入大气。",
+      commonMisconceptions: [],
+      bloomTargets: knowledgeMap.nodes[0]!.bloomTargets,
+      order: 1,
+    },
+  ],
+  assignments: [
+    {
+      groupId: "group-1",
+      disposition: "DIAGNOSED_IN_NODE" as const,
+      nodeId: "draft-node",
+    },
+  ],
+};
+
+const compactMaterialContext = {
+  title: "水循环",
+  modules: knowledgeMap.modules.map(({ id, title }) => ({ id, title })),
+  itemIndex: knowledgeMap.knowledgeItems.map(({ id, title, kind }) => ({
+    id,
+    title,
+    kind,
+  })),
+};
+
 describe("Agent 服务", () => {
   it("以非思考模式分块提取，并把材料明确放入不可信数据边界", async () => {
     const callModel = vi.fn().mockResolvedValue(extraction);
@@ -81,10 +119,7 @@ describe("Agent 服务", () => {
   });
 
   it("覆盖审计开启低强度思考并要求每个来源块显式归属", async () => {
-    const callModel = vi.fn().mockResolvedValue({
-      knowledgeMap,
-      sourceCoverage: [{ chunkId: "chunk-1", knowledgeItemIds: ["item-1"] }],
-    });
+    const callModel = vi.fn().mockResolvedValue(compactAudit);
 
     await expect(
       runAgentOperation(
@@ -97,14 +132,24 @@ describe("Agent 服务", () => {
       ),
     ).resolves.toEqual(knowledgeMap);
     expect(callModel).toHaveBeenCalledWith(
-      expect.objectContaining({ thinking: true, reasoningEffort: "low" }),
+      expect.objectContaining({
+        thinking: true,
+        reasoningEffort: "low",
+        timeoutMs: 180_000,
+      }),
     );
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain('"mergeGroups"');
+    expect(prompt).not.toContain('"knowledgeMap"');
+    expect(prompt).not.toContain('"sourceCoverage"');
   });
 
-  it("拒绝漏掉来源块的覆盖审计结果", async () => {
+  it("拒绝合并谱系漏掉原始知识条目", async () => {
     const callModel = vi.fn().mockResolvedValue({
-      knowledgeMap,
-      sourceCoverage: [],
+      ...compactAudit,
+      mergeGroups: [
+        { id: "group-1", sourceKnowledgeItemIds: ["missing-item"] },
+      ],
     });
 
     await expect(
@@ -119,12 +164,58 @@ describe("Agent 服务", () => {
     ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
   });
 
-  it("拒绝把多个来源章节静默合成一个材料模块", async () => {
+  it("合并谱系失败时只反馈缺失和未知的稳定 ID", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...compactAudit,
+        mergeGroups: [
+          {
+            id: "group-1",
+            sourceKnowledgeItemIds: ["missing-item"],
+            diagnosticRationale: "无效谱系。",
+          },
+        ],
+      })
+      .mockResolvedValueOnce(compactAudit);
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "AUDIT_KNOWLEDGE_MAP",
+          input: { chunks: [{ chunkId: "chunk-1", extraction }] },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual(knowledgeMap);
+
+    const repair = callModel.mock.calls[1]![0].system;
+    expect(repair).toContain("lineage.missing.item-1");
+    expect(repair).toContain("lineage.unknown.missing-item");
+    expect(repair).not.toContain("太阳驱动蒸发");
+  });
+
+  it("跨来源合并同义条目时由代码保留全部模块与来源", async () => {
+    const secondExtraction = {
+      modules: [{ id: "c2-m1", title: "补充模块", sourceRange: "第 2 节" }],
+      knowledgeItems: [
+        {
+          ...extraction.knowledgeItems[0],
+          id: "c2-i1",
+          moduleId: "c2-m1",
+          sourceReferences: [{ label: "第 2 节", excerpt: "热量推动状态变化。" }],
+        },
+      ],
+    };
     const callModel = vi.fn().mockResolvedValue({
-      knowledgeMap,
-      sourceCoverage: [
-        { chunkId: "chunk-1", knowledgeItemIds: ["item-1"] },
-        { chunkId: "chunk-2", knowledgeItemIds: ["item-1"] },
+      ...compactAudit,
+      mergeGroups: [
+        {
+          id: "group-1",
+          sourceKnowledgeItemIds: ["item-1", "c2-i1"],
+          diagnosticRationale: "两个来源共同支撑循环机制。",
+        },
       ],
     });
 
@@ -135,14 +226,23 @@ describe("Agent 服务", () => {
           input: {
             chunks: [
               { chunkId: "chunk-1", extraction },
-              { chunkId: "chunk-2", extraction },
+              { chunkId: "chunk-2", extraction: secondExtraction },
             ],
           },
         },
         "server-key",
         callModel,
       ),
-    ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
+    ).resolves.toMatchObject({
+      modules: [{ id: "module-1" }, { id: "c2-m1" }],
+      knowledgeItems: [
+        {
+          id: "item-1",
+          kind: "CORE",
+          sourceReferences: [source, secondExtraction.knowledgeItems[0]!.sourceReferences[0]],
+        },
+      ],
+    });
   });
 
   it("首个问题先判断材料价值，再提出一项有意义的理解任务", async () => {
@@ -156,12 +256,7 @@ describe("Agent 服务", () => {
         {
           operation: "CREATE_FIRST_QUESTION",
           input: {
-            materialContext: {
-              title: "城市水循环",
-              modules: knowledgeMap.modules,
-              knowledgeItems: knowledgeMap.knowledgeItems,
-              nodes: knowledgeMap.nodes,
-            },
+            materialContext: { ...compactMaterialContext, title: "城市水循环" },
             node: knowledgeMap.nodes[0],
             knowledgeItems: knowledgeMap.knowledgeItems,
             learningGoal: null,
@@ -191,12 +286,7 @@ describe("Agent 服务", () => {
       {
         operation: "RESPOND_TO_USER",
         input: {
-          materialContext: {
-            title: "基金列表",
-            modules: knowledgeMap.modules,
-            knowledgeItems: knowledgeMap.knowledgeItems,
-            nodes: knowledgeMap.nodes,
-          },
+          materialContext: { ...compactMaterialContext, title: "基金列表" },
           node: knowledgeMap.nodes[0],
           knowledgeItems: knowledgeMap.knowledgeItems,
           learningGoal: "理解 ETF 产品差异",

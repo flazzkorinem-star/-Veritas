@@ -400,7 +400,6 @@ export function useWorkspace(
         title: material.fileName,
         modules: material.modules,
         knowledgeItems: material.knowledgeItems,
-        nodes: material.nodes,
       },
       learningGoal: task.learningGoal ?? null,
       session: storedSession.session,
@@ -519,7 +518,6 @@ export function useWorkspace(
             title: learningData.material.fileName,
             modules: learningData.material.modules,
             knowledgeItems: learningData.material.knowledgeItems,
-            nodes: learningData.material.nodes,
           },
           learningGoal: learningData.task.learningGoal ?? null,
         };
