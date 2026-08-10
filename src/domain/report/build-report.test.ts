@@ -19,9 +19,7 @@ const input: ReportAgentInput = {
         APPLICATION: "PASSED_WITH_ANSWER",
         ANALYSIS: "PASSED",
       },
-      messages: [
-        { id: "message-1", role: "USER", content: "太阳能让水蒸发。" },
-      ],
+      messages: [{ id: "message-1", role: "USER", content: "太阳能让水蒸发。" }],
       scaffoldEvents: [],
       sourceReferences: [{ label: "第 1 段", excerpt: "太阳驱动蒸发。" }],
     },

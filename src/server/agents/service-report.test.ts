@@ -18,9 +18,7 @@ const input = {
         APPLICATION: "PASSED" as const,
         ANALYSIS: "PASSED" as const,
       },
-      messages: [
-        { id: "message-1", role: "USER" as const, content: "太阳能驱动蒸发。" },
-      ],
+      messages: [{ id: "message-1", role: "USER" as const, content: "太阳能驱动蒸发。" }],
       scaffoldEvents: [],
       sourceReferences: [{ label: "第 1 段", excerpt: "太阳驱动蒸发。" }],
     },

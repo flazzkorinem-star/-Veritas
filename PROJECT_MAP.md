@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-首版本地验收已经通过；当前在该稳定基线上持续迭代。
+通用 AI 学习伙伴纠偏后的本地正式版已经通过完整 Mock 与真实 DeepSeek 验收；后续改动从当前稳定基线继续。
 
 ## 根目录
 
@@ -45,10 +45,10 @@
 - `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约。
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
-- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属与自然主题开场。
+- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问。
 - `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助与报告操作，并为通用对话提供完整材料上下文。
-- `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、学习目标更新、诊断模式、回答分类、证据、误解、教学动作、问题、提示与答案。
-- `src/domain/report/contracts.ts`：校验 Agent 3 输入与洞察结构，并拒绝伪造用户原话、支架、来源引用和用户可见文案中的内部实现术语。
+- `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
+- `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话输入与洞察结构，并拒绝引用助理消息、伪造用户原话、支架、来源或在用户文案中暴露内部术语。
 - `src/domain/report/build-report.ts`：由本地确定性证据回填任务级报告，并生成转义后的 Markdown 下载文本。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
@@ -63,12 +63,12 @@
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
-- `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、覆盖审计和自然主题开场，按实际完成数报告进度、保持原文顺序并传播取消信号。
-- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；普通消息保持状态不变，诊断决策才交给唯一 reducer。
+- `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、覆盖审计和首个有意义问题，按实际完成数报告进度、保持原文顺序并传播取消信号。
+- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；普通消息保持状态不变，文字提示/答案请求复用按钮流程，状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时、有限重试与外部取消信号。
 - `src/server/agents/service.ts`：组装材料处理、通用 Vita 对话、诊断辅助与报告的隔离提示，独立校验输出、对话模式、提示级别和报告文案，并只重试受影响操作。
-- `src/features/report/generate-report.ts`：在主题完成后只汇集本任务的已验证证据，调用 Agent 3 并保存任务级报告。
+- `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话和已验证状态，调用 Agent 3 并保存任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。
@@ -100,14 +100,14 @@
 - `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
-- `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至自然主题开场、核心覆盖、双端布局与刷新恢复。
+- `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首个有意义问题、核心覆盖、双端布局与刷新恢复。
 - `e2e/phase5-processing-control.spec.ts`：在双端生产 Edge 中验证模型请求进行中取消可立即重试，以及处理中刷新后恢复为明确中断状态。
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
-- `src/features/diagnostic/diagnostic-turn.test.ts`：验证同题追问、答对推进、三轮停滞、三级提示与主动答案的确定性编排。
+- `src/features/diagnostic/diagnostic-turn.test.ts`：验证通用对话绕行、同题追问、答对推进、三轮停滞、按钮与文字语义触发的提示/答案编排。
 - `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和诊断完成等待报告的事务性持久化。
-- `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证提示、回答、分数、节点切换和草稿恢复的组件闭环。
+- `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证默认首问、通用对话绕行、提示、答案、分数、节点切换和草稿恢复的组件闭环。
 - `e2e/phase7-diagnostic.spec.ts`：在双端生产 Edge 中走完一个节点四层和报告查看、下载、分享，并在桌面验证发送失败、草稿保留和原地重试。
-- `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的问题、评价、提示、答案和越权字段隔离。
+- `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的通用绕行、语义提示/答案、问题、评价和越权字段隔离。
 - `src/domain/report/*.test.ts`：验证报告证据引用、确定性回填和安全 Markdown 生成。
 - `src/storage/report-repository.test.ts`：验证报告与完成主题严格匹配，并只在最终报告保存后完成任务。
 - `src/features/report/*.test.tsx`：验证报告编排、全屏渲染、下载文件名、系统分享与复制回退。
@@ -117,4 +117,4 @@
 - `e2e/phase11-mobile.spec.ts`：在 390×844 生产 Edge 中从上传走到报告，并验证移动浮层、返回、软键盘、长内容、下一主题、横屏和溢出。
 - `e2e/phase12-security.spec.ts`：在双端生产 Edge 验证生产 CSP、安全响应头、API 错误脱敏、客户端静态分块秘密隔离和恶意文本纯文本渲染。
 - `e2e/phase13-acceptance.spec.ts`：在生产 Edge 验证键盘与语义基线、减少动效偏好、1024×768 平板断点、全同源首屏网络和初始 JavaScript 资源预算。
-- `e2e/phase14-real-journey.spec.ts`：显式启用时在同一个生产 Edge 任务中调用真实 DeepSeek，连续验收上传、知识地图、不知道后的家教支架、提示、四层推进、未诊断范围和报告。
+- `e2e/phase14-real-journey.spec.ts`：显式启用时在同一个生产 Edge 任务中调用真实 DeepSeek，连续验收上传、知识地图、默认首问、通用对话绕行、语义提示/答案、四层推进、未诊断范围和报告。

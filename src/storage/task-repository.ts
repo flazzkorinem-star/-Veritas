@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { firstQuestionSchema, knowledgeMapSchema } from "@/domain/knowledge-map/contracts";
+import {
+  firstQuestionSchema,
+  knowledgeMapSchema,
+} from "@/domain/knowledge-map/contracts";
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
 import type { FirstQuestion } from "@/domain/knowledge-map/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";

@@ -93,9 +93,7 @@ export const userTurnDecisionSchema = z
         assistantMessage: assistantMessageSchema,
       })
       .strict(),
-    z
-      .object({ responseMode: z.literal("REQUEST_HINT"), ...actionIntentFields })
-      .strict(),
+    z.object({ responseMode: z.literal("REQUEST_HINT"), ...actionIntentFields }).strict(),
     z
       .object({ responseMode: z.literal("REVEAL_ANSWER"), ...actionIntentFields })
       .strict(),

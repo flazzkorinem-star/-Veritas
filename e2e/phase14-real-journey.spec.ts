@@ -28,9 +28,8 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
   });
   page.on("response", (response) => {
     if (!response.url().endsWith("/api/agents")) return;
-    const operation = (
-      response.request().postDataJSON() as { operation?: string } | null
-    )?.operation;
+    const operation = (response.request().postDataJSON() as { operation?: string } | null)
+      ?.operation;
     agentStatuses.push(response.status());
     agentResponses.push({ operation: operation ?? "UNKNOWN", status: response.status() });
   });
@@ -94,9 +93,7 @@ test("同一真实任务走完材料、家教诊断、未检验范围和报告",
   const hintOperationsBefore = operations.filter(
     (operation) => operation === "CREATE_HINT",
   ).length;
-  await page
-    .getByLabel("消息输入")
-    .fill("这道题先给我一点方向，不要直接揭晓答案。");
+  await page.getByLabel("消息输入").fill("这道题先给我一点方向，不要直接揭晓答案。");
   await page.getByRole("button", { name: "发送消息" }).click();
   await waitForAssistantAfter(messageCount);
   expect(operations.filter((operation) => operation === "CREATE_HINT")).toHaveLength(

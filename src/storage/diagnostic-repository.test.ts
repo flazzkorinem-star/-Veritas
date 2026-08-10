@@ -198,14 +198,10 @@ describe("诊断会话仓储", () => {
       "IN_PROGRESS",
     );
 
-    const second = await repository.openNode(
-      task.id,
-      secondNode.id,
-      {
-        opening: "接下来看看降水回流。",
-        question: "降水怎样回到地表？",
-      },
-    );
+    const second = await repository.openNode(task.id, secondNode.id, {
+      opening: "接下来看看降水回流。",
+      question: "降水怎样回到地表？",
+    });
     await repository.saveConversationTurn({
       taskId: task.id,
       nodeId: secondNode.id,
