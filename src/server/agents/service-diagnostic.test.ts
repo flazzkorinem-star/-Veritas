@@ -250,6 +250,108 @@ describe("Agent 2 服务", () => {
     expect(request.system).not.toContain("好问题");
   });
 
+  it("剥离当前模式中白名单允许的无害空字段", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      responseMode: "CONVERSATION",
+      learningGoalUpdate: null,
+      assistantMessage: "先解释材料本身。",
+      question: null,
+      scaffold: null,
+    });
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext,
+            learningGoal: null,
+            diagnostic: { status: "NOT_STARTED", stage: "MEMORY", mainQuestion: null },
+            userMessage: "先帮我解释材料。",
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual({
+      responseMode: "CONVERSATION",
+      learningGoalUpdate: null,
+      assistantMessage: "先解释材料本身。",
+    });
+    expect(callModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("不会把分数等非白名单字段当作无害冗余剥离", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      responseMode: "CONVERSATION",
+      learningGoalUpdate: null,
+      assistantMessage: "回复正文。",
+      score: 100,
+    });
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext,
+            learningGoal: null,
+            diagnostic: { status: "NOT_STARTED", stage: "MEMORY", mainQuestion: null },
+            userMessage: "解释一下。",
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
+    expect(callModel).toHaveBeenCalledTimes(2);
+  });
+
+  it("第二次尝试不会重新获得一份 30 秒超时", async () => {
+    vi.useFakeTimers();
+    try {
+      const callModel = vi
+        .fn()
+        .mockResolvedValueOnce({
+          responseMode: "CONVERSATION",
+          learningGoalUpdate: null,
+          assistantMessage: "回复正文。",
+          score: 100,
+        })
+        .mockImplementationOnce(() => new Promise(() => undefined));
+
+      const pending = runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext,
+            learningGoal: null,
+            diagnostic: { status: "NOT_STARTED", stage: "MEMORY", mainQuestion: null },
+            userMessage: "解释一下。",
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      );
+      const result = expect(pending).rejects.toMatchObject({ code: "REQUEST_TIMEOUT" });
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await result;
+      expect(callModel).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("未开始诊断时拒绝模型伪造诊断评价", async () => {
     const callModel = vi.fn().mockResolvedValue({
       responseMode: "EVALUATE_DIAGNOSTIC",
@@ -287,6 +389,60 @@ describe("Agent 2 服务", () => {
         callModel,
       ),
     ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
-    expect(callModel).toHaveBeenCalledTimes(3);
+    expect(callModel).toHaveBeenCalledTimes(2);
+    expect(callModel.mock.calls[1]![0].system).toContain(
+      "RESPOND_TO_USER:responseMode:custom",
+    );
+    expect(callModel.mock.calls[1]![0].system).not.toContain("回答正确");
+  });
+
+  it("状态冲突会在两次总尝试内定向修复", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        correctEvidence: ["证据"],
+        missingPoints: [],
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        scaffold: null,
+        assistantMessage: "不得泄露到修复请求的模型正文。",
+      })
+      .mockResolvedValueOnce({
+        responseMode: "CONVERSATION",
+        learningGoalUpdate: null,
+        assistantMessage: "我先解释这份材料。",
+      });
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext,
+            learningGoal: null,
+            diagnostic: { status: "NOT_STARTED", stage: "MEMORY", mainQuestion: null },
+            userMessage: "先帮我解释材料。",
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toMatchObject({ responseMode: "CONVERSATION" });
+
+    expect(callModel).toHaveBeenCalledTimes(2);
+    expect(callModel.mock.calls[1]![0].system).toContain(
+      "RESPOND_TO_USER:responseMode:custom",
+    );
+    expect(callModel.mock.calls[1]![0].system).not.toContain(
+      "不得泄露到修复请求的模型正文",
+    );
   });
 });

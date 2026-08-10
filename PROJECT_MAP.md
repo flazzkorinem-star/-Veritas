@@ -66,8 +66,8 @@
 - `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、覆盖审计和首个有意义问题，按实际完成数报告进度、保持原文顺序并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；普通消息保持状态不变，文字提示/答案请求复用按钮流程，状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
-- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型、JSON Output、超时、有限重试与外部取消信号。
-- `src/server/agents/service.ts`：组装材料处理、通用 Vita 对话、诊断辅助与报告的隔离提示，独立校验输出、对话模式、提示级别和报告文案，并只重试受影响操作。
+- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
+- `src/server/agents/service.ts`：组装材料处理、通用 Vita 对话、诊断辅助与报告的隔离提示，作为唯一重试所有者统一限制尝试次数和绝对截止时间，反馈脱敏校验路径、剥离白名单空字段、校验业务状态，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话和已验证状态，调用 Agent 3 并保存任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
@@ -95,8 +95,8 @@
 - `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复、处理中断恢复、取消和任务菜单交互。
 - `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
-- `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、有限重试与调用方取消传播。
-- `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝和操作级重试。
+- `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、单次物理请求与调用方取消传播。
+- `src/server/agents/service.test.ts`：验证提示隔离、覆盖完整性、Zod 拒绝、单一重试预算、共享截止时间、定向结构修复、白名单归一化与日志脱敏。
 - `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。

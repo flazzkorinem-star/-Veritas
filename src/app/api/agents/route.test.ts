@@ -108,12 +108,17 @@ describe("同源 Agent API", () => {
   });
 
   it("不向浏览器暴露无效模型输出细节", async () => {
-    runAgentOperation.mockRejectedValue(new AgentServiceError("INVALID_MODEL_OUTPUT"));
+    const errorId = "00000000-0000-4000-8000-000000000001";
+    runAgentOperation.mockRejectedValue(
+      new AgentServiceError("INVALID_MODEL_OUTPUT", [], errorId),
+    );
 
     const response = await POST(request("{}"));
-    const body = JSON.stringify(await response.json());
+    const responseBody = await response.json();
+    const body = JSON.stringify(responseBody);
 
     expect(response.status).toBe(502);
+    expect(responseBody.error.errorId).toBe(errorId);
     expect(body).not.toContain("INVALID_MODEL_OUTPUT");
     expect(body).not.toContain("server-only-key");
   });

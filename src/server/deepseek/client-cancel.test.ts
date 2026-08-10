@@ -12,7 +12,6 @@ describe("DeepSeek 取消", () => {
         );
       });
     });
-    const sleep = vi.fn().mockResolvedValue(undefined);
     const pending = callDeepSeekJson(
       {
         apiKey: "test-secret",
@@ -22,12 +21,11 @@ describe("DeepSeek 取消", () => {
         maxTokens: 2_000,
         signal: controller.signal,
       },
-      { fetchImpl, sleep },
+      { fetchImpl },
     );
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ code: "REQUEST_ABORTED" });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(sleep).not.toHaveBeenCalled();
   });
 });

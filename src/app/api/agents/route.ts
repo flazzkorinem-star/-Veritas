@@ -19,8 +19,9 @@ function errorResponse(
   code: Parameters<typeof createPublicError>[0],
   message: string,
   status: number,
+  errorId?: string,
 ) {
-  return json(createPublicError(code, message), status);
+  return json(createPublicError(code, message, errorId), status);
 }
 
 function clientId(request: Request) {
@@ -98,10 +99,20 @@ export async function POST(request: Request) {
     if (error instanceof AgentServiceError) {
       return error.code === "INVALID_REQUEST"
         ? errorResponse("VALIDATION_ERROR", "提交的学习内容无效。", 400)
-        : errorResponse("UPSTREAM_UNAVAILABLE", "模型结果暂时无法使用，请重试。", 502);
+        : errorResponse(
+            "UPSTREAM_UNAVAILABLE",
+            "模型结果暂时无法使用，请重试。",
+            502,
+            error.errorId,
+          );
     }
     if (error instanceof DeepSeekError) {
-      return errorResponse("UPSTREAM_UNAVAILABLE", "模型服务暂时不可用，请重试。", 503);
+      return errorResponse(
+        "UPSTREAM_UNAVAILABLE",
+        "模型服务暂时不可用，请重试。",
+        503,
+        error.errorId,
+      );
     }
     return errorResponse("INTERNAL_ERROR", "暂时无法处理材料，请重试。", 500);
   } finally {

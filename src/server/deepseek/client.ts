@@ -2,7 +2,6 @@ import { z } from "zod";
 
 const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-v4-flash";
-const MAX_RETRIES = 2;
 
 const responseSchema = z
   .object({
@@ -18,13 +17,23 @@ const responseSchema = z
   .passthrough();
 
 export type DeepSeekErrorCode =
-  "UPSTREAM_REJECTED" | "UPSTREAM_UNAVAILABLE" | "INVALID_RESPONSE" | "REQUEST_ABORTED";
+  | "UPSTREAM_REJECTED"
+  | "UPSTREAM_UNAVAILABLE"
+  | "INVALID_RESPONSE"
+  | "REQUEST_ABORTED"
+  | "REQUEST_TIMEOUT";
 
 export class DeepSeekError extends Error {
-  constructor(readonly code: DeepSeekErrorCode) {
+  constructor(
+    readonly code: DeepSeekErrorCode,
+    readonly status?: number,
+    readonly errorId?: string,
+  ) {
     super(
       code === "REQUEST_ABORTED"
         ? "请求已取消。"
+        : code === "REQUEST_TIMEOUT"
+          ? "模型请求超时，请重试。"
         : code === "INVALID_RESPONSE"
           ? "模型返回的内容不完整，请重试。"
           : "模型服务暂时不可用，请稍后重试。",
@@ -46,12 +55,6 @@ export interface DeepSeekJsonRequest {
 
 interface DeepSeekDependencies {
   fetchImpl?: typeof fetch;
-  sleep?: (milliseconds: number) => Promise<void>;
-  random?: () => number;
-}
-
-function delay(milliseconds: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function bodyFor(request: DeepSeekJsonRequest) {
@@ -71,6 +74,10 @@ function bodyFor(request: DeepSeekJsonRequest) {
   });
 }
 
+export function deepSeekRequestBodyBytes(request: DeepSeekJsonRequest) {
+  return new TextEncoder().encode(bodyFor(request)).byteLength;
+}
+
 function parseContent(value: unknown) {
   const response = responseSchema.safeParse(value);
   const choice = response.success ? response.data.choices[0] : undefined;
@@ -84,7 +91,7 @@ function parseContent(value: unknown) {
   }
 }
 
-function shouldRetryStatus(status: number) {
+function isRecoverableStatus(status: number) {
   return status === 429 || status === 500 || status === 503;
 }
 
@@ -93,59 +100,34 @@ export async function callDeepSeekJson(
   dependencies: DeepSeekDependencies = {},
 ) {
   const fetchImpl = dependencies.fetchImpl ?? fetch;
-  const sleep = dependencies.sleep ?? delay;
-  const random = dependencies.random ?? Math.random;
-  let finalError: DeepSeekError = new DeepSeekError("UPSTREAM_UNAVAILABLE");
+  if (request.signal?.aborted) throw new DeepSeekError("REQUEST_ABORTED");
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-    if (request.signal?.aborted) throw new DeepSeekError("REQUEST_ABORTED");
-    const controller = new AbortController();
-    const abortFromCaller = () => controller.abort();
-    request.signal?.addEventListener("abort", abortFromCaller, { once: true });
-    const timeout = setTimeout(() => controller.abort(), request.timeoutMs ?? 90_000);
+  try {
+    const response = await fetchImpl(DEEPSEEK_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: bodyFor(request),
+      signal: request.signal,
+    });
+    if (!response.ok) {
+      throw new DeepSeekError(
+        isRecoverableStatus(response.status) ? "UPSTREAM_UNAVAILABLE" : "UPSTREAM_REJECTED",
+        response.status,
+      );
+    }
+    let value: unknown;
     try {
-      const response = await fetchImpl(DEEPSEEK_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${request.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: bodyFor(request),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        if (!shouldRetryStatus(response.status)) {
-          throw new DeepSeekError("UPSTREAM_REJECTED");
-        }
-        finalError = new DeepSeekError("UPSTREAM_UNAVAILABLE");
-      } else {
-        try {
-          return parseContent(await response.json());
-        } catch (error) {
-          if (!(error instanceof DeepSeekError)) {
-            finalError = new DeepSeekError("INVALID_RESPONSE");
-          } else {
-            finalError = error;
-          }
-        }
-      }
-    } catch (error) {
-      if (request.signal?.aborted) throw new DeepSeekError("REQUEST_ABORTED");
-      if (error instanceof DeepSeekError && error.code === "UPSTREAM_REJECTED") {
-        throw error;
-      }
-      finalError =
-        error instanceof DeepSeekError
-          ? error
-          : new DeepSeekError("UPSTREAM_UNAVAILABLE");
-    } finally {
-      clearTimeout(timeout);
-      request.signal?.removeEventListener("abort", abortFromCaller);
+      value = await response.json();
+    } catch {
+      throw new DeepSeekError("INVALID_RESPONSE", response.status);
     }
-
-    if (attempt < MAX_RETRIES) {
-      await sleep(250 * 2 ** attempt + Math.floor(random() * 100));
-    }
+    return parseContent(value);
+  } catch (error) {
+    if (request.signal?.aborted) throw new DeepSeekError("REQUEST_ABORTED");
+    if (error instanceof DeepSeekError) throw error;
+    throw new DeepSeekError("UPSTREAM_UNAVAILABLE");
   }
-  throw finalError;
 }

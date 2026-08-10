@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { DeepSeekError } from "@/server/deepseek/client";
+
 import { runAgentOperation } from "./service";
 
 const source = { label: "第 1 节，第 1 段", excerpt: "太阳驱动蒸发。" };
@@ -252,5 +254,119 @@ describe("Agent 服务", () => {
       ),
     ).resolves.toEqual(extraction);
     expect(callModel).toHaveBeenCalledTimes(2);
+    expect(callModel.mock.calls[1]![0].system).toContain(
+      "EXTRACT_KNOWLEDGE:root:unrecognized_keys",
+    );
+    expect(callModel.mock.calls[1]![0].system).not.toContain('"extra":true');
+  });
+
+  it("可恢复的上游错误由 Agent Service 在操作预算内重试", async () => {
+    const callModel = vi
+      .fn()
+      .mockRejectedValueOnce(new DeepSeekError("UPSTREAM_UNAVAILABLE"))
+      .mockResolvedValueOnce(extraction);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "EXTRACT_KNOWLEDGE",
+          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
+        },
+        "server-key",
+        callModel,
+        undefined,
+        { sleep },
+      ),
+    ).resolves.toEqual(extraction);
+
+    expect(callModel).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it("修复请求遇到网络错误后仍保留同一份定向修复指令", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce({ ...extraction, extra: true })
+      .mockRejectedValueOnce(new DeepSeekError("UPSTREAM_UNAVAILABLE"))
+      .mockResolvedValueOnce(extraction);
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "EXTRACT_KNOWLEDGE",
+          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
+        },
+        "server-key",
+        callModel,
+        undefined,
+        { sleep: vi.fn().mockResolvedValue(undefined) },
+      ),
+    ).resolves.toEqual(extraction);
+
+    expect(callModel).toHaveBeenCalledTimes(3);
+    expect(callModel.mock.calls[1]![0].system).toContain("STRUCTURE_REPAIR");
+    expect(callModel.mock.calls[2]![0].system).toBe(callModel.mock.calls[1]![0].system);
+  });
+
+  it("同一操作的所有尝试共享一个截止信号", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce({ ...extraction, extra: true })
+      .mockResolvedValueOnce(extraction);
+
+    await runAgentOperation(
+      {
+        operation: "EXTRACT_KNOWLEDGE",
+        input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
+      },
+      "server-key",
+      callModel,
+    );
+
+    const firstSignal = callModel.mock.calls[0]![0].signal;
+    expect(firstSignal).toBeInstanceOf(AbortSignal);
+    expect(callModel.mock.calls[1]![0].signal).toBe(firstSignal);
+  });
+
+  it("失败日志只记录元数据和脱敏字段路径", async () => {
+    const sensitiveOutput = {
+      ...extraction,
+      knowledgeItems: [
+        { ...extraction.knowledgeItems[0], kind: "非法类型", summary: "不得进入日志的模型正文" },
+      ],
+    };
+    const callModel = vi.fn().mockResolvedValue(sensitiveOutput);
+    const log = vi.fn();
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "EXTRACT_KNOWLEDGE",
+          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "不得进入日志的材料" },
+        },
+        "server-key",
+        callModel,
+        undefined,
+        { log, createErrorId: () => "00000000-0000-4000-8000-000000000001" },
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_MODEL_OUTPUT",
+      errorId: "00000000-0000-4000-8000-000000000001",
+    });
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]![0]).toMatchObject({
+      operation: "EXTRACT_KNOWLEDGE",
+      attempts: 3,
+      outcome: "INVALID_MODEL_OUTPUT",
+      errorId: "00000000-0000-4000-8000-000000000001",
+      status: 200,
+      zodPaths: ["knowledgeItems.0.kind"],
+    });
+    expect(log.mock.calls[0]![0].requestBytes).toBeGreaterThan(0);
+    expect(JSON.stringify(log.mock.calls[0]![0])).not.toMatch(
+      /不得进入日志的材料|不得进入日志的模型正文|server-key/,
+    );
   });
 });

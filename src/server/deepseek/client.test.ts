@@ -71,18 +71,14 @@ describe("DeepSeek 服务端客户端", () => {
     });
   });
 
-  it("429 后有限重试并使用注入的退避等待", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(response(null, 429))
-      .mockResolvedValueOnce(response('{"ok":true}'));
+  it("一次客户端调用只发送一个物理请求", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(null, 429));
 
-    const sleep = vi.fn().mockResolvedValue(undefined);
+    await expect(callDeepSeekJson(request(), { fetchImpl })).rejects.toMatchObject({
+      code: "UPSTREAM_UNAVAILABLE",
+    });
 
-    await callDeepSeekJson(request(), { fetchImpl, sleep, random: () => 0 });
-
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(sleep).toHaveBeenCalledWith(250);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -93,12 +89,10 @@ describe("DeepSeek 服务端客户端", () => {
   ])("把%s转换为不含上游正文的稳定错误", async (_name, upstream, code) => {
     const fetchImpl = vi.fn().mockResolvedValue(upstream);
 
-    const promise = callDeepSeekJson(request(), {
-      fetchImpl,
-      sleep: vi.fn().mockResolvedValue(undefined),
-    });
+    const promise = callDeepSeekJson(request(), { fetchImpl });
     await expect(promise).rejects.toMatchObject({ code });
     await expect(promise).rejects.not.toThrow(/敏感错误正文|test-secret/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("调用方取消时中止尚未完成的上游请求", async () => {
