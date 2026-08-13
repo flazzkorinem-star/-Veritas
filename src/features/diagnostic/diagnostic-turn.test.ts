@@ -152,6 +152,8 @@ describe("诊断回合编排", () => {
         classification: "CORRECT",
         isCorrect: true,
         progress: "ADVANCING",
+        correctEvidence: ["说出太阳能是主要动力"],
+        missingPoints: [],
         teachingMove: "AFFIRM_AND_ADVANCE",
         assistantMessage: "对，太阳能是关键动力。",
       })

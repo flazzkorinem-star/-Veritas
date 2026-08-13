@@ -43,7 +43,13 @@ const evaluationFields = {
 } as const;
 
 function validateEvaluation(
-  value: { classification: string; isCorrect: boolean; progress: string },
+  value: {
+    classification: string;
+    isCorrect: boolean;
+    progress: string;
+    correctEvidence: readonly string[];
+    missingPoints: readonly string[];
+  },
   context: z.core.$RefinementCtx,
 ) {
   if (value.isCorrect !== (value.classification === "CORRECT")) {
@@ -51,6 +57,20 @@ function validateEvaluation(
   }
   if (value.isCorrect && value.progress !== "ADVANCING") {
     context.addIssue({ code: "custom", message: "正确回答必须代表有进展。" });
+  }
+  if (value.classification === "CORRECT" && value.correctEvidence.length === 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["correctEvidence"],
+      message: "正确回答必须包含直接通过证据。",
+    });
+  }
+  if (value.classification === "CORRECT" && value.missingPoints.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["missingPoints"],
+      message: "正确回答不能仍有未满足点。",
+    });
   }
 }
 

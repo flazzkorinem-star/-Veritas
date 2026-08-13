@@ -43,6 +43,97 @@ const materialContext = {
 
 describe("Agent 2 服务", () => {
   it.each([
+    {
+      name: "回答了同主题的另一个问题",
+      mainQuestion: "ETF 的交易价格为什么会偏离其净值？请用市场供需关系来解释这一现象。",
+      userMessage:
+        "在实际选择上，有证券账户且看重盘中成交选ETF；没有证券账户、习惯定投的人选联接基金。",
+      output: {
+        responseMode: "EVALUATE_DIAGNOSTIC" as const,
+        learningGoalUpdate: null,
+        classification: "OFF_TOPIC" as const,
+        isCorrect: false,
+        progress: "STALLED" as const,
+        correctEvidence: ["说清了怎样根据账户和交易习惯选择产品"],
+        missingPoints: ["没有解释成交价偏离净值的原因"],
+        misconceptions: [],
+        teachingMove: "BRIDGE_BACK" as const,
+        scaffold: null,
+        assistantMessage:
+          "你说清了怎样选择产品，但当前问题问的是价格偏离净值的原因。请补充：ETF成交价和基金净值分别由什么决定？",
+      },
+    },
+    {
+      name: "只完成比较要求的一侧",
+      mainQuestion: "请用一句话说明 ETF 与联接基金在交易方式和定价上的根本区别。",
+      userMessage: "没有证券账户时我会选联接基金，因为它能通过普通基金平台按净值申赎。",
+      output: {
+        responseMode: "EVALUATE_DIAGNOSTIC" as const,
+        learningGoalUpdate: null,
+        classification: "PARTIAL" as const,
+        isCorrect: false,
+        progress: "ADVANCING" as const,
+        correctEvidence: ["说明了联接基金通过普通基金平台按净值申赎"],
+        missingPoints: ["没有说明 ETF 的交易方式和定价"],
+        misconceptions: [],
+        teachingMove: "ASK_MISSING_POINT" as const,
+        scaffold: null,
+        assistantMessage:
+          "联接基金这一侧说对了。再补上 ETF：它在哪里交易，成交价由什么决定？",
+      },
+    },
+    {
+      name: "完整覆盖当前问题",
+      mainQuestion: "请用一句话说明 ETF 与联接基金在交易方式和定价上的根本区别。",
+      userMessage:
+        "ETF 在交易所盘中按供需撮合出的市价成交，联接基金则在基金平台按净值申赎。",
+      output: {
+        responseMode: "EVALUATE_DIAGNOSTIC" as const,
+        learningGoalUpdate: null,
+        classification: "CORRECT" as const,
+        isCorrect: true,
+        progress: "ADVANCING" as const,
+        correctEvidence: ["同时说明了 ETF 与联接基金各自的交易方式和定价"],
+        missingPoints: [],
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE" as const,
+        scaffold: null,
+        assistantMessage: "对，两种产品的交易渠道和定价方式都说完整了。",
+      },
+    },
+  ])("评价标准区分$name", async ({ mainQuestion, userMessage, output }) => {
+    const callModel = vi.fn().mockResolvedValue(output);
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext,
+            learningGoal: null,
+            diagnostic: { status: "ACTIVE", stage: "MEMORY", mainQuestion },
+            userMessage,
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual(output);
+
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain("评价正确性只以当前主问题为准");
+    expect(prompt).toContain("主题相关不等于回答了当前主问题");
+    expect(prompt).toContain("逐项覆盖最低回答要求");
+    expect(prompt).toContain("回答了同主题的另一个问题");
+    expect(prompt).toContain("只完成比较的一侧");
+    expect(prompt).toContain("不要因为回答内容不匹配就改判为 CONVERSATION");
+    expect(prompt).toContain("能够按回答分类判断，就不得返回 CONVERSATION");
+  });
+
+  it.each([
     [
       "CREATE_STAGE_QUESTION",
       { stage: "UNDERSTANDING" },

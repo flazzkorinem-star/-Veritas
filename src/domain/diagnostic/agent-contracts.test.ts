@@ -50,6 +50,24 @@ describe("Agent 2 结构化输出契约", () => {
     ).toThrow();
   });
 
+  it.each([
+    { correctEvidence: [], missingPoints: [] },
+    { correctEvidence: ["回答了一个相关点"], missingPoints: ["仍缺少主问题要求的因果"] },
+  ])("拒绝没有通过证据或仍留有缺口的 CORRECT", (evidence) => {
+    expect(() =>
+      evaluationDecisionSchema.parse({
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        ...evidence,
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        scaffold: null,
+        assistantMessage: "回答正确。",
+      }),
+    ).toThrow();
+  });
+
   it("拒绝模型越权返回分数、层级或状态", () => {
     expect(() =>
       evaluationDecisionSchema.parse({
