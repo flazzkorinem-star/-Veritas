@@ -85,6 +85,7 @@ export async function createFirstQuestion(
     createRequest: (materialContext) => ({
       operation: "CREATE_FIRST_QUESTION" as const,
       input: {
+        stage: "MEMORY" as const,
         node: input.node,
         knowledgeItems: input.knowledgeItems,
         materialContext,

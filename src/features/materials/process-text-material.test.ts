@@ -88,6 +88,17 @@ describe("文本材料处理编排", () => {
       modules: [{ id: "module-1", title: "模块" }],
       itemIndex: [{ id: "item-1", title: "循环动力", kind: "CORE" }],
     });
+    expect(callAgent.mock.calls[2]![0].input).toMatchObject({
+      stage: "MEMORY",
+      node: {
+        bloomTargets: {
+          memory: "说出动力。",
+          understanding: "解释作用。",
+          application: "判断环节。",
+          analysis: "分析关系。",
+        },
+      },
+    });
     const agentSignals = callAgent.mock.calls.map(
       ([, dependencies]) => dependencies?.signal,
     );

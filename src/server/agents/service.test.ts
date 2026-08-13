@@ -245,10 +245,10 @@ describe("Agent 服务", () => {
     });
   });
 
-  it("首个问题先判断材料价值，再提出一项有意义的理解任务", async () => {
+  it("首问明确成为 MEMORY 唯一主问题并只检验 memory 目标", async () => {
     const callModel = vi.fn().mockResolvedValue({
       opening: "这份材料真正值得掌握的是硬化路面怎样改变雨水去向。",
-      question: "硬化路面最直接改变了雨水的哪条去向？",
+      question: "水循环最基本的动力来源是什么？",
     });
 
     await expect(
@@ -256,6 +256,7 @@ describe("Agent 服务", () => {
         {
           operation: "CREATE_FIRST_QUESTION",
           input: {
+            stage: "MEMORY",
             materialContext: { ...compactMaterialContext, title: "城市水循环" },
             node: knowledgeMap.nodes[0],
             knowledgeItems: knowledgeMap.knowledgeItems,
@@ -267,12 +268,54 @@ describe("Agent 服务", () => {
       ),
     ).resolves.toEqual({
       opening: "这份材料真正值得掌握的是硬化路面怎样改变雨水去向。",
-      question: "硬化路面最直接改变了雨水的哪条去向？",
+      question: "水循环最基本的动力来源是什么？",
     });
 
     const request = callModel.mock.calls[0]![0];
     expect(request.system).toContain("通用 AI");
-    expect(request.user).toContain("服务于后续理解");
+    expect(request.user).toContain("当前层固定为 MEMORY");
+    expect(request.user).toContain("将直接成为 MEMORY 的唯一主问题");
+    expect(request.user).toContain("node.bloomTargets.memory");
+    expect(request.user).toContain(knowledgeMap.nodes[0]!.bloomTargets.memory);
+    expect(request.user).toContain("基本概念、定义或基础关系");
+    expect(request.user).toContain("不得提前考查理解、应用或分析目标");
+    expect(request.user).toContain("场景应用、产品选择、机制分析或复杂比较");
+    expect(request.user).toContain("不得把询问学习目标本身当作诊断题");
+    expect(request.user).toContain("代码、编号、名单或孤立数字");
+    expect(request.user).toContain("只要求一个清楚的回答动作");
+    expect(request.user).toContain("不得把两个独立回答动作并列在一题中");
+    expect(request.user).toContain("若用户可能只答对其中一项而漏掉另一项");
+    expect(request.user).toContain("只保留一个同类型的基础关系");
+    expect(request.user).toContain("question 只能是一个问句");
+    expect(request.user).toContain("有学习价值");
+  });
+
+  it.each([
+    ["UNDERSTANDING", knowledgeMap.nodes[0]!.bloomTargets.understanding],
+    ["APPLICATION", knowledgeMap.nodes[0]!.bloomTargets.application],
+    ["ANALYSIS", knowledgeMap.nodes[0]!.bloomTargets.analysis],
+  ] as const)("%s 后续主问题仍使用本层 Bloom 目标", async (stage, target) => {
+    const callModel = vi.fn().mockResolvedValue({ question: "请完成当前层的一个动作。" });
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "CREATE_STAGE_QUESTION",
+          input: {
+            stage,
+            node: knowledgeMap.nodes[0],
+            knowledgeItems: knowledgeMap.knowledgeItems,
+            learningGoal: null,
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual({ question: "请完成当前层的一个动作。" });
+
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain("node.bloomTargets 中与 stage 对应的目标");
+    expect(prompt).toContain(target);
   });
 
   it("通用对话提示词以用户当前意图和学习上下文为中心", async () => {

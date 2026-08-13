@@ -346,7 +346,16 @@ ${JSON.stringify(input.chunks)}
 function firstQuestionPrompt(
   input: Extract<AgentOperationRequest, { operation: "CREATE_FIRST_QUESTION" }>["input"],
 ) {
-  return `根据材料概览和当前主题生成第一次回复。opening 用一句陈述简短判断材料质量、重点或学习价值；question 提出一道服务于后续理解、只要求一个动作的首个主问题。不要考查仅因容易提取而出现的代码、编号、名单或孤立数字，除非学习目标确实要求掌握它。不要批量出题，不宣读处理流程、主题数量或教学模式。只输出 {"opening":"...","question":"..."}。
+  return `根据材料概览和当前主题生成第一次回复。
+
+首问契约：
+1. 当前层固定为 MEMORY，question 将直接成为 MEMORY 的唯一主问题。
+2. 必须以 node.bloomTargets.memory 为唯一考察目标，只检验后续理解真正依赖的基本概念、定义或基础关系；不得提前考查理解、应用或分析目标，不得要求场景应用、产品选择、机制分析或复杂比较，也不得把询问学习目标本身当作诊断题。
+3. question 必须有学习价值且只要求一个清楚的回答动作。输出前检查独立评分要求：若用户可能只答对其中一项而漏掉另一项，说明题目包含多个动作；此时只保留一个同类型的基础关系，必要时聚焦 memory 目标中最基础且最能代表目标的一项。不得把两个独立回答动作并列在一题中，question 只能是一个问句。
+4. 不要考查仅因容易提取而出现的代码、编号、名单或孤立数字，除非 learningGoal 或 memory 目标已明确要求掌握它。
+5. opening 用一句陈述简短判断材料质量、重点或学习价值；不要批量出题，不宣读处理流程、主题数量或教学模式。
+
+只输出 {"opening":"...","question":"..."}。
 
 <UNTRUSTED_VERIFIED_CONTEXT>
 ${JSON.stringify(input)}
@@ -367,7 +376,7 @@ function diagnosticPrompt(
 ) {
   const instructions = {
     CREATE_STAGE_QUESTION:
-      '为当前层生成一个边界清楚、只要求一个动作的主问题。MEMORY 只能检验后续理解真正需要的核心定义或关系，不得考代码、编号、名单或孤立数字；其他层分别检验解释、应用和机制。结合 learningGoal 调整场景。只输出 {"question":"..."}。',
+      '为当前层生成一个边界清楚、只要求一个动作的主问题。必须使用 node.bloomTargets 中与 stage 对应的目标，不得借用其他层目标。MEMORY 只能检验后续理解真正需要的核心定义或关系，不得考代码、编号、名单或孤立数字；其他层分别检验解释、应用和机制。结合 learningGoal 调整场景。只输出 {"question":"..."}。',
     RESPOND_TO_USER:
       '先判断用户这一轮真正想做什么。当前诊断为 ACTIVE 时，只要这条消息能够按回答分类判断，就不得返回 CONVERSATION；即使答案没有答中、只覆盖一个要求或实际回答了同主题的另一个问题，也要返回 EVALUATE_DIAGNOSTIC，不要因为回答内容不匹配就改判为 CONVERSATION。只有用户明确在提问、讨论、解释、整理、创作、换话题或暂停时才返回 CONVERSATION，并用 assistantMessage 直接完成请求。当前有主问题且用户在语义上请求提示时返回 {"responseMode":"REQUEST_HINT"}，请求直接查看答案时返回 {"responseMode":"REVEAL_ANSWER"}；不要依赖某个固定关键词。只有当前没有主问题且用户明确要求开始检验时才返回 START_DIAGNOSTIC。\n\n评价正确性只以当前主问题为准。先从 mainQuestion 识别要回答的对象、关系、因果、比较双方、步骤或限定方式，再逐项覆盖最低回答要求。主题相关不等于回答了当前主问题，说对一个相关点也不等于完成了问题要求的全部关键动作。回答了同主题的另一个问题、但没有完成当前问题的关键动作时分类为 OFF_TOPIC；完成了当前问题的一部分、但遗漏必要对象、因果、步骤或只完成比较的一侧时分类为 PARTIAL。只有用户本轮回答中存在直接对应当前主问题的具体证据，并覆盖全部最低回答要求时才分类为 CORRECT；此时 correctEvidence 至少一条且 missingPoints 为空。非 CORRECT 必须保留当前问题，不生成下一层问题；assistantMessage 只点明已说对的部分和当前缺口，并只追问缺失动作。\n\nlearningGoalUpdate 仅在用户明确表达或改变目标时填写，否则为 null。CONVERSATION 只输出 {"responseMode":"CONVERSATION","learningGoalUpdate":null或"...","assistantMessage":"..."}；START_DIAGNOSTIC 只输出 {"responseMode":"START_DIAGNOSTIC","learningGoalUpdate":null或"...","assistantMessage":"自然过渡","question":"唯一主问题"}；EVALUATE_DIAGNOSTIC 输出 {"responseMode":"EVALUATE_DIAGNOSTIC","learningGoalUpdate":null或"...","classification":"CORRECT|PARTIAL|INCORRECT|TOO_SHORT|COPIED|MISCONCEPTION|OFF_TOPIC|NO_ANSWER","isCorrect":boolean,"progress":"ADVANCING|STALLED","correctEvidence":[],"missingPoints":[],"misconceptions":[],"teachingMove":"AFFIRM_AND_ADVANCE|ASK_MISSING_POINT|CLARIFY_CONFLICT|REQUEST_OWN_WORDS|USE_COUNTEREXAMPLE|BRIDGE_BACK|PROVIDE_SCAFFOLD|PAUSE","scaffold":null或{"type":"CLARIFICATION|EXAMPLE|ANALOGY|COUNTEREXAMPLE|STEP_BY_STEP","reason":"..."},"assistantMessage":"..."}。CORRECT 才能令 isCorrect=true，正确回答的 progress 必须是 ADVANCING。',
     CREATE_HINT:

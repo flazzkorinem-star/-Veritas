@@ -85,6 +85,7 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
       operation: z.literal("CREATE_FIRST_QUESTION"),
       input: z
         .object({
+          stage: z.literal("MEMORY"),
           ...materialContext,
           node: diagnosticNodeSchema,
           knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),

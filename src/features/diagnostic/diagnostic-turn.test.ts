@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
 
-import { requestHint, respondToUser, revealStageAnswer } from "./diagnostic-turn";
+import {
+  createFirstQuestion,
+  requestHint,
+  respondToUser,
+  revealStageAnswer,
+} from "./diagnostic-turn";
 
 const source = { label: "第 1 段", excerpt: "太阳能驱动蒸发。" };
 const knowledgeItems = [
@@ -74,6 +79,20 @@ const partial = {
 };
 
 describe("诊断回合编排", () => {
+  it("未初始化主题的首问请求显式进入 MEMORY", async () => {
+    const agent = vi.fn().mockResolvedValue({
+      opening: "这个主题值得先掌握循环动力。",
+      question: "水循环的主要动力是什么？",
+    });
+
+    await createFirstQuestion(turnContext(), agent);
+
+    expect(agent.mock.calls[0]![0].input).toMatchObject({
+      stage: "MEMORY",
+      node: { bloomTargets: { memory: "说出动力。" } },
+    });
+  });
+
   it("普通对话保持四层状态原样", async () => {
     const session = activeSession();
     const agent = vi.fn().mockResolvedValue({

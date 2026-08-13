@@ -155,6 +155,7 @@ export async function processTextMaterial(
         createRequest: (materialContext) => ({
           operation: "CREATE_FIRST_QUESTION",
           input: {
+            stage: "MEMORY",
             materialContext,
             node: firstNode,
             knowledgeItems: knowledgeMap.knowledgeItems.filter((item) =>
