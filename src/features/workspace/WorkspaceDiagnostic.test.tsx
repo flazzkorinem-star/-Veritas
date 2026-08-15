@@ -142,7 +142,7 @@ describe("工作区诊断交互", () => {
     database.close();
   });
 
-  it("连续三轮无法作答后页面与持久化状态一起进入答案通过", async () => {
+  it("连续三轮无法作答后停留同层验证，答对小题才进入下一层", async () => {
     const name = `veritas-no-answer-ui-${crypto.randomUUID()}`;
     names.push(name);
     const database = createVeritasDatabase(name);
@@ -168,7 +168,21 @@ describe("工作区诊断交互", () => {
       .mockResolvedValueOnce({
         assistantMessage: "完整答案是太阳能给水分子提供能量，推动水蒸发。",
       })
-      .mockResolvedValueOnce({ question: "太阳能怎样推动水蒸发？" });
+      .mockResolvedValueOnce({ question: "太阳能在蒸发中提供了什么？" })
+      .mockResolvedValueOnce({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        correctEvidence: ["指出太阳能提供蒸发所需能量"],
+        missingPoints: [],
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        scaffold: null,
+        assistantMessage: "对，这次你自己说出了关键作用。",
+      })
+      .mockResolvedValueOnce({ question: "太阳能为什么能推动水蒸发？" });
     render(
       <WorkspaceApp
         diagnosticAgent={agent as DiagnosticAgentCall}
@@ -205,19 +219,21 @@ describe("工作区诊断交互", () => {
     expect(
       await screen.findByText("完整答案是太阳能给水分子提供能量，推动水蒸发。"),
     ).toBeVisible();
-    expect(await screen.findByText("太阳能怎样推动水蒸发？")).toBeVisible();
+    expect(await screen.findByText("太阳能在蒸发中提供了什么？")).toBeVisible();
     expect(screen.getByText("0", { selector: ".score-line strong" })).toBeVisible();
     const learning = await repository.getTaskLearningData(taskId);
     expect(learning.session?.session).toMatchObject({
       status: "IN_PROGRESS",
-      currentStage: "UNDERSTANDING",
+      currentStage: "MEMORY",
       stages: {
-        MEMORY: { status: "PASSED_WITH_ANSWER", stalledCount: 0 },
-        UNDERSTANDING: {
+        MEMORY: {
           status: "ACTIVE",
-          mainQuestion: "太阳能怎样推动水蒸发？",
+          mainQuestion: "水循环最基本的动力来源是什么？",
+          verificationQuestion: "太阳能在蒸发中提供了什么？",
+          answerOrigin: "AUTOMATIC",
           stalledCount: 0,
         },
+        UNDERSTANDING: { status: "LOCKED", stalledCount: 0 },
         APPLICATION: { status: "LOCKED", stalledCount: 0 },
         ANALYSIS: { status: "LOCKED", stalledCount: 0 },
       },
@@ -228,8 +244,23 @@ describe("工作区诊断交互", () => {
       "RESPOND_TO_USER",
       "RESPOND_TO_USER",
       "CREATE_STAGE_ANSWER",
-      "CREATE_STAGE_QUESTION",
+      "CREATE_STAGE_VERIFICATION",
     ]);
+
+    fireEvent.change(input, { target: { value: "它提供水蒸发需要的能量。" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    await waitFor(() => expect(input).toBeEnabled());
+    const verified = await repository.getTaskLearningData(taskId);
+    expect(verified.session?.session).toMatchObject({
+      currentStage: "UNDERSTANDING",
+      stages: {
+        MEMORY: { status: "PASSED_WITH_ANSWER", answerOrigin: "AUTOMATIC" },
+        UNDERSTANDING: {
+          status: "ACTIVE",
+          mainQuestion: "太阳能为什么能推动水蒸发？",
+        },
+      },
+    });
     database.close();
   });
 
@@ -349,24 +380,23 @@ describe("工作区诊断交互", () => {
         >[0],
       ) => {
         const node = request.input.completedNodes[0]!;
-        const evidenceMessage = node.messages.find(
+        const evidenceMessages = node.messages.filter(
           (message) => message.role === "USER" && message.content.includes("层回答"),
-        )!;
+        );
+        const stages = ["MEMORY", "UNDERSTANDING", "APPLICATION", "ANALYSIS"] as const;
         return {
           summary: "已经能解释水循环的主要动力。",
           nodeInsights: [
             {
               nodeId: node.nodeId,
-              understood: [
-                {
-                  statement: "能指出太阳能是主要动力。",
-                  userMessageId: evidenceMessage.id,
-                },
-              ],
-              blindSpots: [],
-              userEvidenceMessageIds: [evidenceMessage.id],
+              learningEvidence: stages.map((stage, index) => ({
+                stage,
+                category: "INDEPENDENT" as const,
+                statement: "能指出太阳能是主要动力。",
+                userMessageId: evidenceMessages[index]!.id,
+              })),
+              misconceptions: [],
               scaffoldNotes: [],
-              learnedOrCorrected: [],
               nextSteps: ["换一个天气情境独立解释。"],
               sourceReferenceIndexes: [0],
             },

@@ -59,6 +59,80 @@ describe("本地任务仓储", () => {
     database.close();
   });
 
+  it("从 v3 升级时补齐答案验证事实，并把旧答案通过视为主动跳过", async () => {
+    const name = databaseName();
+    const legacy = new Dexie(name);
+    legacy.version(3).stores({
+      tasks: "&id, title, fileName, updatedAt",
+      materials: "&taskId",
+      sessions: "[taskId+nodeId], taskId, nodeId",
+      messages: "&id, taskId, nodeId, createdAt",
+      drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+      reports: "&taskId",
+      uiStates: "&taskId, updatedAt",
+      workspaceStates: "&id, updatedAt",
+    });
+    const taskId = crypto.randomUUID();
+    await legacy.table("sessions").put({
+      taskId,
+      nodeId: "node-1",
+      session: {
+        nodeId: "node-1",
+        status: "IN_PROGRESS",
+        currentStage: "UNDERSTANDING",
+        stages: {
+          MEMORY: {
+            key: "MEMORY",
+            status: "PASSED_WITH_ANSWER",
+            mainQuestion: "主要动力是什么？",
+            hintLevel: 0,
+            hasRequestedHint: false,
+            stalledCount: 0,
+          },
+          UNDERSTANDING: {
+            key: "UNDERSTANDING",
+            status: "ACTIVE",
+            mainQuestion: "太阳能怎样推动蒸发？",
+            hintLevel: 0,
+            hasRequestedHint: false,
+            stalledCount: 1,
+          },
+          APPLICATION: {
+            key: "APPLICATION",
+            status: "LOCKED",
+            mainQuestion: null,
+            hintLevel: 0,
+            hasRequestedHint: false,
+            stalledCount: 0,
+          },
+          ANALYSIS: {
+            key: "ANALYSIS",
+            status: "LOCKED",
+            mainQuestion: null,
+            hintLevel: 0,
+            hasRequestedHint: false,
+            stalledCount: 0,
+          },
+        },
+      },
+    });
+    legacy.close();
+
+    const database = createVeritasDatabase(name);
+    const stored = await database.sessions.get([taskId, "node-1"]);
+
+    expect(stored?.session.stages.MEMORY).toMatchObject({
+      answerOrigin: "REQUESTED",
+      verificationQuestion: null,
+    });
+    expect(stored?.session.stages.UNDERSTANDING).toMatchObject({
+      answerOrigin: "NONE",
+      verificationQuestion: null,
+      stalledCount: 1,
+    });
+    database.close();
+  });
+
   it("按标题或文件名搜索，并把置顶任务排在最近任务前", async () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);

@@ -10,6 +10,7 @@ import type {
   StoredUiState,
   StoredWorkspaceState,
 } from "@/storage/types";
+import type { StageState } from "@/domain/diagnostic/contracts";
 
 export class VeritasDatabase extends Dexie {
   tasks!: Table<StoredTask, string>;
@@ -61,6 +62,34 @@ export class VeritasDatabase extends Dexie {
       uiStates: "&taskId, updatedAt",
       workspaceStates: "&id, updatedAt",
     });
+
+    this.version(4)
+      .stores({
+        tasks: "&id, title, fileName, updatedAt",
+        materials: "&taskId",
+        sessions: "[taskId+nodeId], taskId, nodeId",
+        messages: "&id, taskId, nodeId, createdAt",
+        drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+        reports: "&taskId",
+        uiStates: "&taskId, updatedAt",
+        workspaceStates: "&id, updatedAt",
+      })
+      .upgrade((transaction) =>
+        transaction
+          .table<StoredSession, [string, string]>("sessions")
+          .toCollection()
+          .modify((stored) => {
+            for (const stage of Object.values(stored.session.stages)) {
+              const legacy = stage as StageState & {
+                answerOrigin?: StageState["answerOrigin"];
+                verificationQuestion?: string | null;
+              };
+              legacy.verificationQuestion ??= null;
+              legacy.answerOrigin ??=
+                legacy.status === "PASSED_WITH_ANSWER" ? "REQUESTED" : "NONE";
+            }
+          }),
+      );
   }
 }
 

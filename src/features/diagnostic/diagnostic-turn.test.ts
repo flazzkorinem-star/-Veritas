@@ -121,6 +121,23 @@ describe("诊断回合编排", () => {
     });
     expect(request.input.materialContext).not.toHaveProperty("nodes");
     expect(request.input.materialContext).not.toHaveProperty("knowledgeItems");
+    expect(request.input.diagnostic).toEqual({
+      status: "ACTIVE",
+      stage: "MEMORY",
+      mainQuestion: "主要动力是什么？",
+      currentQuestion: "主要动力是什么？",
+      verificationQuestion: null,
+      hintLevel: 0,
+      hasRequestedHint: false,
+      stalledCount: 0,
+      answerOrigin: "NONE",
+      stageStatuses: {
+        MEMORY: "ACTIVE",
+        UNDERSTANDING: "LOCKED",
+        APPLICATION: "LOCKED",
+        ANALYSIS: "LOCKED",
+      },
+    });
   });
 
   it("用户要求检验时才启动记忆层主问题", async () => {
@@ -230,7 +247,7 @@ describe("诊断回合编排", () => {
     ]);
   });
 
-  it("第三次连续停滞时自动给完整答案并开始下一层", async () => {
+  it("第三次连续停滞时自动给完整答案并建立同层小验证题", async () => {
     let session = activeSession();
     const stalled = {
       ...partial,
@@ -250,20 +267,81 @@ describe("诊断回合编排", () => {
       .fn()
       .mockResolvedValueOnce(stalled)
       .mockResolvedValueOnce({ assistantMessage: "完整答案是太阳能驱动蒸发。" })
-      .mockResolvedValueOnce({ question: "太阳能怎样推动蒸发？" });
+      .mockResolvedValueOnce({ question: "水循环需要的能量主要来自哪里？" });
 
     const result = await respondToUser(
       { ...turnContext(session), userMessage: "不知道。" },
       agent,
     );
 
-    expect(result.session.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
+    expect(result.session.stages.MEMORY).toMatchObject({
+      status: "ACTIVE",
+      mainQuestion: "主要动力是什么？",
+      verificationQuestion: "水循环需要的能量主要来自哪里？",
+      answerOrigin: "AUTOMATIC",
+      stalledCount: 0,
+    });
+    expect(result.session.currentStage).toBe("MEMORY");
     expect(result.assistantMessages).toHaveLength(3);
+    expect(result.assistantMessages.at(-1)).toBe("水循环需要的能量主要来自哪里？");
     expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
       "RESPOND_TO_USER",
       "CREATE_STAGE_ANSWER",
-      "CREATE_STAGE_QUESTION",
+      "CREATE_STAGE_VERIFICATION",
     ]);
+  });
+
+  it("答对自动答案后的小验证题才以答案通过并进入下一层", async () => {
+    let session = activeSession();
+    const stalledOutcome = {
+      classification: "NO_ANSWER" as const,
+      isCorrect: false,
+      progress: "STALLED" as const,
+    };
+    for (let count = 0; count < 3; count += 1) {
+      session = diagnosticReducer(session, {
+        type: "ANSWER_EVALUATED",
+        outcome: stalledOutcome,
+      });
+    }
+    session = diagnosticReducer(session, {
+      type: "START_ANSWER_VERIFICATION",
+      question: "水循环需要的能量主要来自哪里？",
+    });
+    const agent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...partial,
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        correctEvidence: ["说出太阳能"],
+        missingPoints: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        assistantMessage: "对，主要来自太阳能。",
+      })
+      .mockResolvedValueOnce({ question: "太阳能怎样推动蒸发？" });
+
+    const result = await respondToUser(
+      { ...turnContext(session), userMessage: "主要来自太阳能。" },
+      agent,
+    );
+
+    expect(result.session.stages.MEMORY).toMatchObject({
+      status: "PASSED_WITH_ANSWER",
+      answerOrigin: "AUTOMATIC",
+    });
+    expect(result.session.stages.UNDERSTANDING.status).toBe("ACTIVE");
+    expect(result.assistantMessages).toEqual([
+      "对，主要来自太阳能。",
+      "太阳能怎样推动蒸发？",
+    ]);
+    expect(agent.mock.calls[0]![0].input.diagnostic).toMatchObject({
+      mainQuestion: "主要动力是什么？",
+      currentQuestion: "水循环需要的能量主要来自哪里？",
+      verificationQuestion: "水循环需要的能量主要来自哪里？",
+      answerOrigin: "AUTOMATIC",
+    });
   });
 
   it.each([

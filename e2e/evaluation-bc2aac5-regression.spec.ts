@@ -253,7 +253,8 @@ const scenarios: Scenario[] = [
     id: "S12",
     title: "连续三轮无进展",
     material: "materials/S11-城市内涝误解.md",
-    expected: "三轮连续停滞后自动给完整答案，以答案状态推进；支架不伪装成用户掌握。",
+    expected:
+      "三轮连续停滞后自动给完整答案并留在当前层，改用同目标小题验证；支架不伪装成用户掌握。",
     actions: [
       { kind: "SEND", content: "不知道，完全没思路。" },
       { kind: "SEND", content: "还是不知道。" },

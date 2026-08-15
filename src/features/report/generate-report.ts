@@ -60,12 +60,18 @@ export async function generateTaskReport(
         canonicalUnderstanding: node.canonicalUnderstanding,
         commonMisconceptions: node.commonMisconceptions,
         score: getNodeScore(stored.session as NodeSession),
-        stages: {
-          MEMORY: stored.session.stages.MEMORY.status,
-          UNDERSTANDING: stored.session.stages.UNDERSTANDING.status,
-          APPLICATION: stored.session.stages.APPLICATION.status,
-          ANALYSIS: stored.session.stages.ANALYSIS.status,
-        },
+        stages: Object.fromEntries(
+          Object.entries(stored.session.stages).map(([stage, state]) => [
+            stage,
+            {
+              status: state.status,
+              mainQuestion: state.mainQuestion,
+              verificationQuestion: state.verificationQuestion,
+              answerOrigin: state.answerOrigin,
+              hintLevel: state.hintLevel,
+            },
+          ]),
+        ),
         messages: data.messages
           .filter((message) => message.nodeId === node.id)
           .map(({ id, role, content }) => ({ id, role, content })),

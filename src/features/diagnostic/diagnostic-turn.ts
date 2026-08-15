@@ -6,7 +6,10 @@ import {
   type ScaffoldType,
 } from "@/domain/diagnostic/agent-contracts";
 import { firstQuestionSchema } from "@/domain/knowledge-map/contracts";
-import type { AgentOperationRequest } from "@/domain/agents/contracts";
+import {
+  pendingNodeOrderSchema,
+  type AgentOperationRequest,
+} from "@/domain/agents/contracts";
 import {
   buildBudgetedMaterialRequest,
   buildBudgetedRecentRequest,
@@ -28,9 +31,11 @@ type DiagnosticRequest = Extract<
     operation:
       | "CREATE_FIRST_QUESTION"
       | "CREATE_STAGE_QUESTION"
+      | "CREATE_STAGE_VERIFICATION"
       | "RESPOND_TO_USER"
       | "CREATE_HINT"
-      | "CREATE_STAGE_ANSWER";
+      | "CREATE_STAGE_ANSWER"
+      | "PRIORITIZE_PENDING_NODES";
   }
 >;
 
@@ -69,6 +74,28 @@ export interface DiagnosticTurnResult {
 const defaultAgentCall: DiagnosticAgentCall = (request, dependencies) =>
   callAgent(request, dependencies);
 
+export async function prioritizePendingNodes(
+  input: {
+    learningGoal: string;
+    pendingNodes: Pick<DiagnosticNode, "id" | "title" | "objective" | "order">[];
+    signal?: AbortSignal;
+  },
+  agent: DiagnosticAgentCall = defaultAgentCall,
+) {
+  return pendingNodeOrderSchema.parse(
+    await agent(
+      {
+        operation: "PRIORITIZE_PENDING_NODES",
+        input: {
+          learningGoal: input.learningGoal,
+          pendingNodes: input.pendingNodes,
+        },
+      },
+      { signal: input.signal },
+    ),
+  );
+}
+
 export async function createFirstQuestion(
   input: Pick<
     TurnContext,
@@ -93,9 +120,7 @@ export async function createFirstQuestion(
       },
     }),
   });
-  return firstQuestionSchema.parse(
-    await agent(request, { signal: input.signal }),
-  );
+  return firstQuestionSchema.parse(await agent(request, { signal: input.signal }));
 }
 
 function activeQuestion(session: NodeSession) {
@@ -103,7 +128,10 @@ function activeQuestion(session: NodeSession) {
   if (stage.status !== "ACTIVE" || !stage.mainQuestion) {
     throw new Error("当前主题没有可回答的问题。");
   }
-  return { stage: session.currentStage, question: stage.mainQuestion };
+  return {
+    stage: session.currentStage,
+    question: stage.verificationQuestion ?? stage.mainQuestion,
+  };
 }
 
 function coreInput(context: TurnContext) {
@@ -156,6 +184,8 @@ export async function respondToUser(
       : currentStage.status === "ACTIVE"
         ? "ACTIVE"
         : "NOT_STARTED";
+  const isActive = diagnosticStatus === "ACTIVE";
+  const mainQuestion = isActive ? currentStage.mainQuestion : null;
   const request = buildBudgetedMaterialRequest({
     materialTitle: context.materialContext.title,
     modules: context.materialContext.modules,
@@ -165,17 +195,30 @@ export async function respondToUser(
     createRequest: (materialContext, recentMessages) => ({
       operation: "RESPOND_TO_USER" as const,
       input: {
-          ...coreInput(context),
-          materialContext,
-          recentMessages,
-          diagnostic: {
-            status: diagnosticStatus,
-            stage: context.session.currentStage,
-            mainQuestion:
-              currentStage.status === "ACTIVE" ? currentStage.mainQuestion : null,
+        ...coreInput(context),
+        materialContext,
+        recentMessages,
+        diagnostic: {
+          status: diagnosticStatus,
+          stage: context.session.currentStage,
+          mainQuestion,
+          currentQuestion: isActive
+            ? (currentStage.verificationQuestion ?? mainQuestion)
+            : null,
+          verificationQuestion: isActive ? currentStage.verificationQuestion : null,
+          hintLevel: currentStage.hintLevel,
+          hasRequestedHint: currentStage.hasRequestedHint,
+          stalledCount: currentStage.stalledCount,
+          answerOrigin: currentStage.answerOrigin,
+          stageStatuses: {
+            MEMORY: context.session.stages.MEMORY.status,
+            UNDERSTANDING: context.session.stages.UNDERSTANDING.status,
+            APPLICATION: context.session.stages.APPLICATION.status,
+            ANALYSIS: context.session.stages.ANALYSIS.status,
           },
-          userMessage: context.userMessage,
         },
+        userMessage: context.userMessage,
+      },
     }),
   });
   const decision = userTurnDecisionSchema.parse(
@@ -217,11 +260,13 @@ export async function respondToUser(
     outcome: decision,
   });
   const assistantMessages = [decision.assistantMessage];
-  const automaticallyRevealed =
-    context.session.stages[current.stage].status === "ACTIVE" &&
-    session.stages[current.stage].status === "PASSED_WITH_ANSWER";
+  const needsAutomaticAnswer =
+    !decision.isCorrect &&
+    decision.classification !== "OFF_TOPIC" &&
+    session.stages[current.stage].status === "ACTIVE" &&
+    session.stages[current.stage].stalledCount >= 3;
 
-  if (automaticallyRevealed) {
+  if (needsAutomaticAnswer) {
     const answerRequest = buildBudgetedRecentRequest({
       recentMessages: context.recentMessages,
       createRequest: (recentMessages) => ({
@@ -238,6 +283,24 @@ export async function respondToUser(
       await agent(answerRequest, { signal: context.signal }),
     );
     assistantMessages.push(answer.assistantMessage);
+    const verification = stageQuestionSchema.parse(
+      await agent(
+        {
+          operation: "CREATE_STAGE_VERIFICATION",
+          input: {
+            ...coreInput(context),
+            stage: current.stage,
+            mainQuestion: current.question,
+          },
+        },
+        { signal: context.signal },
+      ),
+    );
+    session = diagnosticReducer(session, {
+      type: "START_ANSWER_VERIFICATION",
+      question: verification.question,
+    });
+    assistantMessages.push(verification.question);
   }
 
   if (session.currentStage !== current.stage) {
@@ -279,9 +342,7 @@ export async function requestHint(
       },
     }),
   });
-  const hint = hintResponseSchema.parse(
-    await agent(request, { signal: context.signal }),
-  );
+  const hint = hintResponseSchema.parse(await agent(request, { signal: context.signal }));
   if (hint.hintLevel !== hintLevel) throw new Error("模型返回了错误的提示级别。");
   return {
     session,

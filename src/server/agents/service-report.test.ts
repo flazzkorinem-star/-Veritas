@@ -13,10 +13,34 @@ const input = {
       commonMisconceptions: [],
       score: 100,
       stages: {
-        MEMORY: "PASSED" as const,
-        UNDERSTANDING: "PASSED" as const,
-        APPLICATION: "PASSED" as const,
-        ANALYSIS: "PASSED" as const,
+        MEMORY: {
+          status: "PASSED" as const,
+          mainQuestion: "动力是什么？",
+          verificationQuestion: null,
+          answerOrigin: "NONE" as const,
+          hintLevel: 0 as const,
+        },
+        UNDERSTANDING: {
+          status: "PASSED" as const,
+          mainQuestion: "为什么？",
+          verificationQuestion: null,
+          answerOrigin: "NONE" as const,
+          hintLevel: 0 as const,
+        },
+        APPLICATION: {
+          status: "PASSED" as const,
+          mainQuestion: "如何应用？",
+          verificationQuestion: null,
+          answerOrigin: "NONE" as const,
+          hintLevel: 0 as const,
+        },
+        ANALYSIS: {
+          status: "PASSED" as const,
+          mainQuestion: "如何分析？",
+          verificationQuestion: null,
+          answerOrigin: "NONE" as const,
+          hintLevel: 0 as const,
+        },
       },
       messages: [{ id: "message-1", role: "USER" as const, content: "太阳能驱动蒸发。" }],
       scaffoldEvents: [],
@@ -30,11 +54,34 @@ const output = {
   nodeInsights: [
     {
       nodeId: "node-1",
-      understood: [{ statement: "能指出主要动力。", userMessageId: "message-1" }],
-      blindSpots: [],
-      userEvidenceMessageIds: ["message-1"],
+      learningEvidence: [
+        {
+          stage: "MEMORY" as const,
+          category: "INDEPENDENT" as const,
+          statement: "能指出主要动力。",
+          userMessageId: "message-1",
+        },
+        {
+          stage: "UNDERSTANDING" as const,
+          category: "INDEPENDENT" as const,
+          statement: "能解释主要动力。",
+          userMessageId: "message-1",
+        },
+        {
+          stage: "APPLICATION" as const,
+          category: "INDEPENDENT" as const,
+          statement: "能应用主要动力。",
+          userMessageId: "message-1",
+        },
+        {
+          stage: "ANALYSIS" as const,
+          category: "INDEPENDENT" as const,
+          statement: "能分析主要动力。",
+          userMessageId: "message-1",
+        },
+      ],
+      misconceptions: [],
       scaffoldNotes: [],
-      learnedOrCorrected: [],
       nextSteps: ["尝试解释不同季节的蒸发差异。"],
       sourceReferenceIndexes: [0],
     },
@@ -64,7 +111,7 @@ describe("Agent 3 服务", () => {
 
   it("拒绝模型引用不存在的用户消息", async () => {
     const invalid = structuredClone(output);
-    invalid.nodeInsights[0]!.userEvidenceMessageIds = ["fake-message"];
+    invalid.nodeInsights[0]!.learningEvidence[0]!.userMessageId = "fake-message";
 
     await expect(
       runAgentOperation(

@@ -72,10 +72,9 @@ test("真实 10、50、200 KiB 材料性能基线", async ({ page }, testInfo) =
 
     const startedAt = Date.now();
     await page.locator("#workspace-upload").setInputFiles(fixturePath);
-    await expect(page.locator(".chat-heading h1")).toHaveText(
-      `material-${sizeKiB}kb`,
-      { timeout: 10_000 },
-    );
+    await expect(page.locator(".chat-heading h1")).toHaveText(`material-${sizeKiB}kb`, {
+      timeout: 10_000,
+    });
     await expect(page.getByRole("button", { name: "取消处理" })).toBeVisible({
       timeout: 10_000,
     });

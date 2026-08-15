@@ -1,4 +1,5 @@
 import type { StoredReport } from "@/storage/types";
+import type { ReportDocumentNode } from "@/domain/report/build-report";
 import { Button } from "@/ui/Button";
 import { Icon } from "@/ui/Icon";
 
@@ -18,10 +19,24 @@ const STAGE_LABELS = {
 } as const;
 
 const STATUS_LABELS = {
-  PASSED: "独立通过",
+  PASSED: "答对",
   PASSED_WITH_HINT: "提示后通过",
-  PASSED_WITH_ANSWER: "依赖答案",
+  PASSED_WITH_ANSWER: "使用过完整答案",
 } as const;
+
+const EVIDENCE_LABELS = {
+  INDEPENDENT: "原本就会",
+  AFTER_HINT: "提示或引导后通过",
+  AFTER_TEACHING_VERIFIED: "讲解后经过验证学会",
+  EXPLAINED_NOT_VERIFIED: "看过答案但未验证",
+} as const;
+
+function stageResultLabel(node: ReportDocumentNode, stage: keyof typeof STAGE_LABELS) {
+  const evidence = node.learningEvidence.find((item) => item.stage === stage);
+  return evidence
+    ? EVIDENCE_LABELS[evidence.category]
+    : STATUS_LABELS[node.stages[stage]];
+}
 
 function TextList({ empty = "暂无", values }: { empty?: string; values: string[] }) {
   return values.length ? (
@@ -115,28 +130,50 @@ export function ReportView(props: ReportViewProps) {
               {Object.entries(node.stages).map(([stage, status]) => (
                 <div key={stage} data-status={status}>
                   <span>{STAGE_LABELS[stage as keyof typeof STAGE_LABELS]}</span>
-                  <strong>{STATUS_LABELS[status]}</strong>
+                  <strong>
+                    {stageResultLabel(node, stage as keyof typeof STAGE_LABELS)}
+                  </strong>
                 </div>
               ))}
             </div>
             <div className="report-detail-grid">
+              {Object.entries(EVIDENCE_LABELS).map(([category, label]) => {
+                const evidence = node.learningEvidence.filter(
+                  (item) => item.category === category,
+                );
+                return (
+                  <section key={category}>
+                    <h3>{label}</h3>
+                    {evidence.length ? (
+                      evidence.map((item) => (
+                        <div key={item.stage}>
+                          <p>{item.statement}</p>
+                          {item.evidenceQuote ? (
+                            <blockquote>{item.evidenceQuote}</blockquote>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="report-empty-copy">暂无</p>
+                    )}
+                  </section>
+                );
+              })}
+              {node.learningEvidence.length === 0 ? (
+                <section>
+                  <h3>已验证的内容</h3>
+                  <TextList values={node.understood.map((item) => item.statement)} />
+                </section>
+              ) : null}
               <section>
-                <h3>已经理解</h3>
-                <TextList values={node.understood.map((item) => item.statement)} />
-              </section>
-              <section>
-                <h3>主要盲点与误解</h3>
-                <TextList values={node.blindSpots} />
-              </section>
-              <section className="report-wide">
-                <h3>用户原话证据</h3>
-                {node.evidenceQuotes.length ? (
-                  node.evidenceQuotes.map((quote) => (
-                    <blockquote key={quote}>{quote}</blockquote>
-                  ))
-                ) : (
-                  <p className="report-empty-copy">暂无可引用原话</p>
-                )}
+                <h3>仍然存在的误解</h3>
+                <TextList
+                  values={
+                    node.misconceptions.length
+                      ? node.misconceptions.map((item) => item.description)
+                      : node.blindSpots
+                  }
+                />
               </section>
               <section>
                 <h3>家教提供的支架</h3>
@@ -144,12 +181,6 @@ export function ReportView(props: ReportViewProps) {
                   values={node.scaffoldNotes.map(
                     (item) => `${item.type}：${item.reason}；${item.learningEffect}`,
                   )}
-                />
-              </section>
-              <section>
-                <h3>本次学会或修正</h3>
-                <TextList
-                  values={node.learnedOrCorrected.map((item) => item.description)}
                 />
               </section>
               <section>

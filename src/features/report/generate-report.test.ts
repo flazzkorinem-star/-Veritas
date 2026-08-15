@@ -39,10 +39,34 @@ describe("报告生成编排", () => {
           session: {
             status: "COMPLETED",
             stages: {
-              MEMORY: { status: "PASSED" },
-              UNDERSTANDING: { status: "PASSED_WITH_HINT" },
-              APPLICATION: { status: "PASSED_WITH_ANSWER" },
-              ANALYSIS: { status: "PASSED" },
+              MEMORY: {
+                status: "PASSED",
+                mainQuestion: "动力是什么？",
+                verificationQuestion: null,
+                answerOrigin: "NONE",
+                hintLevel: 0,
+              },
+              UNDERSTANDING: {
+                status: "PASSED_WITH_HINT",
+                mainQuestion: "为什么？",
+                verificationQuestion: null,
+                answerOrigin: "NONE",
+                hintLevel: 1,
+              },
+              APPLICATION: {
+                status: "PASSED_WITH_ANSWER",
+                mainQuestion: "阴天会怎样？",
+                verificationQuestion: "阴天还会蒸发吗？",
+                answerOrigin: "AUTOMATIC",
+                hintLevel: 0,
+              },
+              ANALYSIS: {
+                status: "PASSED_WITH_ANSWER",
+                mainQuestion: "温度变化会怎样？",
+                verificationQuestion: null,
+                answerOrigin: "REQUESTED",
+                hintLevel: 0,
+              },
             },
           },
           scaffoldEvents: [],
@@ -85,11 +109,34 @@ describe("报告生成编排", () => {
       nodeInsights: [
         {
           nodeId: "node-1",
-          understood: [{ statement: "能指出主要动力。", userMessageId: "message-1" }],
-          blindSpots: ["应用层依赖完整答案。"],
-          userEvidenceMessageIds: ["message-1"],
+          learningEvidence: [
+            {
+              stage: "MEMORY",
+              category: "INDEPENDENT",
+              statement: "能指出主要动力。",
+              userMessageId: "message-1",
+            },
+            {
+              stage: "UNDERSTANDING",
+              category: "AFTER_HINT",
+              statement: "提示后能解释动力。",
+              userMessageId: "message-1",
+            },
+            {
+              stage: "APPLICATION",
+              category: "AFTER_TEACHING_VERIFIED",
+              statement: "讲解后通过应用验证。",
+              userMessageId: "message-1",
+            },
+            {
+              stage: "ANALYSIS",
+              category: "EXPLAINED_NOT_VERIFIED",
+              statement: "看过答案但没有再次验证。",
+              userMessageId: null,
+            },
+          ],
+          misconceptions: [],
           scaffoldNotes: [],
-          learnedOrCorrected: [],
           nextSteps: ["独立完成新情境应用。"],
           sourceReferenceIndexes: [0],
         },
@@ -113,10 +160,21 @@ describe("报告生成编排", () => {
       expect.objectContaining({ id: "message-2", role: "ASSISTANT" }),
     ]);
     expect(request.input.completedNodes).toHaveLength(1);
+    expect(request.input.completedNodes[0].stages.APPLICATION).toMatchObject({
+      answerOrigin: "AUTOMATIC",
+      verificationQuestion: "阴天还会蒸发吗？",
+    });
     expect(saveReport).toHaveBeenCalledWith(
       expect.objectContaining({
         progress: { completed: 1, total: 2 },
-        nodes: [expect.objectContaining({ evidenceQuotes: ["太阳能驱动蒸发。"] })],
+        nodes: [
+          expect.objectContaining({
+            learningEvidence: expect.arrayContaining([
+              expect.objectContaining({ category: "AFTER_TEACHING_VERIFIED" }),
+              expect.objectContaining({ category: "EXPLAINED_NOT_VERIFIED" }),
+            ]),
+          }),
+        ],
       }),
       expect.stringContaining("学习诊断报告"),
     );

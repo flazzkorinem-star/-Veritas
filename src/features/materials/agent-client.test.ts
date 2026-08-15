@@ -101,4 +101,27 @@ describe("浏览器 Agent 客户端", () => {
     });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it("校验待开始主题的新顺序", async () => {
+    const result = { nodeIds: ["node-3", "node-2"] };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.json({ result }, { status: 200 }));
+
+    await expect(
+      callAgent(
+        {
+          operation: "PRIORITIZE_PENDING_NODES",
+          input: {
+            learningGoal: "优先理解蒸发条件",
+            pendingNodes: [
+              { id: "node-2", title: "降水回流", objective: "解释回流。", order: 2 },
+              { id: "node-3", title: "蒸发条件", objective: "解释蒸发。", order: 3 },
+            ],
+          },
+        },
+        { fetchImpl },
+      ),
+    ).resolves.toEqual(result);
+  });
 });

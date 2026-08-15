@@ -82,12 +82,10 @@ describe("Agent 2 服务", () => {
     ).resolves.toEqual(output);
 
     const prompt = callModel.mock.calls[0]![0].user;
-    expect(prompt).toContain("明确表示无法回答当前主问题");
-    expect(prompt).toContain("classification 必须是 NO_ANSWER");
-    expect(prompt).toContain("progress 必须是 STALLED");
-    expect(prompt).toContain("不能改成 CONVERSATION 或 REQUEST_HINT");
-    expect(prompt).toContain("表达犹豫但同时给出实际答案");
-    expect(prompt).toContain("不能只因不确定语气判为 NO_ANSWER");
+    expect(prompt).toContain("明确无法作答也是诊断回应");
+    expect(prompt).toContain("分类为 NO_ANSWER、progress=STALLED");
+    expect(prompt).toContain("根据完整语义理解");
+    expect(prompt).toContain("不要靠关键词匹配意图");
   });
 
   it.each([
@@ -172,13 +170,11 @@ describe("Agent 2 服务", () => {
     ).resolves.toEqual(output);
 
     const prompt = callModel.mock.calls[0]![0].user;
-    expect(prompt).toContain("评价正确性只以当前主问题为准");
-    expect(prompt).toContain("主题相关不等于回答了当前主问题");
-    expect(prompt).toContain("逐项覆盖最低回答要求");
-    expect(prompt).toContain("回答了同主题的另一个问题");
-    expect(prompt).toContain("只完成比较的一侧");
-    expect(prompt).toContain("不要因为回答内容不匹配就改判为 CONVERSATION");
-    expect(prompt).toContain("能够按回答分类判断，就不得返回 CONVERSATION");
+    expect(prompt).toContain("当前评分对象是 currentQuestion");
+    expect(prompt).toContain("识别题目要求的唯一回答动作和最低证据");
+    expect(prompt).toContain("只有用户本轮证据完整满足要求时才是 CORRECT");
+    expect(prompt).toContain("未完整满足时保留当前问题");
+    expect(prompt).toContain("用户正在回答当前问题");
   });
 
   it.each([
@@ -186,6 +182,14 @@ describe("Agent 2 服务", () => {
       "CREATE_STAGE_QUESTION",
       { stage: "UNDERSTANDING" },
       { question: "这个机制为什么能持续运转？" },
+    ],
+    [
+      "CREATE_STAGE_VERIFICATION",
+      {
+        stage: "UNDERSTANDING",
+        mainQuestion: "这个机制为什么能持续运转？",
+      },
+      { question: "太阳能在其中起什么作用？" },
     ],
     [
       "RESPOND_TO_USER",
@@ -258,6 +262,94 @@ describe("Agent 2 服务", () => {
     expect(deepSeekRequestBodyBytes(callModel.mock.calls[0]![0])).toBeLessThanOrEqual(
       AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES,
     );
+    if (operation === "CREATE_STAGE_VERIFICATION") {
+      expect(callModel.mock.calls[0]![0].user).toContain("一次只验证一个关键点");
+      expect(callModel.mock.calls[0]![0].user).toContain("不要再次要求完整列举");
+    }
+  });
+
+  it("验证阶段按当前小题评价，同时保留原题作为教学背景", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      responseMode: "EVALUATE_DIAGNOSTIC",
+      learningGoalUpdate: null,
+      classification: "CORRECT",
+      isCorrect: true,
+      progress: "ADVANCING",
+      correctEvidence: ["说明了太阳能提供蒸发所需能量"],
+      missingPoints: [],
+      misconceptions: [],
+      teachingMove: "AFFIRM_AND_ADVANCE",
+      scaffold: null,
+      assistantMessage: "对，太阳能提供了蒸发所需的能量。",
+    });
+
+    await runAgentOperation(
+      {
+        operation: "RESPOND_TO_USER",
+        input: {
+          node,
+          knowledgeItems,
+          materialContext,
+          learningGoal: null,
+          diagnostic: {
+            status: "ACTIVE",
+            stage: "MEMORY",
+            mainQuestion: "水循环的主要动力是什么，它如何推动完整循环？",
+            currentQuestion: "太阳能在蒸发环节起什么作用？",
+            verificationQuestion: "太阳能在蒸发环节起什么作用？",
+            hintLevel: 0,
+            hasRequestedHint: false,
+            stalledCount: 0,
+            answerOrigin: "AUTOMATIC",
+            stageStatuses: {
+              MEMORY: "ACTIVE",
+              UNDERSTANDING: "LOCKED",
+              APPLICATION: "LOCKED",
+              ANALYSIS: "LOCKED",
+            },
+          },
+          userMessage: "它提供水蒸发所需的能量。",
+          recentMessages: [],
+        },
+      },
+      "server-key",
+      callModel,
+    );
+
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain("当前评分对象是 currentQuestion");
+    expect(prompt).toContain("mainQuestion 只作为原题背景");
+  });
+
+  it("按学习目标重排全部待开始主题，并拒绝增删节点", async () => {
+    const input = {
+      learningGoal: "优先理解天气变化怎样影响水循环",
+      pendingNodes: [
+        { id: "node-2", title: "降水回流", objective: "解释降水回流。", order: 2 },
+        { id: "node-3", title: "蒸发条件", objective: "解释温度与蒸发。", order: 3 },
+      ],
+    };
+    const callModel = vi.fn().mockResolvedValue({ nodeIds: ["node-3", "node-2"] });
+
+    await expect(
+      runAgentOperation(
+        { operation: "PRIORITIZE_PENDING_NODES", input },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual({ nodeIds: ["node-3", "node-2"] });
+    expect(callModel).toHaveBeenCalledWith(
+      expect.objectContaining({ thinking: false, timeoutMs: 30_000 }),
+    );
+    expect(callModel.mock.calls[0]![0].user).toContain(input.learningGoal);
+
+    await expect(
+      runAgentOperation(
+        { operation: "PRIORITIZE_PENDING_NODES", input },
+        "server-key",
+        vi.fn().mockResolvedValue({ nodeIds: ["node-3", "missing"] }),
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
   });
 
   it("在调用模型前拒绝超过 Agent 2 最终上游总字节预算的请求", async () => {

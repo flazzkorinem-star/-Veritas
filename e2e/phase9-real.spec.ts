@@ -15,16 +15,47 @@ async function createReport(request: APIRequestContext) {
             commonMisconceptions: ["植物把光能直接变成氧气"],
             score: 75,
             stages: {
-              MEMORY: "PASSED",
-              UNDERSTANDING: "PASSED_WITH_HINT",
-              APPLICATION: "PASSED_WITH_ANSWER",
-              ANALYSIS: "PASSED",
+              MEMORY: {
+                status: "PASSED",
+                mainQuestion: "光合作用储存什么能量？",
+                verificationQuestion: null,
+                answerOrigin: "NONE",
+                hintLevel: 0,
+              },
+              UNDERSTANDING: {
+                status: "PASSED_WITH_HINT",
+                mainQuestion: "能量如何转化？",
+                verificationQuestion: null,
+                answerOrigin: "NONE",
+                hintLevel: 1,
+              },
+              APPLICATION: {
+                status: "PASSED_WITH_ANSWER",
+                mainQuestion: "弱光下会怎样？",
+                verificationQuestion: null,
+                answerOrigin: "REQUESTED",
+                hintLevel: 0,
+              },
+              ANALYSIS: {
+                status: "PASSED",
+                mainQuestion: "如何区分能量和产物？",
+                verificationQuestion: null,
+                answerOrigin: "NONE",
+                hintLevel: 0,
+              },
             },
             messages: [
               {
                 id: "message-1",
                 role: "USER",
                 content: "植物把光能转成储存在葡萄糖里的化学能。",
+              },
+              { id: "message-2", role: "USER", content: "光能先被吸收，再转成化学能。" },
+              { id: "message-3", role: "USER", content: "我想直接看弱光情境的答案。" },
+              {
+                id: "message-4",
+                role: "USER",
+                content: "氧气是产物，不是光能转化后的能量形式。",
               },
             ],
             scaffoldEvents: [

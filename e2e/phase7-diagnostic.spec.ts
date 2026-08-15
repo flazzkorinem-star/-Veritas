@@ -117,21 +117,39 @@ function mockAgent(route: Route) {
       return fulfill(route, {
         summary: "已经能解释太阳能怎样推动水循环，应用环节仍依赖了完整答案。",
         nodeInsights: request.input.completedNodes!.map((completedNode) => {
-          const evidence = completedNode.messages.find(
-            (message) => message.role === "USER" && message.content.includes("太阳能"),
-          )!;
+          const evidence = completedNode.messages.filter(
+            (message) => message.role === "USER",
+          );
           return {
             nodeId: completedNode.nodeId,
-            understood: [
+            learningEvidence: [
               {
-                statement: "能指出太阳能是水循环的主要动力。",
-                userMessageId: evidence.id,
+                stage: "MEMORY",
+                category: "AFTER_HINT",
+                statement: "提示后能指出太阳能是主要动力。",
+                userMessageId: evidence[0]!.id,
+              },
+              {
+                stage: "UNDERSTANDING",
+                category: "AFTER_HINT",
+                statement: "提示后能解释太阳能与蒸发。",
+                userMessageId: evidence[1]!.id,
+              },
+              {
+                stage: "APPLICATION",
+                category: "EXPLAINED_NOT_VERIFIED",
+                statement: "看过应用题答案，但没有再次验证。",
+                userMessageId: null,
+              },
+              {
+                stage: "ANALYSIS",
+                category: "INDEPENDENT",
+                statement: "能独立分析阳光变化的影响。",
+                userMessageId: evidence[2]!.id,
               },
             ],
-            blindSpots: ["应用到新情境时依赖了家教完整答案。"],
-            userEvidenceMessageIds: [evidence.id],
+            misconceptions: [],
             scaffoldNotes: [],
-            learnedOrCorrected: [],
             nextSteps: ["换一个天气情境独立解释能量变化。"],
             sourceReferenceIndexes: [0],
           };

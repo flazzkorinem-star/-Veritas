@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  knowledgeMapSchema,
-  type ChunkExtraction,
-  type KnowledgeMap,
-} from "./contracts";
+import { knowledgeMapSchema, type ChunkExtraction, type KnowledgeMap } from "./contracts";
 
 const idSchema = z
   .string()
@@ -157,20 +153,11 @@ export function assembleKnowledgeAudit(
     unknownIds.length > 0 ||
     missingIds.length > 0
   ) {
-    throw new KnowledgeAuditAssemblyError(
-      "审计合并谱系没有完整覆盖原始知识条目。",
-      [
-        ...missingIds.map(
-          (id) => `AUDIT_KNOWLEDGE_MAP:lineage.missing.${id}:custom`,
-        ),
-        ...duplicateIds.map(
-          (id) => `AUDIT_KNOWLEDGE_MAP:lineage.duplicate.${id}:custom`,
-        ),
-        ...unknownIds.map(
-          (id) => `AUDIT_KNOWLEDGE_MAP:lineage.unknown.${id}:custom`,
-        ),
-      ],
-    );
+    throw new KnowledgeAuditAssemblyError("审计合并谱系没有完整覆盖原始知识条目。", [
+      ...missingIds.map((id) => `AUDIT_KNOWLEDGE_MAP:lineage.missing.${id}:custom`),
+      ...duplicateIds.map((id) => `AUDIT_KNOWLEDGE_MAP:lineage.duplicate.${id}:custom`),
+      ...unknownIds.map((id) => `AUDIT_KNOWLEDGE_MAP:lineage.unknown.${id}:custom`),
+    ]);
   }
 
   const assignments = new Map(
@@ -199,9 +186,9 @@ export function assembleKnowledgeAudit(
         merged.flatMap((item) => item.sourceReferences),
         (reference) => `${reference.label}\u0000${reference.excerpt}`,
       ),
-      commonMisconceptions:
-        group.canonical?.commonMisconceptions ??
-        [...new Set(merged.flatMap((item) => item.commonMisconceptions))],
+      commonMisconceptions: group.canonical?.commonMisconceptions ?? [
+        ...new Set(merged.flatMap((item) => item.commonMisconceptions)),
+      ],
     });
   }
 
@@ -245,7 +232,11 @@ export function assembleKnowledgeAudit(
     const assignment = assignments.get(group.id)!;
     const knowledgeItemId = finalItemByGroup.get(group.id)!.id;
     return assignment.disposition === "REFERENCE_ONLY"
-      ? { knowledgeItemId, disposition: assignment.disposition, reason: assignment.reason }
+      ? {
+          knowledgeItemId,
+          disposition: assignment.disposition,
+          reason: assignment.reason,
+        }
       : {
           knowledgeItemId,
           disposition: assignment.disposition,
@@ -263,9 +254,7 @@ export function assembleKnowledgeAudit(
     return {
       chunkId: chunk.chunkId,
       knowledgeItemIds: orderedGroups
-        .filter((group) =>
-          group.sourceKnowledgeItemIds.some((id) => chunkItems.has(id)),
-        )
+        .filter((group) => group.sourceKnowledgeItemIds.some((id) => chunkItems.has(id)))
         .map((group) => finalItemByGroup.get(group.id)!.id),
     };
   });

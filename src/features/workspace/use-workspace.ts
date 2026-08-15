@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentClientError } from "@/features/materials/agent-client";
 import {
   createFirstQuestion,
+  prioritizePendingNodes,
   requestHint as runHintTurn,
   respondToUser,
   revealStageAnswer,
@@ -449,6 +450,32 @@ export function useWorkspace(
         scaffold: result.scaffold,
         learningGoalUpdate: result.learningGoalUpdate,
       });
+      if (result.learningGoalUpdate && learningData?.material) {
+        const startedIds = new Set(learningData.sessions.map((stored) => stored.nodeId));
+        const pendingNodes = learningData.material.nodes
+          .filter((node) => !startedIds.has(node.id))
+          .map(({ id, title, objective, order }) => ({
+            id,
+            title,
+            objective,
+            order,
+          }));
+        if (pendingNodes.length >= 2) {
+          try {
+            const priorityInput = {
+              learningGoal: result.learningGoalUpdate,
+              pendingNodes,
+              signal: controller.signal,
+            };
+            const priority = diagnosticAgent
+              ? await prioritizePendingNodes(priorityInput, diagnosticAgent)
+              : await prioritizePendingNodes(priorityInput);
+            await repository.reorderUnstartedNodes(context.task.id, priority.nodeIds);
+          } catch {
+            // 学习目标已经保存；排序失败时保留原顺序，不能让用户重复本轮对话。
+          }
+        }
+      }
       await reloadTasks();
       setLearningData(await repository.getTaskLearningData(context.task.id));
       if (

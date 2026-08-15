@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-通用 AI 学习伙伴纠偏后的本地正式版已经通过完整 Mock 与真实 DeepSeek 验收；后续改动从当前稳定基线继续。
+面向“学过材料后发现并补齐遗漏”的本地正式版已经完成收尾，并通过完整 Mock 与定向真实 DeepSeek 验收；后续改动从当前稳定基线继续。
 
 ## 根目录
 
@@ -42,20 +42,20 @@
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
 - `src/domain/types.ts`：任务、材料、知识地图、主题、层级、消息与报告的稳定领域类型。
-- `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约。
-- `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、完成与计分。
+- `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约；每层保留原主问题、小验证题和答案来源事实。
+- `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、自动答案后的同层验证、完成与计分；主动索要答案可直接推进，自动答案必须验证答对后推进。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
 - `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；单个分块内的模块与条目 ID 必须唯一。
 - `src/domain/knowledge-map/stable-extraction-ids.ts`：按分块和原始顺序为抽取结果重分配稳定命名空间 ID，并同步条目到模块的引用。
 - `src/domain/knowledge-map/audit-assembly.ts`：校验只含合并谱系、诊断主题和条目归属的精简审计；由代码确定性组装最终知识地图、条目类型、节点顺序和来源覆盖。
-- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助与报告操作；Agent 2 的线上材料上下文只接受精简目录。
+- `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助、待开始主题排序与报告操作；Agent 2 的线上材料上下文只接受精简目录。
 - `src/domain/agents/context-budget.ts`：按整包 JSON 字节预算确定性组装 Agent 2 请求，优先保留当前主题、最新消息和模块/条目目录，剩余空间再加入摘要。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
-- `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话输入与洞察结构，并拒绝引用助理消息、伪造用户原话、支架、来源或在用户文案中暴露内部术语。
-- `src/domain/report/build-report.ts`：由本地确定性证据回填任务级报告，并生成转义后的 Markdown 下载文本。
+- `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话、每层问题与答案来源；报告结论只能落入独立通过、提示或引导后通过、自动讲解后验证通过、主动看答案未验证四类，并拒绝伪造原话、支架和来源。
+- `src/domain/report/build-report.ts`：由本地确定性证据回填整份材料的任务级报告，使用自然中文呈现四类学习结果、误解和覆盖范围，并生成转义后的 Markdown 下载文本。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
 - `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、报告、完成状态、界面状态和事务性删除/撤销，并把配额耗尽与损坏报告转换为稳定本地错误。
+- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、界面状态和事务性删除/撤销；保存报告时重新核对分数、四层状态、学习证据分类、用户原话、支架、来源和 Markdown。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
@@ -67,16 +67,16 @@
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
 - `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、稳定 ID 重分配、精简覆盖审计和首个有意义问题，按实际完成数报告进度、保持原文顺序并传播取消信号。
-- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示与答案回合；发送前应用整包字节预算，普通消息保持状态不变，文字提示/答案请求复用按钮流程，状态变化只交给唯一 reducer。
+- `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示、答案、三轮停滞后的自动讲解与同层小验证，以及学习目标驱动的待开始主题排序；状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
 - `src/server/agents/service.ts`：组装材料处理、精简知识审计、通用 Vita 对话、诊断辅助与报告的隔离提示，确定性恢复最终知识地图；作为唯一重试所有者统一限制尝试次数和绝对截止时间，限制 Agent 2 上游整包字节数，反馈脱敏校验路径、剥离白名单空字段、校验业务状态，并记录不含材料与模型正文的操作元数据。
-- `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话和已验证状态，调用 Agent 3 并保存任务级报告。
+- `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源，调用 Agent 3 并保存覆盖整份材料范围的任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
-- `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，不解析模型 HTML。
+- `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。
 - `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、两区主界面、按需主题/进度浮层、报告页面、移动抽屉、返回行为与任务对话框。
-- `src/features/workspace/use-workspace.ts`：协调仓储读取、通用对话、按需诊断与报告重试，以及学习目标、草稿和报告写入队列；异步处理结束前核对当前任务，避免覆盖用户已切换到的学习数据。
+- `src/features/workspace/use-workspace.ts`：协调仓储读取、通用对话、按需诊断与报告重试，以及学习目标、待开始主题重排、草稿和报告写入队列；异步处理结束前核对当前任务，避免覆盖用户已切换到的学习数据。
 - `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索和任务列表；单任务菜单通过视口级浮层避开滚动裁剪，并处理外部点击、Esc 与焦点归还。
 - `src/features/workspace/LearningPanels.tsx`：显示精简页头、白色核心对话、按需主题/进度、节点历史、通用文字与语音消息、Enter/Shift+Enter 键盘行为，以及只在诊断题激活时出现的提示与答案操作。
 - `src/features/workspace/TaskDialogs.tsx`：提供带焦点约束、Esc 关闭和焦点归还的重命名与单任务删除确认模态框。
@@ -108,13 +108,13 @@
 - `e2e/phase5-real.spec.ts`：显式开启时用真实 DeepSeek 验收 Markdown 至首个有意义问题、核心覆盖、双端布局与刷新恢复。
 - `e2e/phase5-processing-control.spec.ts`：在双端生产 Edge 中验证模型请求进行中取消可立即重试，以及处理中刷新后恢复为明确中断状态。
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
-- `src/features/diagnostic/diagnostic-turn.test.ts`：验证通用对话绕行、同题追问、答对推进、三轮停滞、按钮与文字语义触发的提示/答案编排。
-- `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架和诊断完成等待报告的事务性持久化。
+- `src/features/diagnostic/diagnostic-turn.test.ts`：验证通用对话绕行、同题追问、答对推进、三轮停滞后同层小验证、按钮与文字语义触发的提示/答案编排。
+- `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架、只重排未开始主题和诊断完成等待报告的事务性持久化。
 - `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证默认首问、通用对话绕行、提示、答案、分数、节点切换和草稿恢复的组件闭环。
 - `e2e/phase7-diagnostic.spec.ts`：在双端生产 Edge 中走完一个节点四层和报告查看、下载、分享，并在桌面验证发送失败、草稿保留和原地重试。
 - `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的通用绕行、语义提示/答案、问题、评价和越权字段隔离。
 - `src/domain/report/*.test.ts`：验证报告证据引用、确定性回填和安全 Markdown 生成。
-- `src/storage/report-repository.test.ts`：验证报告与完成主题严格匹配，并只在最终报告保存后完成任务。
+- `src/storage/report-repository.test.ts`：验证报告与完成主题、分数、状态、原话、来源和 Markdown 严格匹配，并只在最终报告保存后完成任务。
 - `src/features/report/*.test.tsx`：验证报告编排、全屏渲染、下载文件名、系统分享与复制回退。
 - `e2e/phase9-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 3 的忠实报告结构和越权字段隔离。
 - `src/features/speech/use-speech-input.test.tsx`：验证中文转写、停止、权限、无声音、设备失败、中断、不支持和卸载释放。
@@ -126,7 +126,7 @@
 - `e2e/phase15-performance-real.spec.ts`：仅显式启用时串行生成并处理 10、50、200 KiB 合成 Markdown，记录端到端耗时、同源请求字节数、调用数、状态和主题数，不进入普通 CI 的真实模型调用。
 - `e2e/evaluation-a0691c1.spec.ts`：显式启用时在本地生产 Edge 中串行执行 20 个真实用户评测 session，并把逐轮输入输出、确定性状态、Agent 操作、报告和截图保存到版本化评测目录。
 - `e2e/agent2-answer-coverage-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S15、S20 的目标问题，保存用户输入、Vita 输出、结构化判断和前后状态，并用完整答案验证正常推进。
-- `e2e/agent2-no-answer-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 区分六种无法作答表达、用户提问、暂停和带尝试的回答，并从真实首问连续验证三轮停滞、自动答案、分数与四层持久化状态。
+- `e2e/agent2-no-answer-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 区分六种无法作答表达、用户提问、暂停和带尝试的回答，并从真实首问连续验证三轮停滞、自动答案、同层小验证、答对后推进、分数与四层持久化状态。
 - `e2e/agent2-single-question-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S01、S02 的正确推进，保存全部 Agent 操作、前后会话、分数、页面消息和浏览器错误，并验证评价反馈后只有与新层 `mainQuestion` 一致的正式问题。
 - `e2e/first-question-memory-real.spec.ts`：显式启用时在生产 Edge 中把 ETF、城市内涝、光合作用和基金代码考试材料各上传两次，保存 `bloomTargets.memory`、真实首问、请求阶段与最终存储层级，供逐条人工核对首问层级。
 - `docs/evaluation/a0691c1/`：保存 a0691c1 的评测矩阵、评分规则、20 条原始 JSON、报告、截图、逐案评级、Badcase 归因、执行异常和总体结论；人工预设案例与线上真实案例明确区分。

@@ -122,21 +122,20 @@ function mockAgent(route: Route) {
       return reply(route, {
         summary: "已经完成第一个主题，能够说明太阳能与蒸发的关系。",
         nodeInsights: request.input.completedNodes!.map((completedNode) => {
-          const evidence = completedNode.messages.find(
+          const evidence = completedNode.messages.filter(
             (message) => message.role === "USER" && message.content.includes("太阳能"),
-          )!;
+          );
+          const stages = ["MEMORY", "UNDERSTANDING", "APPLICATION", "ANALYSIS"];
           return {
             nodeId: completedNode.nodeId,
-            understood: [
-              {
-                statement: "能指出水循环的主要动力。",
-                userMessageId: evidence.id,
-              },
-            ],
-            blindSpots: [],
-            userEvidenceMessageIds: [evidence.id],
+            learningEvidence: stages.map((stage, index) => ({
+              stage,
+              category: "INDEPENDENT",
+              statement: "能独立说明水循环的主要动力。",
+              userMessageId: evidence[index]!.id,
+            })),
+            misconceptions: [],
             scaffoldNotes: [],
-            learnedOrCorrected: [],
             nextSteps: ["继续学习降水回流。"],
             sourceReferenceIndexes: [0],
           };

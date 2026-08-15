@@ -43,6 +43,13 @@ const secondNode = {
   objective: "解释降水回流。",
   order: 2,
 };
+const thirdNode = {
+  ...node,
+  id: "node-3",
+  title: "蒸发条件",
+  objective: "解释温度与蒸发的关系。",
+  order: 3,
+};
 const map = {
   modules: [{ id: "module-1", title: "水循环", sourceRange: "第 1 段" }],
   knowledgeItems: [item],
@@ -162,6 +169,26 @@ describe("诊断会话仓储", () => {
         scaffold: null,
         learningGoalUpdate: null,
       }),
+    ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
+    database.close();
+  });
+
+  it("只按新目标重排尚未开始的主题", async () => {
+    const { database, repository, task } = await setup();
+    const material = (await database.materials.get(task.id))!;
+    await database.materials.put({
+      ...material,
+      nodes: [...material.nodes, thirdNode],
+    });
+
+    await repository.reorderUnstartedNodes(task.id, [thirdNode.id, secondNode.id]);
+
+    const reordered = (await repository.getTaskLearningData(task.id))
+      .material!.nodes.toSorted((left, right) => left.order - right.order)
+      .map((candidate) => candidate.id);
+    expect(reordered).toEqual([node.id, thirdNode.id, secondNode.id]);
+    await expect(
+      repository.reorderUnstartedNodes(task.id, [node.id, secondNode.id]),
     ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
     database.close();
   });

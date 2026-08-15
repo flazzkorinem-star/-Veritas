@@ -17,6 +17,8 @@ type StoredSession = {
     {
       status: string;
       mainQuestion: string | null;
+      verificationQuestion: string | null;
+      answerOrigin: "NONE" | "REQUESTED" | "AUTOMATIC";
       stalledCount: number;
     }
   >;
@@ -227,7 +229,9 @@ test("六种无法作答表达与三个边界对照由真实 Agent 2 正确区�
   });
 });
 
-test("真实页面连续三轮无法作答后自动给答案并进入下一层", async ({ page }, testInfo) => {
+test("真实页面连续三轮无法作答后先做同层小验证，再进入下一层", async ({
+  page,
+}, testInfo) => {
   const operations: AgentOperation[] = [];
   const browserProblems: string[] = [];
   page.on("console", (message) => {
@@ -299,21 +303,49 @@ test("真实页面连续三轮无法作答后自动给答案并进入下一层",
   expect(after.score).toBe("0");
   expect(afterSession).toMatchObject({
     status: "IN_PROGRESS",
-    currentStage: "UNDERSTANDING",
+    currentStage: "MEMORY",
     stages: {
-      MEMORY: { status: "PASSED_WITH_ANSWER", stalledCount: 0 },
-      UNDERSTANDING: { status: "ACTIVE", stalledCount: 0 },
+      MEMORY: {
+        status: "ACTIVE",
+        mainQuestion: originalQuestion,
+        answerOrigin: "AUTOMATIC",
+        stalledCount: 0,
+      },
+      UNDERSTANDING: { status: "LOCKED", stalledCount: 0 },
       APPLICATION: { status: "LOCKED", stalledCount: 0 },
       ANALYSIS: { status: "LOCKED", stalledCount: 0 },
     },
   });
-  expect(afterSession.stages.UNDERSTANDING.mainQuestion).toBeTruthy();
+  expect(afterSession.stages.MEMORY.verificationQuestion).toBeTruthy();
   expect(after.assistantMessages.at(-1)).toBe(
-    afterSession.stages.UNDERSTANDING.mainQuestion,
+    afterSession.stages.MEMORY.verificationQuestion,
   );
   expect(turns.at(-1)!.operations).toEqual([
     { operation: "RESPOND_TO_USER", status: 200 },
     { operation: "CREATE_STAGE_ANSWER", status: 200 },
+    { operation: "CREATE_STAGE_VERIFICATION", status: 200 },
+  ]);
+
+  const verification = await sendTurn(
+    page,
+    "降雨越强、持续越久，到达地面的水越多；与草地泥土相比，硬化地表让雨水更难下渗，形成的径流更多也更快；排水能力决定积水能否及时排走；低洼地形更容易汇集积水。",
+    operations,
+  );
+  expect(verification.decision).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "CORRECT",
+    isCorrect: true,
+    progress: "ADVANCING",
+  });
+  expect(verification.state.stored.session).toMatchObject({
+    currentStage: "UNDERSTANDING",
+    stages: {
+      MEMORY: { status: "PASSED_WITH_ANSWER", answerOrigin: "AUTOMATIC" },
+      UNDERSTANDING: { status: "ACTIVE" },
+    },
+  });
+  expect(verification.operations).toEqual([
+    { operation: "RESPOND_TO_USER", status: 200 },
     { operation: "CREATE_STAGE_QUESTION", status: 200 },
   ]);
   expect(browserProblems).toEqual([]);

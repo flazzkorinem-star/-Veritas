@@ -15,11 +15,21 @@ export interface ReportCoverage {
   referenceOnly: string[];
 }
 
+export type LearningEvidenceCategory =
+  "INDEPENDENT" | "AFTER_HINT" | "AFTER_TEACHING_VERIFIED" | "EXPLAINED_NOT_VERIFIED";
+
 export interface ReportDocumentNode {
   nodeId: string;
   title: string;
   score: number;
   stages: Record<StageKey, Extract<StageStatus, `PASSED${string}` | "PASSED">>;
+  learningEvidence: {
+    stage: StageKey;
+    category: LearningEvidenceCategory;
+    statement: string;
+    evidenceQuote: string | null;
+  }[];
+  misconceptions: { description: string; evidenceQuote: string }[];
   understood: { statement: string; evidenceQuote: string }[];
   blindSpots: string[];
   evidenceQuotes: string[];
@@ -77,6 +87,30 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
                 ANALYSIS: storedStageStatus,
               })
               .strict(),
+            learningEvidence: z
+              .array(
+                z
+                  .object({
+                    stage: z.enum(["MEMORY", "UNDERSTANDING", "APPLICATION", "ANALYSIS"]),
+                    category: z.enum([
+                      "INDEPENDENT",
+                      "AFTER_HINT",
+                      "AFTER_TEACHING_VERIFIED",
+                      "EXPLAINED_NOT_VERIFIED",
+                    ]),
+                    statement: storedText,
+                    evidenceQuote: storedText.nullable(),
+                  })
+                  .strict(),
+              )
+              .max(4)
+              .default([]),
+            misconceptions: z
+              .array(
+                z.object({ description: storedText, evidenceQuote: storedText }).strict(),
+              )
+              .max(12)
+              .default([]),
             understood: z
               .array(
                 z.object({ statement: storedText, evidenceQuote: storedText }).strict(),
@@ -151,15 +185,47 @@ export function buildReportDocument(options: {
         nodeId: node.nodeId,
         title: node.title,
         score: node.score,
-        stages: node.stages,
-        understood: insight.understood.map((item) => ({
+        stages: Object.fromEntries(
+          Object.entries(node.stages).map(([stage, state]) => [stage, state.status]),
+        ) as ReportDocumentNode["stages"],
+        learningEvidence: insight.learningEvidence.map((item) => ({
+          stage: item.stage,
+          category: item.category,
           statement: item.statement,
+          evidenceQuote:
+            item.userMessageId === null
+              ? null
+              : messages.get(item.userMessageId)!.content,
+        })),
+        misconceptions: insight.misconceptions.map((item) => ({
+          description: item.description,
           evidenceQuote: messages.get(item.userMessageId)!.content,
         })),
-        blindSpots: insight.blindSpots,
-        evidenceQuotes: insight.userEvidenceMessageIds.map(
-          (id) => messages.get(id)!.content,
+        understood: insight.learningEvidence.flatMap((item) =>
+          item.userMessageId === null
+            ? []
+            : [
+                {
+                  statement: item.statement,
+                  evidenceQuote: messages.get(item.userMessageId)!.content,
+                },
+              ],
         ),
+        blindSpots: [
+          ...insight.misconceptions.map((item) => item.description),
+          ...insight.learningEvidence
+            .filter((item) => item.category === "EXPLAINED_NOT_VERIFIED")
+            .map((item) => item.statement),
+        ],
+        evidenceQuotes: [
+          ...new Set(
+            insight.learningEvidence.flatMap((item) =>
+              item.userMessageId === null
+                ? []
+                : [messages.get(item.userMessageId)!.content],
+            ),
+          ),
+        ],
         scaffoldNotes: insight.scaffoldNotes.map((note) => {
           const event = scaffolds.get(note.scaffoldEventId)!;
           return {
@@ -168,13 +234,13 @@ export function buildReportDocument(options: {
             learningEffect: note.learningEffect,
           };
         }),
-        learnedOrCorrected: insight.learnedOrCorrected.map((item) => {
-          const evidence =
-            item.basis === "USER_RESPONSE"
-              ? messages.get(item.evidenceId)!.content
-              : scaffolds.get(item.evidenceId)!.reason;
-          return { description: item.description, basis: item.basis, evidence };
-        }),
+        learnedOrCorrected: insight.learningEvidence
+          .filter((item) => item.category === "AFTER_TEACHING_VERIFIED")
+          .map((item) => ({
+            description: item.statement,
+            basis: "USER_RESPONSE",
+            evidence: messages.get(item.userMessageId!)!.content,
+          })),
         nextSteps: insight.nextSteps,
         sourceReferences: insight.sourceReferenceIndexes.map(
           (index) => node.sourceReferences[index]!,
@@ -198,6 +264,37 @@ function list(values: string[]) {
     : "- 无";
 }
 
+function evidenceList(items: ReportDocumentNode["learningEvidence"]) {
+  return items.length
+    ? items
+        .map(
+          (item) =>
+            `- ${escapeMarkdown(item.statement)}${item.evidenceQuote ? `\n\n> ${escapeMarkdown(item.evidenceQuote)}` : ""}`,
+        )
+        .join("\n\n")
+    : "- 无";
+}
+
+const STAGE_LABELS: Record<StageKey, string> = {
+  MEMORY: "记忆",
+  UNDERSTANDING: "理解",
+  APPLICATION: "应用",
+  ANALYSIS: "分析",
+};
+
+const STATUS_LABELS: Record<ReportDocumentNode["stages"][StageKey], string> = {
+  PASSED: "答对",
+  PASSED_WITH_HINT: "提示后答对",
+  PASSED_WITH_ANSWER: "使用过完整答案",
+};
+
+const EVIDENCE_HEADINGS: Record<LearningEvidenceCategory, string> = {
+  INDEPENDENT: "原本就会",
+  AFTER_HINT: "提示或引导后通过",
+  AFTER_TEACHING_VERIFIED: "讲解后经过验证学会",
+  EXPLAINED_NOT_VERIFIED: "看过答案但未验证",
+};
+
 export function reportToMarkdown(report: ReportDocument) {
   const nodeSections = report.nodes
     .map(
@@ -206,28 +303,25 @@ export function reportToMarkdown(report: ReportDocument) {
 ### 四层状态
 
 ${Object.entries(node.stages)
-  .map(([stage, status]) => `- ${stage}: ${status}`)
+  .map(
+    ([stage, status]) => `- ${STAGE_LABELS[stage as StageKey]}：${STATUS_LABELS[status]}`,
+  )
   .join("\n")}
 
-### 已经理解
+${(Object.keys(EVIDENCE_HEADINGS) as LearningEvidenceCategory[])
+  .map((category) => {
+    const items = node.learningEvidence.filter((item) => item.category === category);
+    return `### ${EVIDENCE_HEADINGS[category]}\n\n${evidenceList(items)}`;
+  })
+  .join("\n\n")}
 
-${list(node.understood.map((item) => item.statement))}
+### 仍然存在的误解
 
-### 主要盲点
-
-${list(node.blindSpots)}
-
-### 用户原话证据
-
-${node.evidenceQuotes.length ? node.evidenceQuotes.map((quote) => `> ${escapeMarkdown(quote)}`).join("\n\n") : "无"}
+${list(node.misconceptions.map((item) => item.description))}
 
 ### 家教提供的支架
 
 ${list(node.scaffoldNotes.map((note) => `${note.type}：${note.reason}；${note.learningEffect}`))}
-
-### 本次学会或修正
-
-${list(node.learnedOrCorrected.map((item) => item.description))}
 
 ### 下一步建议
 

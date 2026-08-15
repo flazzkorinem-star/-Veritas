@@ -46,7 +46,8 @@ const cases = [
       "S02-ETF正常作答二.md",
     ),
     stage: "MEMORY" as const,
-    question: "没有证券账户、只能使用基金销售平台时，应选择 ETF 还是 ETF 联接基金？请说明理由。",
+    question:
+      "没有证券账户、只能使用基金销售平台时，应选择 ETF 还是 ETF 联接基金？请说明理由。",
     answer:
       "没有证券账户时我会选ETF联接基金，因为它能在基金销售平台按净值申购赎回；ETF通常要用证券账户盘中交易。",
   },
@@ -136,6 +137,8 @@ async function setArtificialDiagnosticState(
                   ? "ACTIVE"
                   : "LOCKED",
             mainQuestion: index === activeIndex ? question : null,
+            verificationQuestion: null,
+            answerOrigin: "NONE",
             hintLevel: 0,
             hasRequestedHint: false,
             stalledCount: 0,

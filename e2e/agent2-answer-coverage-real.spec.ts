@@ -101,6 +101,9 @@ async function setTargetQuestion(page: Page, stage: StageKey, question: string) 
               ? "PASSED_WITH_ANSWER"
               : "LOCKED",
         mainQuestion: key === stage ? question : null,
+        verificationQuestion: null,
+        answerOrigin:
+          stage === "UNDERSTANDING" && key === "MEMORY" ? "REQUESTED" : "NONE",
         hintLevel: 0,
         hasRequestedHint: false,
         stalledCount: 0,

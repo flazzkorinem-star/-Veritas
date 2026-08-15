@@ -7,6 +7,7 @@ import {
 import {
   type AgentOperationRequest,
   agentOperationRequestSchema,
+  pendingNodeOrderSchema,
 } from "@/domain/agents/contracts";
 import {
   chunkExtractionSchema,
@@ -58,7 +59,12 @@ export interface AgentOperationLogEntry {
   requestBytes: number;
   durationMs: number;
   attempts: number;
-  endReason: "SUCCESS" | "ATTEMPTS_EXHAUSTED" | "DEADLINE_EXCEEDED" | "CANCELLED" | "NON_RETRYABLE";
+  endReason:
+    | "SUCCESS"
+    | "ATTEMPTS_EXHAUSTED"
+    | "DEADLINE_EXCEEDED"
+    | "CANCELLED"
+    | "NON_RETRYABLE";
   status: number | null;
   failureType: string | null;
   outcome: string;
@@ -113,9 +119,11 @@ function defaultLog(entry: AgentOperationLogEntry) {
 
 function operationMaxAttempts(operation: AgentOperationRequest["operation"]) {
   return operation === "CREATE_STAGE_QUESTION" ||
+    operation === "CREATE_STAGE_VERIFICATION" ||
     operation === "RESPOND_TO_USER" ||
     operation === "CREATE_HINT" ||
-    operation === "CREATE_STAGE_ANSWER"
+    operation === "CREATE_STAGE_ANSWER" ||
+    operation === "PRIORITIZE_PENDING_NODES"
     ? 2
     : 3;
 }
@@ -124,20 +132,28 @@ function usesAgentTwoRequestBudget(operation: AgentOperationRequest["operation"]
   return (
     operation === "CREATE_FIRST_QUESTION" ||
     operation === "CREATE_STAGE_QUESTION" ||
+    operation === "CREATE_STAGE_VERIFICATION" ||
     operation === "RESPOND_TO_USER" ||
     operation === "CREATE_HINT" ||
-    operation === "CREATE_STAGE_ANSWER"
+    operation === "CREATE_STAGE_ANSWER" ||
+    operation === "PRIORITIZE_PENDING_NODES"
   );
 }
 
 function sanitizeDetails(details: string[]) {
-  return [...new Set(details.map((detail) => detail.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 160)))]
+  return [
+    ...new Set(
+      details.map((detail) => detail.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 160)),
+    ),
+  ]
     .filter(Boolean)
     .slice(0, 20);
 }
 
 function zodPaths(details: string[]) {
-  return [...new Set(sanitizeDetails(details).map((detail) => detail.split(":")[1] ?? "root"))];
+  return [
+    ...new Set(sanitizeDetails(details).map((detail) => detail.split(":")[1] ?? "root")),
+  ];
 }
 
 function repairRequest(
@@ -148,7 +164,10 @@ function repairRequest(
     error instanceof AgentServiceError
       ? `上一次输出未通过结构校验。失败字段路径：${sanitizeDetails(error.details).join(", ") || "root"}。只修正这些字段并重新输出完整 JSON，不要解释，也不要增加未声明字段。`
       : "上一次输出为空、截断或不是合法 JSON。请按原定结构重新输出完整 JSON，不要解释。";
-  return { ...request, system: `${request.system}\n\n<STRUCTURE_REPAIR>${repair}</STRUCTURE_REPAIR>` };
+  return {
+    ...request,
+    system: `${request.system}\n\n<STRUCTURE_REPAIR>${repair}</STRUCTURE_REPAIR>`,
+  };
 }
 
 function isRetryable(error: unknown) {
@@ -160,7 +179,9 @@ function isRetryable(error: unknown) {
 }
 
 function abortError(reason: "DEADLINE_EXCEEDED" | "CANCELLED") {
-  return new DeepSeekError(reason === "DEADLINE_EXCEEDED" ? "REQUEST_TIMEOUT" : "REQUEST_ABORTED");
+  return new DeepSeekError(
+    reason === "DEADLINE_EXCEEDED" ? "REQUEST_TIMEOUT" : "REQUEST_ABORTED",
+  );
 }
 
 function raceWithSignal<T>(
@@ -255,7 +276,10 @@ async function callValidated<T>(
           error instanceof AgentServiceError ||
           (error instanceof DeepSeekError && error.code === "INVALID_RESPONSE")
         ) {
-          finalRequest = { ...repairRequest(baseRequest, error), signal: controller.signal };
+          finalRequest = {
+            ...repairRequest(baseRequest, error),
+            signal: controller.signal,
+          };
         }
         if (error instanceof DeepSeekError && error.code === "UPSTREAM_UNAVAILABLE") {
           await raceWithSignal(
@@ -366,7 +390,11 @@ type DiagnosticOperation = Extract<
   AgentOperationRequest,
   {
     operation:
-      "CREATE_STAGE_QUESTION" | "RESPOND_TO_USER" | "CREATE_HINT" | "CREATE_STAGE_ANSWER";
+      | "CREATE_STAGE_QUESTION"
+      | "CREATE_STAGE_VERIFICATION"
+      | "RESPOND_TO_USER"
+      | "CREATE_HINT"
+      | "CREATE_STAGE_ANSWER";
   }
 >;
 
@@ -377,15 +405,20 @@ function diagnosticPrompt(
   const instructions = {
     CREATE_STAGE_QUESTION:
       '为当前层生成一个边界清楚、只要求一个动作的主问题。必须使用 node.bloomTargets 中与 stage 对应的目标，不得借用其他层目标。MEMORY 只能检验后续理解真正需要的核心定义或关系，不得考代码、编号、名单或孤立数字；其他层分别检验解释、应用和机制。结合 learningGoal 调整场景。只输出 {"question":"..."}。',
-    RESPOND_TO_USER: `先判断用户这一轮真正想做什么。当前诊断为 ACTIVE 时，只要这条消息能够按回答分类判断，就不得返回 CONVERSATION；即使答案没有答中、只覆盖一个要求或实际回答了同主题的另一个问题，也要返回 EVALUATE_DIAGNOSTIC，不要因为回答内容不匹配就改判为 CONVERSATION。只有用户明确在提问、讨论、解释、整理、创作、换话题或暂停时才返回 CONVERSATION，并用 assistantMessage 直接完成请求。当前有主问题且用户在语义上请求提示时返回 {"responseMode":"REQUEST_HINT"}，请求直接查看答案时返回 {"responseMode":"REVEAL_ANSWER"}；不要依赖某个固定关键词。只有当前没有主问题且用户明确要求开始检验时才返回 START_DIAGNOSTIC。
+    CREATE_STAGE_VERIFICATION:
+      '用户已经连续卡住并看过当前题的完整答案。为同一层、同一考察目标生成一道明显更小的新验证题：只从原答案选一个关键概念或关系，一次只验证一个关键点，且只要求一个简短回答动作。不要照抄原题，不要再次要求完整列举或解释全部内容，不要进入下一层或引入新目标。只输出 {"question":"..."}。',
+    RESPOND_TO_USER: `先根据完整语义理解用户这一轮的意图，再选择一个 responseMode：
+1. 用户正在回答当前问题，包括尝试、偏题或明确无法作答，使用 EVALUATE_DIAGNOSTIC。
+2. 用户在提问、讨论、请求解释或文本任务、换话题或暂停检验，使用 CONVERSATION，并直接完成本轮请求，不评分。
+3. 用户语义上索要提示或完整答案，分别使用 REQUEST_HINT 或 REVEAL_ANSWER；按钮和自然语言遵循同一规则。
+4. 只有当前没有问题且用户要开始检验时使用 START_DIAGNOSTIC。
+不要靠关键词匹配意图。learningGoalUpdate 只在用户明确表达或改变学习目标时填写，否则为 null。
 
-当前诊断为 ACTIVE 且用户明确表示无法回答当前主问题、没有可供评价的实质尝试时，这本身就是对主问题的诊断回应：必须返回 EVALUATE_DIAGNOSTIC，classification 必须是 NO_ANSWER，isCorrect 必须是 false，progress 必须是 STALLED。可以在 scaffold 和 assistantMessage 中主动澄清、举例或搭支架，但不能改成 CONVERSATION 或 REQUEST_HINT；只有用户语义上明确索要提示时才使用 REQUEST_HINT。用户在询问概念或题意、请求暂停时不评分；用户表达犹豫但同时给出实际答案时，按实际答案内容评价，不能只因不确定语气判为 NO_ANSWER。必须结合完整语义判断这些边界，不得按固定词语匹配。
+当前评分对象是 currentQuestion；mainQuestion 只作为原题背景。先识别题目要求的唯一回答动作和最低证据，再判断用户本轮是否完成。只有用户本轮证据完整满足要求时才是 CORRECT，并令 isCorrect=true、progress=ADVANCING、correctEvidence 非空且 missingPoints 为空。部分完成、误解、偏题和无答案应如实分类；未完整满足时保留当前问题，并在 assistantMessage 中具体回应已说对的内容和当前缺口。明确无法作答也是诊断回应，应分类为 NO_ANSWER、progress=STALLED；可以按需要解释、举例或提供支架。
 
-评价正确性只以当前主问题为准。先从 mainQuestion 识别要回答的对象、关系、因果、比较双方、步骤或限定方式，再逐项覆盖最低回答要求。主题相关不等于回答了当前主问题，说对一个相关点也不等于完成了问题要求的全部关键动作。回答了同主题的另一个问题、但没有完成当前问题的关键动作时分类为 OFF_TOPIC；完成了当前问题的一部分、但遗漏必要对象、因果、步骤或只完成比较的一侧时分类为 PARTIAL。只有用户本轮回答中存在直接对应当前主问题的具体证据，并覆盖全部最低回答要求时才分类为 CORRECT；此时 correctEvidence 至少一条且 missingPoints 为空。非 CORRECT 必须保留当前问题，不生成下一层问题；assistantMessage 只点明已说对的部分和当前缺口，并只追问缺失动作。
+CORRECT 的 assistantMessage 只评价本轮并自然收束，不生成下一道题；下一层正式问题由 CREATE_STAGE_QUESTION 单独生成。CONVERSATION 不改变诊断状态，先完成用户当前请求。
 
-CORRECT 的 assistantMessage 只负责评价本轮回答，可以在简短、具体的反馈后附一句不要求用户作答的自然过渡；不得提出下一道诊断题，不得要求用户完成另一个回答动作，也不得提前承担下一层出题职责。若正确回答后还有下一层，下一层正式主问题只由 CREATE_STAGE_QUESTION 生成并保存。
-
-learningGoalUpdate 仅在用户明确表达或改变目标时填写，否则为 null。CONVERSATION 只输出 {"responseMode":"CONVERSATION","learningGoalUpdate":null或"...","assistantMessage":"..."}；START_DIAGNOSTIC 只输出 {"responseMode":"START_DIAGNOSTIC","learningGoalUpdate":null或"...","assistantMessage":"自然过渡","question":"唯一主问题"}；EVALUATE_DIAGNOSTIC 输出 {"responseMode":"EVALUATE_DIAGNOSTIC","learningGoalUpdate":null或"...","classification":"CORRECT|PARTIAL|INCORRECT|TOO_SHORT|COPIED|MISCONCEPTION|OFF_TOPIC|NO_ANSWER","isCorrect":boolean,"progress":"ADVANCING|STALLED","correctEvidence":[],"missingPoints":[],"misconceptions":[],"teachingMove":"AFFIRM_AND_ADVANCE|ASK_MISSING_POINT|CLARIFY_CONFLICT|REQUEST_OWN_WORDS|USE_COUNTEREXAMPLE|BRIDGE_BACK|PROVIDE_SCAFFOLD|PAUSE","scaffold":null或{"type":"CLARIFICATION|EXAMPLE|ANALOGY|COUNTEREXAMPLE|STEP_BY_STEP","reason":"..."},"assistantMessage":"..."}。CORRECT 才能令 isCorrect=true，正确回答的 progress 必须是 ADVANCING。`,
+按所选模式只输出对应结构：CONVERSATION 为 {"responseMode":"CONVERSATION","learningGoalUpdate":null或"...","assistantMessage":"..."}；START_DIAGNOSTIC 为 {"responseMode":"START_DIAGNOSTIC","learningGoalUpdate":null或"...","assistantMessage":"自然过渡","question":"唯一主问题"}；EVALUATE_DIAGNOSTIC 为 {"responseMode":"EVALUATE_DIAGNOSTIC","learningGoalUpdate":null或"...","classification":"CORRECT|PARTIAL|INCORRECT|TOO_SHORT|COPIED|MISCONCEPTION|OFF_TOPIC|NO_ANSWER","isCorrect":boolean,"progress":"ADVANCING|STALLED","correctEvidence":[],"missingPoints":[],"misconceptions":[],"teachingMove":"AFFIRM_AND_ADVANCE|ASK_MISSING_POINT|CLARIFY_CONFLICT|REQUEST_OWN_WORDS|USE_COUNTEREXAMPLE|BRIDGE_BACK|PROVIDE_SCAFFOLD|PAUSE","scaffold":null或{"type":"CLARIFICATION|EXAMPLE|ANALOGY|COUNTEREXAMPLE|STEP_BY_STEP","reason":"..."},"assistantMessage":"..."}。REQUEST_HINT 和 REVEAL_ANSWER 只输出 responseMode 与 learningGoalUpdate。`,
     CREATE_HINT:
       '按 hintLevel 生成对应强度的提示：1 只给方向，2 给案例或类比，3 给接近答案的结构化线索。不得直接改变主问题。只输出 {"hintLevel":1|2|3,"assistantMessage":"..."}。',
     CREATE_STAGE_ANSWER:
@@ -437,15 +470,28 @@ function normalizeUserTurnOutput(output: unknown) {
 function reportPrompt(
   input: Extract<AgentOperationRequest, { operation: "CREATE_REPORT" }>["input"],
 ) {
-  return `根据学习目标、每个已完成主题的确定性分数、四层状态、完整对话、支架记录和材料来源，生成忠实、具体且便于继续学习的报告洞察。messages 按真实顺序包含用户和 Vita 的消息；结合前后文综合判断每条用户消息是否真的体现理解，不能把提问、换话题、操作请求或复述 Vita 刚给出的答案自动算作掌握，也不能依靠固定句式机械排除证据。
+  return `根据学习目标、每个已完成主题的确定性分数、四层问题与状态、提示和答案事实、完整对话、支架记录及材料来源，生成忠实、具体且便于继续学习的整份材料报告。messages 按真实顺序包含用户和 Vita 的消息；结合前后文综合判断哪句用户原话真正证明理解，不能把 Vita 的讲解本身当成用户已经学会的证据。
 
-每个 completedNode 必须且只能对应一个 nodeInsights；understood 和 userEvidenceMessageIds 只能引用同主题 messages 中 role 为 USER 的 id；scaffoldNotes 只能引用同主题 scaffoldEvents 的 id；sourceReferenceIndexes 从 0 开始，只能引用同主题已有来源。PASSED_WITH_ANSWER 说明该层依赖 Vita 的完整答案，不能据此声称用户已独立掌握。learnedOrCorrected 的 USER_RESPONSE 必须引用用户消息 id，TUTOR_GUIDANCE 必须引用 scaffoldEvent id。用户可见文案不得出现 PASSED、PASSED_WITH_HINT、PASSED_WITH_ANSWER 等内部枚举，也不要解释“确定性分数”；请分别改写成“独立通过”“提示后通过”“依赖完整答案”等自然中文。
+每个 completedNode 必须且只能对应一个 nodeInsights，每层恰好给出一条 learningEvidence。category 必须服从结构化事实：独立答对用 INDEPENDENT；提示或引导后答对用 AFTER_HINT；自动给出答案后又通过同层小验证用 AFTER_TEACHING_VERIFIED；用户主动索要完整答案并直接进入下一层用 EXPLAINED_NOT_VERIFIED。前三类必须引用同主题真实 USER 消息 id，最后一类的 userMessageId 必须为 null。misconceptions 只记录对话结束时仍存在的误解，并引用对应 USER 消息。scaffoldNotes 只能引用同主题 scaffoldEvents，sourceReferenceIndexes 从 0 开始。用户可见文字不得出现内部枚举或“确定性分数”。
 
-只输出以下形状：{"summary":"...","nodeInsights":[{"nodeId":"...","understood":[{"statement":"...","userMessageId":"..."}],"blindSpots":[],"userEvidenceMessageIds":[],"scaffoldNotes":[{"scaffoldEventId":"...","learningEffect":"..."}],"learnedOrCorrected":[{"description":"...","basis":"USER_RESPONSE或TUTOR_GUIDANCE","evidenceId":"..."}],"nextSteps":["..."],"sourceReferenceIndexes":[0]}]}。
+只输出以下形状：{"summary":"...","nodeInsights":[{"nodeId":"...","learningEvidence":[{"stage":"MEMORY|UNDERSTANDING|APPLICATION|ANALYSIS","category":"INDEPENDENT|AFTER_HINT|AFTER_TEACHING_VERIFIED|EXPLAINED_NOT_VERIFIED","statement":"...","userMessageId":"真实用户消息 id 或 null"}],"misconceptions":[{"description":"...","userMessageId":"..."}],"scaffoldNotes":[{"scaffoldEventId":"...","learningEffect":"..."}],"nextSteps":["..."],"sourceReferenceIndexes":[0]}]}。
 
 <UNTRUSTED_REPORT_EVIDENCE>
 ${JSON.stringify(input)}
 </UNTRUSTED_REPORT_EVIDENCE>`;
+}
+
+function pendingNodePriorityPrompt(
+  input: Extract<
+    AgentOperationRequest,
+    { operation: "PRIORITIZE_PENDING_NODES" }
+  >["input"],
+) {
+  return `根据用户刚确认的学习目标，重新排列尚未开始的主题，让最相关、最有前置价值的内容优先。只调整给出的 pendingNodes，不增删主题，不改变主题内容。只输出 {"nodeIds":["按优先顺序排列的全部 id"]}。
+
+<UNTRUSTED_PENDING_NODES>
+${JSON.stringify(input)}
+</UNTRUSTED_PENDING_NODES>`;
 }
 
 export async function runAgentOperation(
@@ -491,11 +537,7 @@ export async function runAgentOperation(
           signal,
         },
         (value) => {
-          const audit = parseOutput(
-            knowledgeAuditSchema,
-            value,
-            "AUDIT_KNOWLEDGE_MAP",
-          );
+          const audit = parseOutput(knowledgeAuditSchema, value, "AUDIT_KNOWLEDGE_MAP");
           try {
             return assembleKnowledgeAudit(auditInput.chunks, audit).knowledgeMap;
           } catch (error) {
@@ -527,6 +569,7 @@ export async function runAgentOperation(
         dependencies,
       );
     case "CREATE_STAGE_QUESTION":
+    case "CREATE_STAGE_VERIFICATION":
       return callValidated(
         request.data.operation,
         callModel,
@@ -608,6 +651,38 @@ export async function runAgentOperation(
         (output) => parseOutput(stageAnswerSchema, output, request.data.operation),
         dependencies,
       );
+    case "PRIORITIZE_PENDING_NODES": {
+      const priorityInput = request.data.input;
+      return callValidated(
+        request.data.operation,
+        callModel,
+        {
+          apiKey,
+          system: VITA_SYSTEM,
+          user: pendingNodePriorityPrompt(priorityInput),
+          thinking: false,
+          maxTokens: 1_000,
+          timeoutMs: 30_000,
+          signal,
+        },
+        (output) => {
+          const order = parseOutput(
+            pendingNodeOrderSchema,
+            output,
+            request.data.operation,
+          );
+          const expected = priorityInput.pendingNodes.map((node) => node.id).toSorted();
+          if (
+            order.nodeIds.length !== expected.length ||
+            order.nodeIds.toSorted().join("\n") !== expected.join("\n")
+          ) {
+            return invalidModelOutput(["PRIORITIZE_PENDING_NODES:nodeIds:custom"]);
+          }
+          return order;
+        },
+        dependencies,
+      );
+    }
     case "CREATE_REPORT": {
       const reportInput = request.data.input;
       return callValidated(

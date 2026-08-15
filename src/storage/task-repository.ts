@@ -5,12 +5,18 @@ import {
   knowledgeMapSchema,
 } from "@/domain/knowledge-map/contracts";
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
+import { getNodeScore } from "@/domain/diagnostic/selectors";
 import type { FirstQuestion } from "@/domain/knowledge-map/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
 import type { StageKey } from "@/domain/types";
-import { TASK_STATUSES } from "@/domain/types";
-import { reportDocumentSchema, type ReportDocument } from "@/domain/report/build-report";
+import { STAGE_ORDER, TASK_STATUSES } from "@/domain/types";
+import {
+  reportDocumentSchema,
+  reportToMarkdown,
+  type ReportDocument,
+} from "@/domain/report/build-report";
+import { expectedLearningEvidenceCategory } from "@/domain/report/contracts";
 import type { VeritasDatabase } from "@/storage/database";
 import type {
   DeletedTaskSnapshot,
@@ -440,13 +446,23 @@ export function createTaskRepository(database: VeritasDatabase) {
       return run(() =>
         database.transaction(
           "rw",
-          [database.tasks, database.materials, database.sessions, database.reports],
+          [
+            database.tasks,
+            database.materials,
+            database.sessions,
+            database.messages,
+            database.reports,
+          ],
           async () => {
             const document = reportDocumentSchema.safeParse(documentValue);
             const markdown = markdownValue.trim();
             const task = await getExistingTask(documentValue.taskId);
             const material = await database.materials.get(task.id);
             const sessions = await database.sessions
+              .where("taskId")
+              .equals(task.id)
+              .toArray();
+            const messages = await database.messages
               .where("taskId")
               .equals(task.id)
               .toArray();
@@ -457,11 +473,79 @@ export function createTaskRepository(database: VeritasDatabase) {
             const reportNodeIds = document.success
               ? document.data.nodes.map((node) => node.nodeId).toSorted()
               : [];
+            const sessionByNode = new Map(
+              sessions.map((stored) => [stored.nodeId, stored]),
+            );
+            const materialNodeById = new Map(
+              material?.nodes.map((node) => [node.id, node]) ?? [],
+            );
+            const factsMatch =
+              document.success &&
+              document.data.nodes.every((reportNode) => {
+                const stored = sessionByNode.get(reportNode.nodeId);
+                const materialNode = materialNodeById.get(reportNode.nodeId);
+                const userQuotes = new Set(
+                  messages
+                    .filter(
+                      (message) =>
+                        message.nodeId === reportNode.nodeId && message.role === "USER",
+                    )
+                    .map((message) => message.content),
+                );
+                if (
+                  !stored ||
+                  !materialNode ||
+                  stored.session.status !== "COMPLETED" ||
+                  reportNode.score !== getNodeScore(stored.session) ||
+                  reportNode.learningEvidence.length !== STAGE_ORDER.length
+                ) {
+                  return false;
+                }
+                const stagesMatch = STAGE_ORDER.every((stage) => {
+                  const state = stored.session.stages[stage];
+                  const evidence = reportNode.learningEvidence.find(
+                    (item) => item.stage === stage,
+                  );
+                  if (!evidence || reportNode.stages[stage] !== state.status) {
+                    return false;
+                  }
+                  const expected = expectedLearningEvidenceCategory(
+                    state as Parameters<typeof expectedLearningEvidenceCategory>[0],
+                    (stored.scaffoldEvents ?? []).some((event) => event.stage === stage),
+                  );
+                  const quoteMatches =
+                    expected === "EXPLAINED_NOT_VERIFIED"
+                      ? evidence.evidenceQuote === null
+                      : evidence.evidenceQuote !== null &&
+                        userQuotes.has(evidence.evidenceQuote);
+                  return evidence.category === expected && quoteMatches;
+                });
+                return (
+                  stagesMatch &&
+                  reportNode.misconceptions.every((item) =>
+                    userQuotes.has(item.evidenceQuote),
+                  ) &&
+                  reportNode.scaffoldNotes.every((note) =>
+                    (stored.scaffoldEvents ?? []).some(
+                      (event) => event.type === note.type && event.reason === note.reason,
+                    ),
+                  ) &&
+                  reportNode.sourceReferences.every((source) =>
+                    materialNode.sourceReferences.some(
+                      (candidate) =>
+                        candidate.label === source.label &&
+                        candidate.excerpt === source.excerpt,
+                    ),
+                  )
+                );
+              });
             if (
               !document.success ||
               !material ||
               !markdown ||
               markdown.length > 200_000 ||
+              markdown !== reportToMarkdown(document.data).trim() ||
+              !factsMatch ||
               document.data.materialTitle !== task.fileName ||
               document.data.progress.completed !== completedNodeIds.length ||
               document.data.progress.total !== material.nodes.length ||
@@ -582,6 +666,53 @@ export function createTaskRepository(database: VeritasDatabase) {
               updatedAt: new Date(baseTime).toISOString(),
             });
             await database.tasks.put(updatedTask);
+          },
+        ),
+      );
+    },
+
+    reorderUnstartedNodes(taskId: string, nodeIds: string[]) {
+      return run(() =>
+        database.transaction(
+          "rw",
+          [database.tasks, database.materials, database.sessions],
+          async () => {
+            await getExistingTask(taskId);
+            const material = await database.materials.get(taskId);
+            const sessions = await database.sessions
+              .where("taskId")
+              .equals(taskId)
+              .toArray();
+            if (!material) {
+              throw new LocalStoreError("NOT_FOUND", "找不到这份任务的材料。");
+            }
+            const startedIds = new Set(sessions.map((stored) => stored.nodeId));
+            const pending = material.nodes
+              .filter((node) => !startedIds.has(node.id))
+              .toSorted((left, right) => left.order - right.order);
+            const expectedIds = pending.map((node) => node.id).toSorted();
+            if (
+              nodeIds.length !== expectedIds.length ||
+              new Set(nodeIds).size !== nodeIds.length ||
+              nodeIds.toSorted().join("\n") !== expectedIds.join("\n")
+            ) {
+              throw new LocalStoreError(
+                "RELATION_MISMATCH",
+                "新的主题顺序与尚未开始的内容不匹配，已拒绝保存。",
+              );
+            }
+            const orderSlots = pending.map((node) => node.order);
+            const orderById = new Map(
+              nodeIds.map((nodeId, index) => [nodeId, orderSlots[index]!]),
+            );
+            await database.materials.put({
+              ...material,
+              nodes: material.nodes.map((node) =>
+                orderById.has(node.id)
+                  ? { ...node, order: orderById.get(node.id)! }
+                  : node,
+              ),
+            });
           },
         ),
       );

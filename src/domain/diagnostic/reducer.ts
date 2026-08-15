@@ -16,6 +16,8 @@ function createStage(key: StageKey): StageState {
     key,
     status: "LOCKED",
     mainQuestion: null,
+    verificationQuestion: null,
+    answerOrigin: "NONE",
     hintLevel: 0,
     hasRequestedHint: false,
     stalledCount: 0,
@@ -97,6 +99,19 @@ export function diagnosticReducer(
         { ...stage, status: "ACTIVE", mainQuestion: question },
       );
     }
+    case "START_ANSWER_VERIFICATION": {
+      const question = event.question.trim();
+      const stage = currentActiveStage(state);
+      if (!question || stage.stalledCount < 3) {
+        throw new InvalidTransitionError("当前层不能建立答案验证题。");
+      }
+      return replaceStage(state, {
+        ...stage,
+        verificationQuestion: question,
+        answerOrigin: "AUTOMATIC",
+        stalledCount: 0,
+      });
+    }
     case "REQUEST_HINT": {
       const stage = currentActiveStage(state);
       const hintLevel = Math.min(3, stage.hintLevel + 1) as HintLevel;
@@ -106,25 +121,31 @@ export function diagnosticReducer(
         hintLevel,
       });
     }
-    case "REVEAL_ANSWER":
-      return completeCurrentStage(state, "PASSED_WITH_ANSWER");
+    case "REVEAL_ANSWER": {
+      const stage = currentActiveStage(state);
+      return completeCurrentStage(
+        replaceStage(state, { ...stage, answerOrigin: "REQUESTED" }),
+        "PASSED_WITH_ANSWER",
+      );
+    }
     case "ANSWER_EVALUATED": {
       validateOutcome(event.outcome);
       const stage = currentActiveStage(state);
       if (event.outcome.isCorrect) {
         return completeCurrentStage(
           state,
-          stage.hasRequestedHint ? "PASSED_WITH_HINT" : "PASSED",
+          stage.answerOrigin !== "NONE"
+            ? "PASSED_WITH_ANSWER"
+            : stage.hasRequestedHint
+              ? "PASSED_WITH_HINT"
+              : "PASSED",
         );
       }
       if (event.outcome.classification === "OFF_TOPIC") return state;
 
       const stalledCount =
         event.outcome.progress === "ADVANCING" ? 0 : stage.stalledCount + 1;
-      if (stalledCount >= 3) {
-        return completeCurrentStage(state, "PASSED_WITH_ANSWER");
-      }
-      return replaceStage(state, { ...stage, stalledCount });
+      return replaceStage(state, { ...stage, stalledCount: Math.min(3, stalledCount) });
     }
   }
 }

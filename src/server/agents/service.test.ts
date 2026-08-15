@@ -147,9 +147,7 @@ describe("Agent 服务", () => {
   it("拒绝合并谱系漏掉原始知识条目", async () => {
     const callModel = vi.fn().mockResolvedValue({
       ...compactAudit,
-      mergeGroups: [
-        { id: "group-1", sourceKnowledgeItemIds: ["missing-item"] },
-      ],
+      mergeGroups: [{ id: "group-1", sourceKnowledgeItemIds: ["missing-item"] }],
     });
 
     await expect(
@@ -239,7 +237,10 @@ describe("Agent 服务", () => {
         {
           id: "item-1",
           kind: "CORE",
-          sourceReferences: [source, secondExtraction.knowledgeItems[0]!.sourceReferences[0]],
+          sourceReferences: [
+            source,
+            secondExtraction.knowledgeItems[0]!.sourceReferences[0],
+          ],
         },
       ],
     });
@@ -391,10 +392,9 @@ describe("Agent 服务", () => {
     );
 
     const prompt = callModel.mock.calls[0]![0].user;
-    expect(prompt).toContain("CORRECT 的 assistantMessage 只负责评价本轮回答");
-    expect(prompt).toContain("不得提出下一道诊断题");
-    expect(prompt).toContain("不得要求用户完成另一个回答动作");
-    expect(prompt).toContain("下一层正式主问题只由 CREATE_STAGE_QUESTION 生成");
+    expect(prompt).toContain("CORRECT 的 assistantMessage 只评价本轮并自然收束");
+    expect(prompt).toContain("不生成下一道题");
+    expect(prompt).toContain("下一层正式问题由 CREATE_STAGE_QUESTION 单独生成");
   });
 
   it("Zod 拒绝模型输出的未知字段", async () => {
@@ -509,7 +509,11 @@ describe("Agent 服务", () => {
     const sensitiveOutput = {
       ...extraction,
       knowledgeItems: [
-        { ...extraction.knowledgeItems[0], kind: "非法类型", summary: "不得进入日志的模型正文" },
+        {
+          ...extraction.knowledgeItems[0],
+          kind: "非法类型",
+          summary: "不得进入日志的模型正文",
+        },
       ],
     };
     const callModel = vi.fn().mockResolvedValue(sensitiveOutput);
@@ -519,7 +523,11 @@ describe("Agent 服务", () => {
       runAgentOperation(
         {
           operation: "EXTRACT_KNOWLEDGE",
-          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "不得进入日志的材料" },
+          input: {
+            chunkId: "chunk-1",
+            sourceLabel: "第 1 段",
+            text: "不得进入日志的材料",
+          },
         },
         "server-key",
         callModel,

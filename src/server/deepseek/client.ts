@@ -34,9 +34,9 @@ export class DeepSeekError extends Error {
         ? "请求已取消。"
         : code === "REQUEST_TIMEOUT"
           ? "模型请求超时，请重试。"
-        : code === "INVALID_RESPONSE"
-          ? "模型返回的内容不完整，请重试。"
-          : "模型服务暂时不可用，请稍后重试。",
+          : code === "INVALID_RESPONSE"
+            ? "模型返回的内容不完整，请重试。"
+            : "模型服务暂时不可用，请稍后重试。",
     );
     this.name = "DeepSeekError";
   }
@@ -114,7 +114,9 @@ export async function callDeepSeekJson(
     });
     if (!response.ok) {
       throw new DeepSeekError(
-        isRecoverableStatus(response.status) ? "UPSTREAM_UNAVAILABLE" : "UPSTREAM_REJECTED",
+        isRecoverableStatus(response.status)
+          ? "UPSTREAM_UNAVAILABLE"
+          : "UPSTREAM_REJECTED",
         response.status,
       );
     }

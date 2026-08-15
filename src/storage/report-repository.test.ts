@@ -94,6 +94,14 @@ describe("报告仓储", () => {
       session: completeSession(node.id),
       scaffoldEvents: [],
     });
+    await database.messages.put({
+      id: "message-1",
+      taskId,
+      nodeId: node.id,
+      role: "USER",
+      content: "太阳能驱动蒸发。",
+      createdAt: now,
+    });
     const input = {
       materialTitle: "water.md",
       learningGoal: null,
@@ -105,12 +113,38 @@ describe("报告仓储", () => {
           commonMisconceptions: [],
           score: 100,
           stages: {
-            MEMORY: "PASSED" as const,
-            UNDERSTANDING: "PASSED" as const,
-            APPLICATION: "PASSED" as const,
-            ANALYSIS: "PASSED" as const,
+            MEMORY: {
+              status: "PASSED" as const,
+              mainQuestion: "MEMORY?",
+              verificationQuestion: null,
+              answerOrigin: "NONE" as const,
+              hintLevel: 0 as const,
+            },
+            UNDERSTANDING: {
+              status: "PASSED" as const,
+              mainQuestion: "UNDERSTANDING?",
+              verificationQuestion: null,
+              answerOrigin: "NONE" as const,
+              hintLevel: 0 as const,
+            },
+            APPLICATION: {
+              status: "PASSED" as const,
+              mainQuestion: "APPLICATION?",
+              verificationQuestion: null,
+              answerOrigin: "NONE" as const,
+              hintLevel: 0 as const,
+            },
+            ANALYSIS: {
+              status: "PASSED" as const,
+              mainQuestion: "ANALYSIS?",
+              verificationQuestion: null,
+              answerOrigin: "NONE" as const,
+              hintLevel: 0 as const,
+            },
           },
-          messages: [],
+          messages: [
+            { id: "message-1", role: "USER" as const, content: "太阳能驱动蒸发。" },
+          ],
           scaffoldEvents: [],
           sourceReferences: node.sourceReferences,
         },
@@ -121,11 +155,34 @@ describe("报告仓储", () => {
       nodeInsights: [
         {
           nodeId: node.id,
-          understood: [],
-          blindSpots: [],
-          userEvidenceMessageIds: [],
+          learningEvidence: [
+            {
+              stage: "MEMORY" as const,
+              category: "INDEPENDENT" as const,
+              statement: "能记住动力。",
+              userMessageId: "message-1",
+            },
+            {
+              stage: "UNDERSTANDING" as const,
+              category: "INDEPENDENT" as const,
+              statement: "能解释动力。",
+              userMessageId: "message-1",
+            },
+            {
+              stage: "APPLICATION" as const,
+              category: "INDEPENDENT" as const,
+              statement: "能应用动力。",
+              userMessageId: "message-1",
+            },
+            {
+              stage: "ANALYSIS" as const,
+              category: "INDEPENDENT" as const,
+              statement: "能分析动力。",
+              userMessageId: "message-1",
+            },
+          ],
+          misconceptions: [],
           scaffoldNotes: [],
-          learnedOrCorrected: [],
           nextSteps: ["间隔一天后复述。"],
           sourceReferenceIndexes: [0],
         },
@@ -154,6 +211,22 @@ describe("报告仓储", () => {
     const invalid = structuredClone(document);
     invalid.progress.completed = 0;
     await expect(repository.saveReport(invalid, "# 坏报告")).rejects.toMatchObject({
+      code: "RELATION_MISMATCH",
+    });
+
+    const falseScore = structuredClone(document);
+    falseScore.nodes[0]!.score = 0;
+    await expect(
+      repository.saveReport(falseScore, reportToMarkdown(falseScore)),
+    ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
+
+    const falseEvidence = structuredClone(document);
+    falseEvidence.nodes[0]!.learningEvidence[0]!.evidenceQuote = "并不存在的用户原话";
+    await expect(
+      repository.saveReport(falseEvidence, reportToMarkdown(falseEvidence)),
+    ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
+
+    await expect(repository.saveReport(document, "# 伪造报告")).rejects.toMatchObject({
       code: "RELATION_MISMATCH",
     });
 

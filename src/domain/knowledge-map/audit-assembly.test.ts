@@ -7,7 +7,13 @@ function extractedChunk(chunkNumber: number, text: string) {
   return {
     chunkId: `chunk-${chunkNumber}`,
     extraction: {
-      modules: [{ id: `${prefix}-m1`, title: `模块 ${chunkNumber}`, sourceRange: `第 ${chunkNumber} 段` }],
+      modules: [
+        {
+          id: `${prefix}-m1`,
+          title: `模块 ${chunkNumber}`,
+          sourceRange: `第 ${chunkNumber} 段`,
+        },
+      ],
       knowledgeItems: [
         {
           id: `${prefix}-i1`,
@@ -63,8 +69,14 @@ const compactAudit = {
 
 describe("精简审计确定性组装", () => {
   it("从合并谱系恢复最终条目、来源、类型、节点和来源覆盖", () => {
-    const chunks = [extractedChunk(1, "太阳驱动蒸发。"), extractedChunk(2, "热量推动状态变化。")];
-    const result = assembleKnowledgeAudit(chunks, knowledgeAuditSchema.parse(compactAudit));
+    const chunks = [
+      extractedChunk(1, "太阳驱动蒸发。"),
+      extractedChunk(2, "热量推动状态变化。"),
+    ];
+    const result = assembleKnowledgeAudit(
+      chunks,
+      knowledgeAuditSchema.parse(compactAudit),
+    );
 
     expect(result.knowledgeMap.modules).toHaveLength(2);
     expect(result.knowledgeMap.knowledgeItems).toEqual([
@@ -102,13 +114,16 @@ describe("精简审计确定性组装", () => {
   });
 
   it("拒绝合并谱系漏掉任何原始条目", () => {
-    const chunks = [extractedChunk(1, "太阳驱动蒸发。"), extractedChunk(2, "热量推动状态变化。")];
+    const chunks = [
+      extractedChunk(1, "太阳驱动蒸发。"),
+      extractedChunk(2, "热量推动状态变化。"),
+    ];
     const audit = structuredClone(compactAudit);
     audit.mergeGroups[0]!.sourceKnowledgeItemIds = ["c1-i1"];
 
-    expect(() => assembleKnowledgeAudit(chunks, knowledgeAuditSchema.parse(audit))).toThrow(
-      "审计合并谱系没有完整覆盖原始知识条目。",
-    );
+    expect(() =>
+      assembleKnowledgeAudit(chunks, knowledgeAuditSchema.parse(audit)),
+    ).toThrow("审计合并谱系没有完整覆盖原始知识条目。");
 
     try {
       assembleKnowledgeAudit(chunks, knowledgeAuditSchema.parse(audit));

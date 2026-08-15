@@ -57,13 +57,9 @@ function mockAgentResult(route: Route) {
         chunk.extraction ? [chunk.extraction] : [],
       ) ?? [];
     const modules = extractions.flatMap((extraction) => extraction.modules);
-    const knowledgeItems = extractions.flatMap(
-      (extraction) => extraction.knowledgeItems,
-    );
+    const knowledgeItems = extractions.flatMap((extraction) => extraction.knowledgeItems);
     const knowledgeItemIds = knowledgeItems.map((item) => item.id);
-    const sourceReferences = knowledgeItems.flatMap(
-      (item) => item.sourceReferences,
-    );
+    const sourceReferences = knowledgeItems.flatMap((item) => item.sourceReferences);
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -90,10 +86,10 @@ function mockAgentResult(route: Route) {
             },
           ],
           coverageAssignments: knowledgeItemIds.map((knowledgeItemId) => ({
-              knowledgeItemId,
-              disposition: "DIAGNOSED_IN_NODE",
-              nodeId: "node-1",
-            })),
+            knowledgeItemId,
+            disposition: "DIAGNOSED_IN_NODE",
+            nodeId: "node-1",
+          })),
         },
       }),
     });

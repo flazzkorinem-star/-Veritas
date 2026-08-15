@@ -7,7 +7,7 @@ import {
   materialModuleSchema,
 } from "@/domain/knowledge-map/contracts";
 import { reportAgentInputSchema } from "@/domain/report/contracts";
-import { STAGE_ORDER } from "@/domain/types";
+import { STAGE_ORDER, STAGE_STATUSES } from "@/domain/types";
 
 const chunkIdSchema = z.string().regex(/^chunk-[1-9][0-9]*$/);
 const stageSchema = z.enum(STAGE_ORDER);
@@ -49,6 +49,11 @@ const conversationContext = {
     )
     .max(20),
 };
+
+export const pendingNodeOrderSchema = z
+  .object({ nodeIds: z.array(z.string().trim().min(1).max(120)).min(1).max(40) })
+  .strict();
+export type PendingNodeOrder = z.infer<typeof pendingNodeOrderSchema>;
 
 export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
   z
@@ -102,6 +107,18 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
     .strict(),
   z
     .object({
+      operation: z.literal("CREATE_STAGE_VERIFICATION"),
+      input: z
+        .object({
+          ...agentTwoContext,
+          stage: stageSchema,
+          mainQuestion: z.string().trim().min(1).max(600),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       operation: z.literal("RESPOND_TO_USER"),
       input: z
         .object({
@@ -113,16 +130,79 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
               status: z.enum(["NOT_STARTED", "ACTIVE", "COMPLETED"]),
               stage: stageSchema,
               mainQuestion: z.string().trim().min(1).max(600).nullable(),
+              currentQuestion: z.string().trim().min(1).max(600).nullable().optional(),
+              verificationQuestion: z
+                .string()
+                .trim()
+                .min(1)
+                .max(600)
+                .nullable()
+                .optional(),
+              hintLevel: z
+                .union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)])
+                .optional(),
+              hasRequestedHint: z.boolean().optional(),
+              stalledCount: z.number().int().min(0).max(3).optional(),
+              answerOrigin: z.enum(["NONE", "REQUESTED", "AUTOMATIC"]).optional(),
+              stageStatuses: z
+                .object({
+                  MEMORY: z.enum(STAGE_STATUSES),
+                  UNDERSTANDING: z.enum(STAGE_STATUSES),
+                  APPLICATION: z.enum(STAGE_STATUSES),
+                  ANALYSIS: z.enum(STAGE_STATUSES),
+                })
+                .strict()
+                .optional(),
             })
             .strict()
             .superRefine((value, context) => {
-              if ((value.status === "ACTIVE") !== Boolean(value.mainQuestion)) {
+              if (
+                (value.status === "ACTIVE") !==
+                Boolean(
+                  value.mainQuestion &&
+                  (value.currentQuestion === undefined
+                    ? value.mainQuestion
+                    : value.currentQuestion),
+                )
+              ) {
                 context.addIssue({
                   code: "custom",
                   message: "诊断状态与当前主问题不一致。",
                 });
               }
-            }),
+              if (
+                value.verificationQuestion &&
+                ((value.answerOrigin ?? "NONE") !== "AUTOMATIC" ||
+                  value.currentQuestion !== value.verificationQuestion)
+              ) {
+                context.addIssue({
+                  code: "custom",
+                  message: "答案验证题与当前诊断事实不一致。",
+                });
+              }
+            })
+            .transform((value) => ({
+              ...value,
+              currentQuestion:
+                value.currentQuestion === undefined
+                  ? value.mainQuestion
+                  : value.currentQuestion,
+              verificationQuestion: value.verificationQuestion ?? null,
+              hintLevel: value.hintLevel ?? 0,
+              hasRequestedHint: value.hasRequestedHint ?? false,
+              stalledCount: value.stalledCount ?? 0,
+              answerOrigin: value.answerOrigin ?? "NONE",
+              stageStatuses:
+                value.stageStatuses ??
+                Object.fromEntries(
+                  STAGE_ORDER.map((stage) => [
+                    stage,
+                    stage === value.stage && value.status === "ACTIVE"
+                      ? "ACTIVE"
+                      : "LOCKED",
+                  ]),
+                ),
+            })),
           userMessage: z.string().trim().min(1).max(12_000),
         })
         .strict(),
@@ -151,6 +231,24 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
           ...conversationContext,
           stage: stageSchema,
           mainQuestion: z.string().trim().min(1).max(600),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal("PRIORITIZE_PENDING_NODES"),
+      input: z
+        .object({
+          learningGoal: z.string().trim().min(1).max(500),
+          pendingNodes: z
+            .array(
+              diagnosticNodeSchema
+                .pick({ id: true, title: true, objective: true, order: true })
+                .strict(),
+            )
+            .min(2)
+            .max(40),
         })
         .strict(),
     })

@@ -4,6 +4,8 @@ import { AGENT_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import {
   type AgentOperationRequest,
   agentOperationRequestSchema,
+  type PendingNodeOrder,
+  pendingNodeOrderSchema,
 } from "@/domain/agents/contracts";
 import {
   type ChunkExtraction,
@@ -59,12 +61,16 @@ type QuestionRequest = Extract<
 >;
 type StageQuestionRequest = Extract<
   AgentOperationRequest,
-  { operation: "CREATE_STAGE_QUESTION" }
+  { operation: "CREATE_STAGE_QUESTION" | "CREATE_STAGE_VERIFICATION" }
 >;
 type UserTurnRequest = Extract<AgentOperationRequest, { operation: "RESPOND_TO_USER" }>;
 type HintRequest = Extract<AgentOperationRequest, { operation: "CREATE_HINT" }>;
 type AnswerRequest = Extract<AgentOperationRequest, { operation: "CREATE_STAGE_ANSWER" }>;
 type ReportRequest = Extract<AgentOperationRequest, { operation: "CREATE_REPORT" }>;
+type PendingNodeOrderRequest = Extract<
+  AgentOperationRequest,
+  { operation: "PRIORITIZE_PENDING_NODES" }
+>;
 
 function resultSchema(operation: AgentOperationRequest["operation"]) {
   switch (operation) {
@@ -75,6 +81,7 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
     case "CREATE_FIRST_QUESTION":
       return firstQuestionSchema;
     case "CREATE_STAGE_QUESTION":
+    case "CREATE_STAGE_VERIFICATION":
       return stageQuestionSchema;
     case "RESPOND_TO_USER":
       return userTurnDecisionSchema;
@@ -82,6 +89,8 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
       return hintResponseSchema;
     case "CREATE_STAGE_ANSWER":
       return stageAnswerSchema;
+    case "PRIORITIZE_PENDING_NODES":
+      return pendingNodeOrderSchema;
     case "CREATE_REPORT":
       return reportAgentOutputSchema;
   }
@@ -120,6 +129,10 @@ export function callAgent(
   dependencies?: AgentClientDependencies,
 ): Promise<ReportAgentOutput>;
 export function callAgent(
+  request: PendingNodeOrderRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<PendingNodeOrder>;
+export function callAgent(
   request: AgentOperationRequest,
   dependencies?: AgentClientDependencies,
 ): Promise<
@@ -130,6 +143,7 @@ export function callAgent(
   | UserTurnDecision
   | HintResponse
   | StageAnswer
+  | PendingNodeOrder
   | ReportAgentOutput
 >;
 export async function callAgent(

@@ -14,12 +14,40 @@ const input: ReportAgentInput = {
       commonMisconceptions: [],
       score: 75,
       stages: {
-        MEMORY: "PASSED",
-        UNDERSTANDING: "PASSED_WITH_HINT",
-        APPLICATION: "PASSED_WITH_ANSWER",
-        ANALYSIS: "PASSED",
+        MEMORY: {
+          status: "PASSED",
+          mainQuestion: "动力是什么？",
+          verificationQuestion: null,
+          answerOrigin: "NONE",
+          hintLevel: 0,
+        },
+        UNDERSTANDING: {
+          status: "PASSED_WITH_HINT",
+          mainQuestion: "为什么？",
+          verificationQuestion: null,
+          answerOrigin: "NONE",
+          hintLevel: 1,
+        },
+        APPLICATION: {
+          status: "PASSED_WITH_ANSWER",
+          mainQuestion: "如何应用？",
+          verificationQuestion: "换个场景呢？",
+          answerOrigin: "AUTOMATIC",
+          hintLevel: 0,
+        },
+        ANALYSIS: {
+          status: "PASSED_WITH_ANSWER",
+          mainQuestion: "如何分析？",
+          verificationQuestion: null,
+          answerOrigin: "REQUESTED",
+          hintLevel: 0,
+        },
       },
-      messages: [{ id: "message-1", role: "USER", content: "太阳能让水蒸发。" }],
+      messages: [
+        { id: "message-1", role: "USER", content: "太阳能让水蒸发。" },
+        { id: "message-2", role: "USER", content: "它为蒸发提供能量。" },
+        { id: "message-3", role: "USER", content: "换个场景仍然成立。" },
+      ],
       scaffoldEvents: [],
       sourceReferences: [{ label: "第 1 段", excerpt: "太阳驱动蒸发。" }],
     },
@@ -31,11 +59,34 @@ const output: ReportAgentOutput = {
   nodeInsights: [
     {
       nodeId: "node-1",
-      understood: [{ statement: "能指出主要动力。", userMessageId: "message-1" }],
-      blindSpots: ["新情境应用仍需练习。"],
-      userEvidenceMessageIds: ["message-1"],
+      learningEvidence: [
+        {
+          stage: "MEMORY",
+          category: "INDEPENDENT",
+          statement: "能指出主要动力。",
+          userMessageId: "message-1",
+        },
+        {
+          stage: "UNDERSTANDING",
+          category: "AFTER_HINT",
+          statement: "提示后能解释原因。",
+          userMessageId: "message-2",
+        },
+        {
+          stage: "APPLICATION",
+          category: "AFTER_TEACHING_VERIFIED",
+          statement: "讲解后通过了新场景验证。",
+          userMessageId: "message-3",
+        },
+        {
+          stage: "ANALYSIS",
+          category: "EXPLAINED_NOT_VERIFIED",
+          statement: "看过分析答案但没有验证。",
+          userMessageId: null,
+        },
+      ],
+      misconceptions: [],
       scaffoldNotes: [],
-      learnedOrCorrected: [],
       nextSteps: ["更换情境练习。"],
       sourceReferenceIndexes: [0],
     },
@@ -61,8 +112,23 @@ describe("任务级报告构建", () => {
     expect(document.progress).toEqual({ completed: 1, total: 2 });
     expect(document.nodes[0]).toMatchObject({
       score: 75,
-      evidenceQuotes: ["太阳能让水蒸发。"],
-      stages: input.completedNodes[0]!.stages,
+      evidenceQuotes: ["太阳能让水蒸发。", "它为蒸发提供能量。", "换个场景仍然成立。"],
+      stages: {
+        MEMORY: "PASSED",
+        UNDERSTANDING: "PASSED_WITH_HINT",
+        APPLICATION: "PASSED_WITH_ANSWER",
+        ANALYSIS: "PASSED_WITH_ANSWER",
+      },
+      learningEvidence: expect.arrayContaining([
+        expect.objectContaining({
+          category: "INDEPENDENT",
+          evidenceQuote: "太阳能让水蒸发。",
+        }),
+        expect.objectContaining({
+          category: "EXPLAINED_NOT_VERIFIED",
+          evidenceQuote: null,
+        }),
+      ]),
     });
     expect(document.coverage.undiagnosed).toEqual(["降水回流"]);
   });
@@ -85,7 +151,9 @@ describe("任务级报告构建", () => {
     const markdown = reportToMarkdown(document);
     expect(markdown).toContain("# 水循环.md · 学习诊断报告");
     expect(markdown).toContain("> 太阳能让水蒸发。");
-    expect(markdown).toContain("PASSED_WITH_ANSWER");
+    expect(markdown).toContain("讲解后经过验证学会");
+    expect(markdown).toContain("看过答案但未验证");
+    expect(markdown).not.toContain("PASSED_WITH_ANSWER");
     expect(markdown).not.toContain("canonicalUnderstanding");
   });
 

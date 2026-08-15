@@ -152,18 +152,19 @@ export async function processTextMaterial(
         knowledgeItems: knowledgeMap.knowledgeItems,
         currentKnowledgeItemIds: nodeItemIds,
         recentMessages: [],
-        createRequest: (materialContext) => ({
-          operation: "CREATE_FIRST_QUESTION",
-          input: {
-            stage: "MEMORY",
-            materialContext,
-            node: firstNode,
-            knowledgeItems: knowledgeMap.knowledgeItems.filter((item) =>
-              nodeItemIds.has(item.id),
-            ),
-            learningGoal: null,
-          },
-        } as const),
+        createRequest: (materialContext) =>
+          ({
+            operation: "CREATE_FIRST_QUESTION",
+            input: {
+              stage: "MEMORY",
+              materialContext,
+              node: firstNode,
+              knowledgeItems: knowledgeMap.knowledgeItems.filter((item) =>
+                nodeItemIds.has(item.id),
+              ),
+              learningGoal: null,
+            },
+          }) as const,
       });
       const firstQuestion = await runAgent(firstQuestionRequest, {
         signal: modelSignal,

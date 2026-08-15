@@ -33,11 +33,40 @@ const report: StoredReport = {
           MEMORY: "PASSED",
           UNDERSTANDING: "PASSED_WITH_HINT",
           APPLICATION: "PASSED_WITH_ANSWER",
-          ANALYSIS: "PASSED",
+          ANALYSIS: "PASSED_WITH_ANSWER",
         },
         understood: [{ statement: "能指出太阳能。", evidenceQuote: "太阳能驱动蒸发。" }],
         blindSpots: ["应用时依赖了完整答案。"],
         evidenceQuotes: ["太阳能驱动蒸发。"],
+        learningEvidence: [
+          {
+            stage: "MEMORY",
+            category: "INDEPENDENT",
+            statement: "能指出太阳能。",
+            evidenceQuote: "太阳能驱动蒸发。",
+          },
+          {
+            stage: "UNDERSTANDING",
+            category: "AFTER_HINT",
+            statement: "提示后能解释原因。",
+            evidenceQuote: "太阳能为蒸发提供能量。",
+          },
+          {
+            stage: "APPLICATION",
+            category: "AFTER_TEACHING_VERIFIED",
+            statement: "讲解后通过了小验证。",
+            evidenceQuote: "阴天仍然会蒸发。",
+          },
+          {
+            stage: "ANALYSIS",
+            category: "EXPLAINED_NOT_VERIFIED",
+            statement: "看过分析答案，但没有验证。",
+            evidenceQuote: null,
+          },
+        ],
+        misconceptions: [
+          { description: "仍把风当作唯一动力。", evidenceQuote: "只有风才会让水循环。" },
+        ],
         scaffoldNotes: [],
         learnedOrCorrected: [],
         nextSteps: ["独立完成新情境应用。"],
@@ -63,7 +92,11 @@ describe("报告全屏页面", () => {
     expect(screen.getByText("1 / 2 个主题")).toBeVisible();
     expect(screen.getByText("太阳能驱动蒸发。")).toBeVisible();
     expect(screen.getByText("第 1 段")).toBeVisible();
-    expect(screen.getByText("依赖答案", { exact: false })).toBeVisible();
+    expect(screen.getAllByText("讲解后经过验证学会", { exact: false })).not.toHaveLength(
+      0,
+    );
+    expect(screen.getAllByText("看过答案但未验证", { exact: false })).not.toHaveLength(0);
+    expect(screen.getByText("仍把风当作唯一动力。", { exact: false })).toBeVisible();
     expect(document.querySelector("script")).toBeNull();
   });
 
@@ -88,7 +121,8 @@ describe("报告全屏页面", () => {
   it("把不可信报告文本作为纯文本渲染", () => {
     const hostile = structuredClone(report);
     hostile.document.summary = "<img src=x onerror=alert(1)>";
-    hostile.document.nodes[0]!.evidenceQuotes = ["<script>alert(1)</script>"];
+    hostile.document.nodes[0]!.learningEvidence[0]!.evidenceQuote =
+      "<script>alert(1)</script>";
     render(
       <ReportView
         onClose={vi.fn()}

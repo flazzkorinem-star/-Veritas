@@ -75,7 +75,10 @@ describe("diagnosticReducer", () => {
   it("查看答案以 0 分完成当前层", () => {
     const state = diagnosticReducer(startQuestion(), { type: "REVEAL_ANSWER" });
 
-    expect(state.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
+    expect(state.stages.MEMORY).toMatchObject({
+      status: "PASSED_WITH_ANSWER",
+      answerOrigin: "REQUESTED",
+    });
     expect(getNodeScore(state)).toBe(0);
     expect(state.currentStage).toBe("UNDERSTANDING");
   });
@@ -112,7 +115,7 @@ describe("diagnosticReducer", () => {
     expect(state.stages.MEMORY).toMatchObject({ status: "ACTIVE", stalledCount: 2 });
   });
 
-  it("连续三轮停滞后自动以答案完成当前层", () => {
+  it("连续三轮停滞后留在当前层，直到建立同目标验证题", () => {
     let state = startQuestion();
     const stalled = {
       type: "ANSWER_EVALUATED",
@@ -123,7 +126,53 @@ describe("diagnosticReducer", () => {
     state = diagnosticReducer(state, stalled);
     state = diagnosticReducer(state, stalled);
 
-    expect(state.stages.MEMORY.status).toBe("PASSED_WITH_ANSWER");
+    expect(state.stages.MEMORY).toMatchObject({
+      status: "ACTIVE",
+      stalledCount: 3,
+      answerOrigin: "NONE",
+      verificationQuestion: null,
+    });
+    expect(getNodeScore(state)).toBe(0);
+    expect(state.currentStage).toBe("MEMORY");
+
+    state = diagnosticReducer(state, {
+      type: "START_ANSWER_VERIFICATION",
+      question: "太阳能在水循环中提供了什么？",
+    });
+
+    expect(state.stages.MEMORY).toMatchObject({
+      status: "ACTIVE",
+      stalledCount: 0,
+      mainQuestion: "请说出这个概念的基本含义。",
+      verificationQuestion: "太阳能在水循环中提供了什么？",
+      answerOrigin: "AUTOMATIC",
+    });
+  });
+
+  it("自动答案后只有答对小验证题才以 0 分进入下一层", () => {
+    let state = startQuestion();
+    const stalled = {
+      type: "ANSWER_EVALUATED",
+      outcome: { classification: "NO_ANSWER", isCorrect: false, progress: "STALLED" },
+    } as const;
+
+    state = diagnosticReducer(state, stalled);
+    state = diagnosticReducer(state, stalled);
+    state = diagnosticReducer(state, stalled);
+    state = diagnosticReducer(state, {
+      type: "START_ANSWER_VERIFICATION",
+      question: "太阳能在水循环中提供了什么？",
+    });
+    state = diagnosticReducer(state, {
+      type: "ANSWER_EVALUATED",
+      outcome: correct,
+    });
+
+    expect(state.stages.MEMORY).toMatchObject({
+      status: "PASSED_WITH_ANSWER",
+      answerOrigin: "AUTOMATIC",
+      verificationQuestion: "太阳能在水循环中提供了什么？",
+    });
     expect(getNodeScore(state)).toBe(0);
     expect(state.currentStage).toBe("UNDERSTANDING");
   });
