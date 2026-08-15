@@ -99,6 +99,17 @@ describe("diagnosticReducer", () => {
 
     expect(state.stages.MEMORY.stalledCount).toBe(0);
     expect(state.stages.MEMORY.mainQuestion).toBe("请说出这个概念的基本含义。");
+
+    state = diagnosticReducer(state, {
+      type: "ANSWER_EVALUATED",
+      outcome: { classification: "NO_ANSWER", isCorrect: false, progress: "STALLED" },
+    });
+    state = diagnosticReducer(state, {
+      type: "ANSWER_EVALUATED",
+      outcome: { classification: "NO_ANSWER", isCorrect: false, progress: "STALLED" },
+    });
+
+    expect(state.stages.MEMORY).toMatchObject({ status: "ACTIVE", stalledCount: 2 });
   });
 
   it("连续三轮停滞后自动以答案完成当前层", () => {

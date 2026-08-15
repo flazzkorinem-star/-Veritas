@@ -1,0 +1,190 @@
+{
+  "caseId": "S01",
+  "model": "deepseek-v4-flash",
+  "productionBuild": true,
+  "browser": "Edge 1440×900",
+  "artificialDiagnosticState": true,
+  "artificialStateDescription": "上传原始评测材料后，仅把当前层和主问题改为固定回归状态；回答仍从页面发送，并经过真实 /api/agents。",
+  "question": "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？",
+  "answer": "ETF 是在交易所上市、通常用证券账户盘中买卖的基金；ETF 联接基金主要投资目标 ETF，通常在基金销售平台按净值申购和赎回。",
+  "decision": {
+    "responseMode": "EVALUATE_DIAGNOSTIC",
+    "learningGoalUpdate": null,
+    "classification": "CORRECT",
+    "isCorrect": true,
+    "progress": "ADVANCING",
+    "correctEvidence": [
+      "正确指出ETF在交易所上市、用证券账户盘中买卖",
+      "正确指出ETF联接基金主要投资目标ETF、在销售平台按净值申赎"
+    ],
+    "missingPoints": [],
+    "misconceptions": [],
+    "teachingMove": "AFFIRM_AND_ADVANCE",
+    "scaffold": null,
+    "assistantMessage": "你说得很准确：ETF在交易所上市、用证券账户盘中买卖，价格随供需变化；联接基金则主要投向目标ETF，在销售平台按净值申赎。这两点正是两者在交易渠道和申赎方式上的核心差别。"
+  },
+  "feedback": "你说得很准确：ETF在交易所上市、用证券账户盘中买卖，价格随供需变化；联接基金则主要投向目标ETF，在销售平台按净值申赎。这两点正是两者在交易渠道和申赎方式上的核心差别。",
+  "formalQuestion": "为什么ETF在盘中交易时，成交价可能短暂偏离其基金净值？请解释造成这种偏离的核心原因。",
+  "operations": [
+    {
+      "operation": "EXTRACT_KNOWLEDGE",
+      "status": 200
+    },
+    {
+      "operation": "AUDIT_KNOWLEDGE_MAP",
+      "status": 200
+    },
+    {
+      "operation": "CREATE_FIRST_QUESTION",
+      "status": 200
+    },
+    {
+      "operation": "RESPOND_TO_USER",
+      "status": 200
+    },
+    {
+      "operation": "CREATE_STAGE_QUESTION",
+      "status": 200
+    }
+  ],
+  "turnOperations": [
+    {
+      "operation": "RESPOND_TO_USER",
+      "status": 200
+    },
+    {
+      "operation": "CREATE_STAGE_QUESTION",
+      "status": 200
+    }
+  ],
+  "before": {
+    "score": "0",
+    "visibleMessages": [
+      "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？"
+    ],
+    "assistantMessages": [
+      "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？"
+    ],
+    "stored": {
+      "session": {
+        "nodeId": "node-1",
+        "status": "IN_PROGRESS",
+        "currentStage": "MEMORY",
+        "stages": {
+          "MEMORY": {
+            "key": "MEMORY",
+            "status": "ACTIVE",
+            "mainQuestion": "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？",
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          },
+          "UNDERSTANDING": {
+            "key": "UNDERSTANDING",
+            "status": "LOCKED",
+            "mainQuestion": null,
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          },
+          "APPLICATION": {
+            "key": "APPLICATION",
+            "status": "LOCKED",
+            "mainQuestion": null,
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          },
+          "ANALYSIS": {
+            "key": "ANALYSIS",
+            "status": "LOCKED",
+            "mainQuestion": null,
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          }
+        }
+      },
+      "messages": [
+        {
+          "role": "ASSISTANT",
+          "content": "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？"
+        }
+      ]
+    }
+  },
+  "after": {
+    "score": "25",
+    "visibleMessages": [
+      "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？",
+      "ETF 是在交易所上市、通常用证券账户盘中买卖的基金；ETF 联接基金主要投资目标 ETF，通常在基金销售平台按净值申购和赎回。",
+      "你说得很准确：ETF在交易所上市、用证券账户盘中买卖，价格随供需变化；联接基金则主要投向目标ETF，在销售平台按净值申赎。这两点正是两者在交易渠道和申赎方式上的核心差别。",
+      "为什么ETF在盘中交易时，成交价可能短暂偏离其基金净值？请解释造成这种偏离的核心原因。"
+    ],
+    "assistantMessages": [
+      "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？",
+      "你说得很准确：ETF在交易所上市、用证券账户盘中买卖，价格随供需变化；联接基金则主要投向目标ETF，在销售平台按净值申赎。这两点正是两者在交易渠道和申赎方式上的核心差别。",
+      "为什么ETF在盘中交易时，成交价可能短暂偏离其基金净值？请解释造成这种偏离的核心原因。"
+    ],
+    "stored": {
+      "session": {
+        "nodeId": "node-1",
+        "status": "IN_PROGRESS",
+        "currentStage": "UNDERSTANDING",
+        "stages": {
+          "MEMORY": {
+            "key": "MEMORY",
+            "status": "PASSED",
+            "mainQuestion": "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？",
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          },
+          "UNDERSTANDING": {
+            "key": "UNDERSTANDING",
+            "status": "ACTIVE",
+            "mainQuestion": "为什么ETF在盘中交易时，成交价可能短暂偏离其基金净值？请解释造成这种偏离的核心原因。",
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          },
+          "APPLICATION": {
+            "key": "APPLICATION",
+            "status": "LOCKED",
+            "mainQuestion": null,
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          },
+          "ANALYSIS": {
+            "key": "ANALYSIS",
+            "status": "LOCKED",
+            "mainQuestion": null,
+            "hintLevel": 0,
+            "hasRequestedHint": false,
+            "stalledCount": 0
+          }
+        }
+      },
+      "messages": [
+        {
+          "role": "ASSISTANT",
+          "content": "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？"
+        },
+        {
+          "role": "USER",
+          "content": "ETF 是在交易所上市、通常用证券账户盘中买卖的基金；ETF 联接基金主要投资目标 ETF，通常在基金销售平台按净值申购和赎回。"
+        },
+        {
+          "role": "ASSISTANT",
+          "content": "你说得很准确：ETF在交易所上市、用证券账户盘中买卖，价格随供需变化；联接基金则主要投向目标ETF，在销售平台按净值申赎。这两点正是两者在交易渠道和申赎方式上的核心差别。"
+        },
+        {
+          "role": "ASSISTANT",
+          "content": "为什么ETF在盘中交易时，成交价可能短暂偏离其基金净值？请解释造成这种偏离的核心原因。"
+        }
+      ]
+    }
+  },
+  "browserProblems": []
+}

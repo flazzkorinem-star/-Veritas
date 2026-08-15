@@ -354,6 +354,49 @@ describe("Agent 服务", () => {
     expect(request.user).toContain("没有股票账户时怎么选");
   });
 
+  it("正确回答的评价反馈不承担下一层出题职责", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      responseMode: "EVALUATE_DIAGNOSTIC",
+      learningGoalUpdate: null,
+      classification: "CORRECT",
+      isCorrect: true,
+      progress: "ADVANCING",
+      correctEvidence: ["说明了 ETF 在场内交易、联接基金按净值申赎"],
+      missingPoints: [],
+      misconceptions: [],
+      teachingMove: "AFFIRM_AND_ADVANCE",
+      scaffold: null,
+      assistantMessage: "对，交易渠道和定价方式的区别都说清楚了。",
+    });
+
+    await runAgentOperation(
+      {
+        operation: "RESPOND_TO_USER",
+        input: {
+          materialContext: { ...compactMaterialContext, title: "基金列表" },
+          node: knowledgeMap.nodes[0],
+          knowledgeItems: knowledgeMap.knowledgeItems,
+          learningGoal: "理解 ETF 产品差异",
+          recentMessages: [],
+          diagnostic: {
+            status: "ACTIVE",
+            stage: "MEMORY",
+            mainQuestion: "ETF 与 ETF 联接基金在交易方式上有什么区别？",
+          },
+          userMessage: "ETF 在场内实时交易，联接基金在场外按净值申购赎回。",
+        },
+      },
+      "server-key",
+      callModel,
+    );
+
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain("CORRECT 的 assistantMessage 只负责评价本轮回答");
+    expect(prompt).toContain("不得提出下一道诊断题");
+    expect(prompt).toContain("不得要求用户完成另一个回答动作");
+    expect(prompt).toContain("下一层正式主问题只由 CREATE_STAGE_QUESTION 生成");
+  });
+
   it("Zod 拒绝模型输出的未知字段", async () => {
     const callModel = vi.fn().mockResolvedValue({ ...extraction, systemPrompt: "泄露" });
 

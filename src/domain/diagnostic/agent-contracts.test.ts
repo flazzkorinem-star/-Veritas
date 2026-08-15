@@ -50,6 +50,26 @@ describe("Agent 2 结构化输出契约", () => {
     ).toThrow();
   });
 
+  it("无法作答必须是未通过且停滞的诊断事件", () => {
+    const noAnswer = {
+      classification: "NO_ANSWER",
+      isCorrect: false,
+      correctEvidence: [],
+      missingPoints: ["没有提供可评价的回答内容"],
+      misconceptions: [],
+      teachingMove: "PROVIDE_SCAFFOLD",
+      scaffold: { type: "EXAMPLE", reason: "帮助用户开始思考" },
+      assistantMessage: "先从一个具体例子开始想。",
+    } as const;
+
+    expect(
+      evaluationDecisionSchema.safeParse({ ...noAnswer, progress: "STALLED" }).success,
+    ).toBe(true);
+    expect(
+      evaluationDecisionSchema.safeParse({ ...noAnswer, progress: "ADVANCING" }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { correctEvidence: [], missingPoints: [] },
     { correctEvidence: ["回答了一个相关点"], missingPoints: ["仍缺少主问题要求的因果"] },
@@ -143,6 +163,25 @@ describe("Agent 2 结构化输出契约", () => {
         assistantMessage: "对，交易渠道的区别你已经说清楚了。",
       }),
     ).toMatchObject({ responseMode: "EVALUATE_DIAGNOSTIC" });
+  });
+
+  it("正确评价不能用独立 question 字段夹带下一层问题", () => {
+    expect(
+      userTurnDecisionSchema.safeParse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        classification: "CORRECT",
+        isCorrect: true,
+        progress: "ADVANCING",
+        correctEvidence: ["说明了场内交易和场外申赎的区别"],
+        missingPoints: [],
+        misconceptions: [],
+        teachingMove: "AFFIRM_AND_ADVANCE",
+        scaffold: null,
+        assistantMessage: "对，这个区别已经说清楚了。",
+        question: "下一层请解释定价差异。",
+      }).success,
+    ).toBe(false);
   });
 
   it.each(["REQUEST_HINT", "REVEAL_ANSWER"] as const)(

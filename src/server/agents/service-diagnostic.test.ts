@@ -42,6 +42,54 @@ const materialContext = {
 };
 
 describe("Agent 2 服务", () => {
+  it("明确无法回答时保留诊断评价模式并累计停滞", async () => {
+    const output = {
+      responseMode: "EVALUATE_DIAGNOSTIC" as const,
+      learningGoalUpdate: null,
+      classification: "NO_ANSWER" as const,
+      isCorrect: false,
+      progress: "STALLED" as const,
+      correctEvidence: [],
+      missingPoints: ["没有提供可评价的回答内容"],
+      misconceptions: [],
+      teachingMove: "PROVIDE_SCAFFOLD" as const,
+      scaffold: { type: "EXAMPLE" as const, reason: "帮助用户开始思考" },
+      assistantMessage: "先从一个具体场景开始拆解。",
+    };
+    const callModel = vi.fn().mockResolvedValue(output);
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "RESPOND_TO_USER",
+          input: {
+            node,
+            knowledgeItems,
+            materialContext,
+            learningGoal: null,
+            diagnostic: {
+              status: "ACTIVE",
+              stage: "MEMORY",
+              mainQuestion: "主要动力是什么？",
+            },
+            userMessage: "我真的答不上来，脑子里完全没有思路。",
+            recentMessages: [],
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toEqual(output);
+
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain("明确表示无法回答当前主问题");
+    expect(prompt).toContain("classification 必须是 NO_ANSWER");
+    expect(prompt).toContain("progress 必须是 STALLED");
+    expect(prompt).toContain("不能改成 CONVERSATION 或 REQUEST_HINT");
+    expect(prompt).toContain("表达犹豫但同时给出实际答案");
+    expect(prompt).toContain("不能只因不确定语气判为 NO_ANSWER");
+  });
+
   it.each([
     {
       name: "回答了同主题的另一个问题",

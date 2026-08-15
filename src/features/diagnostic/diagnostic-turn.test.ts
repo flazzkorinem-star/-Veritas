@@ -163,6 +163,34 @@ describe("诊断回合编排", () => {
     expect(agent).toHaveBeenCalledTimes(1);
   });
 
+  it("偏题时保留当前问题且不生成下一层问题", async () => {
+    const agent = vi.fn().mockResolvedValue({
+      ...partial,
+      classification: "OFF_TOPIC",
+      progress: "STALLED",
+      correctEvidence: [],
+      missingPoints: ["没有回答当前问题要求的动力来源"],
+      teachingMove: "BRIDGE_BACK",
+      assistantMessage: "这个例子和水循环有关，我们先回到原题：主要动力来自哪里？",
+    });
+
+    const result = await respondToUser(
+      {
+        ...turnContext(),
+        userMessage: "河流最后会流进海洋。",
+      },
+      agent,
+    );
+
+    expect(result.session).toEqual(activeSession());
+    expect(result.assistantMessages).toEqual([
+      "这个例子和水循环有关，我们先回到原题：主要动力来自哪里？",
+    ]);
+    expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
+      "RESPOND_TO_USER",
+    ]);
+  });
+
   it("答对后由代码进入下一层，再生成该层唯一主问题", async () => {
     const agent = vi
       .fn()
@@ -192,6 +220,13 @@ describe("诊断回合编排", () => {
     expect(result.assistantMessages).toEqual([
       "对，太阳能是关键动力。",
       "太阳能怎样推动蒸发？",
+    ]);
+    expect(result.assistantMessages[1]).toBe(
+      result.session.stages.UNDERSTANDING.mainQuestion,
+    );
+    expect(agent.mock.calls.map(([request]) => request.operation)).toEqual([
+      "RESPOND_TO_USER",
+      "CREATE_STAGE_QUESTION",
     ]);
   });
 
@@ -229,6 +264,35 @@ describe("诊断回合编排", () => {
       "CREATE_STAGE_ANSWER",
       "CREATE_STAGE_QUESTION",
     ]);
+  });
+
+  it.each([
+    "我真的不知道该怎么回答这个问题。",
+    "这题我不会，暂时答不出来。",
+    "我脑子里一片空白，完全没有思路。",
+    "想了半天还是不知道从哪里开始。",
+    "这个我确实答不上来。",
+    "我没法给出答案，能先帮我理一理吗？",
+  ])("无法作答表达会把 STALLED 事件交给 reducer：%s", async (userMessage) => {
+    const agent = vi.fn().mockResolvedValue({
+      ...partial,
+      classification: "NO_ANSWER",
+      progress: "STALLED",
+      correctEvidence: [],
+      missingPoints: ["没有提供可评价的回答内容"],
+      teachingMove: "PROVIDE_SCAFFOLD",
+      scaffold: { type: "EXAMPLE", reason: "帮助用户开始思考" },
+      assistantMessage: "先从一个具体场景开始拆解。",
+    });
+
+    const result = await respondToUser({ ...turnContext(), userMessage }, agent);
+
+    expect(result.session.stages.MEMORY).toMatchObject({
+      status: "ACTIVE",
+      mainQuestion: "主要动力是什么？",
+      stalledCount: 1,
+    });
+    expect(result.scaffold).toMatchObject({ stage: "MEMORY", type: "EXAMPLE" });
   });
 
   it("提示只因点击升级，并把升级后的级别交给模型", async () => {

@@ -126,5 +126,7 @@
 - `e2e/phase15-performance-real.spec.ts`：仅显式启用时串行生成并处理 10、50、200 KiB 合成 Markdown，记录端到端耗时、同源请求字节数、调用数、状态和主题数，不进入普通 CI 的真实模型调用。
 - `e2e/evaluation-a0691c1.spec.ts`：显式启用时在本地生产 Edge 中串行执行 20 个真实用户评测 session，并把逐轮输入输出、确定性状态、Agent 操作、报告和截图保存到版本化评测目录。
 - `e2e/agent2-answer-coverage-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S15、S20 的目标问题，保存用户输入、Vita 输出、结构化判断和前后状态，并用完整答案验证正常推进。
+- `e2e/agent2-no-answer-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 区分六种无法作答表达、用户提问、暂停和带尝试的回答，并从真实首问连续验证三轮停滞、自动答案、分数与四层持久化状态。
+- `e2e/agent2-single-question-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S01、S02 的正确推进，保存全部 Agent 操作、前后会话、分数、页面消息和浏览器错误，并验证评价反馈后只有与新层 `mainQuestion` 一致的正式问题。
 - `e2e/first-question-memory-real.spec.ts`：显式启用时在生产 Edge 中把 ETF、城市内涝、光合作用和基金代码考试材料各上传两次，保存 `bloomTargets.memory`、真实首问、请求阶段与最终存储层级，供逐条人工核对首问层级。
 - `docs/evaluation/a0691c1/`：保存 a0691c1 的评测矩阵、评分规则、20 条原始 JSON、报告、截图、逐案评级、Badcase 归因、执行异常和总体结论；人工预设案例与线上真实案例明确区分。
