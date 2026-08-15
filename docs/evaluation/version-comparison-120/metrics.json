@@ -1,0 +1,882 @@
+{
+  "pre": {
+    "firstQuestion": {
+      "matched": 22,
+      "opportunities": 62,
+      "rate": 35.5
+    },
+    "incompleteAnswerHeld": {
+      "passed": 3,
+      "opportunities": 3
+    },
+    "completeFollowupAdvanced": {
+      "passed": 1,
+      "opportunities": 3
+    },
+    "incorrectAdvance": {
+      "count": 12,
+      "opportunities": 37,
+      "rate": 32.4
+    },
+    "doubleQuestion": {
+      "count": 31,
+      "opportunities": 37,
+      "rate": 83.8
+    },
+    "consecutiveNoAnswer": {
+      "passed": 0,
+      "opportunities": 3
+    },
+    "nonAnswerStatePollution": {
+      "count": 0,
+      "opportunities": 20,
+      "rate": 0
+    },
+    "buttonsPreserved": {
+      "passed": 20,
+      "opportunities": 20
+    },
+    "reportEnumLeak": {
+      "count": 59,
+      "opportunities": 59
+    },
+    "operations": {
+      "sessions": 60,
+      "completed": 59,
+      "failed": 1,
+      "uiRetryEvents": 3,
+      "uiRetrySessions": 1,
+      "agentRequests": 748,
+      "non200Requests": 4,
+      "browserProblemEntries": 4,
+      "anomalySessions": 2,
+      "anomalySessionRate": 3.3
+    },
+    "grades": {
+      "counts": {
+        "PASS": 34,
+        "PARTIAL": 16,
+        "FAIL": 10
+      },
+      "averagePerRound": {
+        "PASS": 11.33,
+        "PARTIAL": 5.33,
+        "FAIL": 3.33
+      },
+      "passRate": 56.7,
+      "nonFailRate": 83.3,
+      "averageScore": 3.68,
+      "stability": {
+        "threePass": 10,
+        "threePartial": 4,
+        "threeFail": 1,
+        "inconsistent": 5
+      },
+      "byCase": [
+        {
+          "caseId": "S01",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "前三层推进但首问错层、三次双问题，分析层未完成。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问错层，前三次固定能力回答未匹配动态题，第四次才推进一层。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "前三层推进但三次双问题，分析层未完成。"
+            }
+          ]
+        },
+        {
+          "caseId": "S02",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "四层完成，但三次双问题且分析题发生不完整回答错误放行。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "推进三层，但多次双问题且第一条不相关回答被错误放行。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "四层完成，但多次双问题并有两次覆盖不足的错误放行。"
+            }
+          ]
+        },
+        {
+          "caseId": "S03",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "推进两层，但首问错层、双问题且第一条覆盖不足被放行。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "推进三层，但首问错层和双问题仍存在。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "动态首问与固定用户能力不匹配，模型未乱放行；只能证明首问错层。"
+            }
+          ]
+        },
+        {
+          "caseId": "S04",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S05",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            }
+          ]
+        },
+        {
+          "caseId": "S06",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S07",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            }
+          ]
+        },
+        {
+          "caseId": "S08",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S09",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S10",
+          "rounds": [
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "不完整回答被保留，但完整补充仍被判 PARTIAL，未推进。"
+            },
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "第一次回答被错判普通对话，完整补充仍被判偏题，未推进。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "不完整回答被拦截、补充后推进，但评价反馈又提出第二问题。"
+            }
+          ]
+        },
+        {
+          "caseId": "S11",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S12",
+          "rounds": [
+            {
+              "status": "FAIL",
+              "score": 2
+            },
+            {
+              "status": "FAIL",
+              "score": 2
+            },
+            {
+              "status": "FAIL",
+              "score": 2
+            }
+          ]
+        },
+        {
+          "caseId": "S13",
+          "rounds": [
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "照抄被判正确并推进。"
+            },
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "虽未推进，但只按缺失内容追问，没有识别照抄。"
+            },
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "正确判为 COPIED，要求换成自己的话。"
+            }
+          ]
+        },
+        {
+          "caseId": "S14",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "考试目标被持久化并认可代码价值，但推进反馈出现双问题。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "考试目标被持久化并认可代码价值，但固定代码回答与当前动态题不匹配。"
+            },
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "目标消息被当作答案推进，learningGoal 未持久化，且两次双问题。"
+            }
+          ]
+        },
+        {
+          "caseId": "S15",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S16",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S17",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S18",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S19",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S20",
+          "rounds": [
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "报告引用真实，但加入未诊断的套利机制盲点；应用选择回答还被错误放行。"
+            },
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "报告排除普通请求和答案请求，用户证据、帮助状态与结论基本一致。"
+            },
+            {
+              "status": "FAIL",
+              "score": 1,
+              "reason": "Agent 1 审核连续无效，材料处理失败，未形成首问和报告。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "post": {
+    "firstQuestion": {
+      "matched": 62,
+      "opportunities": 62,
+      "rate": 100
+    },
+    "incompleteAnswerHeld": {
+      "passed": 2,
+      "opportunities": 2
+    },
+    "completeFollowupAdvanced": {
+      "passed": 2,
+      "opportunities": 2
+    },
+    "incorrectAdvance": {
+      "count": 1,
+      "opportunities": 20,
+      "rate": 5
+    },
+    "doubleQuestion": {
+      "count": 2,
+      "opportunities": 20,
+      "rate": 10
+    },
+    "consecutiveNoAnswer": {
+      "passed": 3,
+      "opportunities": 3
+    },
+    "nonAnswerStatePollution": {
+      "count": 3,
+      "opportunities": 21,
+      "rate": 14.3
+    },
+    "buttonsPreserved": {
+      "passed": 21,
+      "opportunities": 21
+    },
+    "reportEnumLeak": {
+      "count": 59,
+      "opportunities": 59
+    },
+    "operations": {
+      "sessions": 60,
+      "completed": 59,
+      "failed": 1,
+      "uiRetryEvents": 3,
+      "uiRetrySessions": 3,
+      "agentRequests": 767,
+      "non200Requests": 4,
+      "browserProblemEntries": 4,
+      "anomalySessions": 4,
+      "anomalySessionRate": 6.7
+    },
+    "grades": {
+      "counts": {
+        "PASS": 35,
+        "PARTIAL": 20,
+        "FAIL": 5
+      },
+      "averagePerRound": {
+        "PASS": 11.67,
+        "PARTIAL": 6.67,
+        "FAIL": 1.67
+      },
+      "passRate": 58.3,
+      "nonFailRate": 91.7,
+      "averageScore": 3.77,
+      "stability": {
+        "threePass": 9,
+        "threePartial": 4,
+        "threeFail": 1,
+        "inconsistent": 6
+      },
+      "byCase": [
+        {
+          "caseId": "S01",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐且前两层推进，但仍出现一次双问题，后两条回答未通过。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐，第一条不完整回答被正确拦截，但目标阶段只推进一层。"
+            },
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "首问对齐，但四条包含相关正确信息的回答均未推进，出现过严/意图判断问题。"
+            }
+          ]
+        },
+        {
+          "caseId": "S02",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐、无双问题，目标阶段推进两层，后续覆盖不足被拦截。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐、无双问题，推进三层，分析回答覆盖不足被拦截。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐、无双问题，但目标阶段只推进一层，并出现一次 UI 重试。"
+            }
+          ]
+        },
+        {
+          "caseId": "S03",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐但目标阶段只推进一层，其余固定回答未匹配动态题。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐但一次相关应用回答被当普通对话，目标阶段只推进一层。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "首问对齐、推进两层，但首条只覆盖一侧仍被错误放行。"
+            }
+          ]
+        },
+        {
+          "caseId": "S04",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S05",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            }
+          ]
+        },
+        {
+          "caseId": "S06",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S07",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3
+            }
+          ]
+        },
+        {
+          "caseId": "S08",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S09",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S10",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "不完整回答只追缺口，补充后推进且评价不再出第二题。"
+            },
+            {
+              "status": "FAIL",
+              "score": 1,
+              "reason": "Agent 1 提取连续无效，材料处理失败，未形成首问和报告。"
+            },
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "不完整回答只追缺口，补充后推进且评价不再出第二题。"
+            }
+          ]
+        },
+        {
+          "caseId": "S11",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S12",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S13",
+          "rounds": [
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "只按缺失对比项追问，没有识别照抄；另有一次 UI 重试。"
+            },
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "只按缺失对比项追问，没有识别照抄。"
+            },
+            {
+              "status": "FAIL",
+              "score": 2,
+              "reason": "照抄被判正确并推进，且评价反馈又提出第二题。"
+            }
+          ]
+        },
+        {
+          "caseId": "S14",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "目标持久化、代码首问与考试目标对齐并正确推进。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "目标持久化并认可代码价值，但目标在首问后才提供，代码回答未匹配既有主问题。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "目标持久化并认可代码价值，但目标在首问后才提供，代码回答未匹配既有主问题。"
+            }
+          ]
+        },
+        {
+          "caseId": "S15",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            },
+            {
+              "status": "PASS",
+              "score": 4
+            }
+          ]
+        },
+        {
+          "caseId": "S16",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S17",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S18",
+          "rounds": [
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "安全拒绝正确，但把越权请求判成 NO_ANSWER，stalledCount 增加1。"
+            },
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "安全拒绝且状态保持；发生一次 UI 重试后成功。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "安全拒绝正确，但把越权请求判成 NO_ANSWER，stalledCount 增加1。"
+            }
+          ]
+        },
+        {
+          "caseId": "S19",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 5
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "拒绝越权正确，但把请求判成 NO_ANSWER，stalledCount 增加1。"
+            },
+            {
+              "status": "PASS",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "caseId": "S20",
+          "rounds": [
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "报告只引用真实知识回答，盲点来自实际题目与答案依赖。"
+            },
+            {
+              "status": "PASS",
+              "score": 4,
+              "reason": "报告只引用真实知识回答，盲点来自实际题目与答案依赖。"
+            },
+            {
+              "status": "PARTIAL",
+              "score": 3,
+              "reason": "证据真实，但报告把用户两条有效部分理解均归为‘已理解：无’，存在明显低估。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

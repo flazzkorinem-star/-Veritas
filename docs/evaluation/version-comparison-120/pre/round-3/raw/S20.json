@@ -1,0 +1,315 @@
+{
+  "id": "S20",
+  "title": "混合消息下的报告证据",
+  "expected": "报告只把真实知识回答当证据，排除普通请求和Vita答案，状态与提示答案记录一致。",
+  "metadata": {
+    "version": "pre",
+    "head": "f48d2b00e53954035bce27297a426a1ea20957f0",
+    "round": "round-3",
+    "runOrder": "5/6",
+    "harnessSha256": "B808FC4B28688EE95836984C77F8FB8A099AC943187083F14CB41F95B86C2A13",
+    "route": "真实前端 → Next.js 正式构建 → /api/agents → 真实 DeepSeek → IndexedDB/报告",
+    "model": "deepseek-v4-flash",
+    "browser": "Microsoft Edge 1440×900",
+    "fileInput": "Playwright setInputFiles 触发真实上传、解析和建图链路",
+    "stateSetup": "无 Mock、无直接内部函数调用、无直接 API 调用、无人工构造或写入状态",
+    "futureInputsVisibleToModel": false
+  },
+  "startedAt": "2026-08-15T05:29:06.916Z",
+  "steps": [],
+  "agentTraffic": [
+    {
+      "id": 1,
+      "phase": "目标交互",
+      "startedAt": "2026-08-15T05:29:07.139Z",
+      "requestBody": {
+        "operation": "EXTRACT_KNOWLEDGE",
+        "input": {
+          "chunkId": "chunk-1",
+          "sourceLabel": "全文",
+          "text": "# ETF 与 ETF 联接基金\n\nETF 是在证券交易所上市交易的基金。投资者通常通过证券账户在交易时段内买卖，成交价格会随市场供需变化。ETF 的基金净值反映其持有资产的价值，但盘中成交价可能短暂高于或低于净值。\n\nETF 联接基金的主要资产是目标 ETF。投资者通常通过基金销售平台按基金净值申购或赎回，不需要直接在交易所盘中撮合买卖。它为不使用证券账户、希望定期定额投资或习惯场外申赎的用户提供了另一种参与方式。\n\n二者都可以帮助投资者获得相近的指数敞口，但交易渠道、成交定价时点和跟踪链条不同。希望盘中自主成交的用户可能更适合 ETF；希望操作方式接近普通开放式基金的用户可能更适合 ETF 联接基金。选择不能只看名称，还要结合账户条件、交易习惯和费用信息判断。"
+        }
+      },
+      "responseStatus": 200,
+      "responseBody": {
+        "result": {
+          "modules": [
+            {
+              "id": "module-1",
+              "title": "ETF 与 ETF 联接基金",
+              "sourceRange": "chunk-1 全文"
+            }
+          ],
+          "knowledgeItems": [
+            {
+              "id": "item-1",
+              "moduleId": "module-1",
+              "title": "ETF 的交易方式与价格形成",
+              "summary": "ETF 在证券交易所上市，投资者通过证券账户在交易时段内买卖，成交价格随市场供需变化，盘中成交价可能短时偏离净值。",
+              "kind": "CORE",
+              "diagnosticRationale": "理解 ETF 的交易机制和价格偏离是区分其与普通基金的核心，直接影响对流动性和折溢价概念的理解。",
+              "sourceReferences": [
+                {
+                  "label": "交易方式",
+                  "excerpt": "投资者通常通过证券账户在交易时段内买卖，成交价格会随市场供需变化。"
+                },
+                {
+                  "label": "价格偏离",
+                  "excerpt": "盘中成交价可能短暂高于或低于净值。"
+                }
+              ],
+              "commonMisconceptions": [
+                "ETF 的成交价总是等于其净值"
+              ]
+            },
+            {
+              "id": "item-2",
+              "moduleId": "module-1",
+              "title": "ETF 联接基金的本质与申赎方式",
+              "summary": "ETF 联接基金的主要资产是目标 ETF，投资者通过基金销售平台按净值申购赎回，不需在交易所盘中撮合。",
+              "kind": "CORE",
+              "diagnosticRationale": "这是理解联接基金运作方式和适用人群的基础，也是区分两者交易机制的要点。",
+              "sourceReferences": [
+                {
+                  "label": "资产构成",
+                  "excerpt": "ETF 联接基金的主要资产是目标 ETF。"
+                },
+                {
+                  "label": "申赎方式",
+                  "excerpt": "投资者通常通过基金销售平台按基金净值申购或赎回，不需要直接在交易所盘中撮合买卖。"
+                }
+              ],
+              "commonMisconceptions": [
+                "ETF 联接基金也在交易所盘中交易"
+              ]
+            },
+            {
+              "id": "item-3",
+              "moduleId": "module-1",
+              "title": "ETF 与联接基金的核心区别",
+              "summary": "两者都提供相近的指数敞口，但交易渠道、成交定价时点和跟踪链条不同：ETF 盘中自主成交，联接基金按净值场外申赎且跟踪链条更长。",
+              "kind": "CORE",
+              "diagnosticRationale": "比较二者差异是选择合适的投资工具的关键，涉及渠道、定价和跟踪误差等实际决策因素。",
+              "sourceReferences": [
+                {
+                  "label": "共同点",
+                  "excerpt": "二者都可以帮助投资者获得相近的指数敞口"
+                },
+                {
+                  "label": "差异",
+                  "excerpt": "但交易渠道、成交定价时点和跟踪链条不同。"
+                }
+              ],
+              "commonMisconceptions": [
+                "两者在交易机制上完全相同"
+              ]
+            },
+            {
+              "id": "item-4",
+              "moduleId": "module-1",
+              "title": "选择 ETF 与联接基金的适用情形",
+              "summary": "希望盘中自主成交的用户更适合 ETF；希望操作接近普通开放式基金、无证券账户或定期定额投资的人更适合联接基金。",
+              "kind": "SUPPORTING",
+              "diagnosticRationale": "帮助将机制差异应用到实际选择场景，提升决策能力。",
+              "sourceReferences": [
+                {
+                  "label": "适用情形",
+                  "excerpt": "希望盘中自主成交的用户可能更适合 ETF；希望操作方式接近普通开放式基金的用户可能更适合 ETF 联接基金。"
+                }
+              ],
+              "commonMisconceptions": []
+            },
+            {
+              "id": "item-5",
+              "moduleId": "module-1",
+              "title": "选择时需综合判断",
+              "summary": "不能只看名称选择，需结合账户条件、交易习惯和费用信息判断。",
+              "kind": "SUPPORTING",
+              "diagnosticRationale": "提醒投资者避免仅凭名称做决定，培养全面评估的意识。",
+              "sourceReferences": [
+                {
+                  "label": "提醒",
+                  "excerpt": "选择不能只看名称，还要结合账户条件、交易习惯和费用信息判断。"
+                }
+              ],
+              "commonMisconceptions": [
+                "名称相似的产品可以互换使用"
+              ]
+            }
+          ]
+        }
+      },
+      "endedAt": "2026-08-15T05:29:13.062Z"
+    },
+    {
+      "id": 2,
+      "phase": "目标交互",
+      "startedAt": "2026-08-15T05:29:13.060Z",
+      "requestBody": {
+        "operation": "AUDIT_KNOWLEDGE_MAP",
+        "input": {
+          "chunks": [
+            {
+              "chunkId": "chunk-1",
+              "extraction": {
+                "modules": [
+                  {
+                    "id": "c1-m1",
+                    "title": "ETF 与 ETF 联接基金",
+                    "sourceRange": "chunk-1 全文"
+                  }
+                ],
+                "knowledgeItems": [
+                  {
+                    "id": "c1-i1",
+                    "moduleId": "c1-m1",
+                    "title": "ETF 的交易方式与价格形成",
+                    "summary": "ETF 在证券交易所上市，投资者通过证券账户在交易时段内买卖，成交价格随市场供需变化，盘中成交价可能短时偏离净值。",
+                    "kind": "CORE",
+                    "diagnosticRationale": "理解 ETF 的交易机制和价格偏离是区分其与普通基金的核心，直接影响对流动性和折溢价概念的理解。",
+                    "sourceReferences": [
+                      {
+                        "label": "交易方式",
+                        "excerpt": "投资者通常通过证券账户在交易时段内买卖，成交价格会随市场供需变化。"
+                      },
+                      {
+                        "label": "价格偏离",
+                        "excerpt": "盘中成交价可能短暂高于或低于净值。"
+                      }
+                    ],
+                    "commonMisconceptions": [
+                      "ETF 的成交价总是等于其净值"
+                    ]
+                  },
+                  {
+                    "id": "c1-i2",
+                    "moduleId": "c1-m1",
+                    "title": "ETF 联接基金的本质与申赎方式",
+                    "summary": "ETF 联接基金的主要资产是目标 ETF，投资者通过基金销售平台按净值申购赎回，不需在交易所盘中撮合。",
+                    "kind": "CORE",
+                    "diagnosticRationale": "这是理解联接基金运作方式和适用人群的基础，也是区分两者交易机制的要点。",
+                    "sourceReferences": [
+                      {
+                        "label": "资产构成",
+                        "excerpt": "ETF 联接基金的主要资产是目标 ETF。"
+                      },
+                      {
+                        "label": "申赎方式",
+                        "excerpt": "投资者通常通过基金销售平台按基金净值申购或赎回，不需要直接在交易所盘中撮合买卖。"
+                      }
+                    ],
+                    "commonMisconceptions": [
+                      "ETF 联接基金也在交易所盘中交易"
+                    ]
+                  },
+                  {
+                    "id": "c1-i3",
+                    "moduleId": "c1-m1",
+                    "title": "ETF 与联接基金的核心区别",
+                    "summary": "两者都提供相近的指数敞口，但交易渠道、成交定价时点和跟踪链条不同：ETF 盘中自主成交，联接基金按净值场外申赎且跟踪链条更长。",
+                    "kind": "CORE",
+                    "diagnosticRationale": "比较二者差异是选择合适的投资工具的关键，涉及渠道、定价和跟踪误差等实际决策因素。",
+                    "sourceReferences": [
+                      {
+                        "label": "共同点",
+                        "excerpt": "二者都可以帮助投资者获得相近的指数敞口"
+                      },
+                      {
+                        "label": "差异",
+                        "excerpt": "但交易渠道、成交定价时点和跟踪链条不同。"
+                      }
+                    ],
+                    "commonMisconceptions": [
+                      "两者在交易机制上完全相同"
+                    ]
+                  },
+                  {
+                    "id": "c1-i4",
+                    "moduleId": "c1-m1",
+                    "title": "选择 ETF 与联接基金的适用情形",
+                    "summary": "希望盘中自主成交的用户更适合 ETF；希望操作接近普通开放式基金、无证券账户或定期定额投资的人更适合联接基金。",
+                    "kind": "SUPPORTING",
+                    "diagnosticRationale": "帮助将机制差异应用到实际选择场景，提升决策能力。",
+                    "sourceReferences": [
+                      {
+                        "label": "适用情形",
+                        "excerpt": "希望盘中自主成交的用户可能更适合 ETF；希望操作方式接近普通开放式基金的用户可能更适合 ETF 联接基金。"
+                      }
+                    ],
+                    "commonMisconceptions": []
+                  },
+                  {
+                    "id": "c1-i5",
+                    "moduleId": "c1-m1",
+                    "title": "选择时需综合判断",
+                    "summary": "不能只看名称选择，需结合账户条件、交易习惯和费用信息判断。",
+                    "kind": "SUPPORTING",
+                    "diagnosticRationale": "提醒投资者避免仅凭名称做决定，培养全面评估的意识。",
+                    "sourceReferences": [
+                      {
+                        "label": "提醒",
+                        "excerpt": "选择不能只看名称，还要结合账户条件、交易习惯和费用信息判断。"
+                      }
+                    ],
+                    "commonMisconceptions": [
+                      "名称相似的产品可以互换使用"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "responseStatus": 502,
+      "responseBody": {
+        "error": {
+          "code": "UPSTREAM_UNAVAILABLE",
+          "message": "模型结果暂时无法使用，请重试。",
+          "errorId": "1d2c8e94-9190-4353-9e34-5d984b7ed58d"
+        }
+      },
+      "endedAt": "2026-08-15T05:30:17.253Z"
+    }
+  ],
+  "uiRetries": [],
+  "browserProblems": [
+    "error: Failed to load resource: the server responded with a status of 502 (Bad Gateway)"
+  ],
+  "error": "这份材料暂时没能准备好\n\n核对整份材料时失败：模型结果暂时无法使用，请重试。\n\n重新处理",
+  "finalState": {
+    "tasks": [
+      {
+        "id": "260c3325-3b49-44bb-83eb-944d947e2ae7",
+        "title": "S02-ETF正常作答二",
+        "fileName": "S02-ETF正常作答二.md",
+        "materialId": "3449bbb7-feda-4f16-9f98-182b219498dd",
+        "status": "FAILED",
+        "currentNodeId": null,
+        "isPinned": false,
+        "failureReason": "核对整份材料时失败：模型结果暂时无法使用，请重试。",
+        "createdAt": "2026-08-15T05:29:07.106Z",
+        "updatedAt": "2026-08-15T05:30:17.253Z"
+      }
+    ],
+    "materials": [
+      {
+        "taskId": "260c3325-3b49-44bb-83eb-944d947e2ae7",
+        "materialId": "3449bbb7-feda-4f16-9f98-182b219498dd",
+        "fileName": "S02-ETF正常作答二.md",
+        "mimeType": "text/markdown",
+        "sizeBytes": 932,
+        "originalFile": {},
+        "parsedText": null,
+        "modules": [],
+        "knowledgeItems": [],
+        "nodes": [],
+        "coverageAssignments": []
+      }
+    ],
+    "sessions": [],
+    "messages": [],
+    "reports": []
+  },
+  "endedAt": "2026-08-15T05:30:17.720Z"
+}
