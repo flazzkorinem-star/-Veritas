@@ -39,22 +39,46 @@ function reply(route: Route, result: unknown) {
 function mockAgent(route: Route) {
   const request = route.request().postDataJSON() as {
     operation: string;
-    input?: { userMessage?: string };
+    input?: {
+      userMessage?: string;
+      sourceUnits?: Array<{ id: string; sourceLabel: string; text: string }>;
+    };
   };
   switch (request.operation) {
-    case "EXTRACT_KNOWLEDGE":
+    case "EXTRACT_COMPACT_KNOWLEDGE": {
+      const sourceUnitIds = request.input!.sourceUnits!.map(({ id }) => id);
       return reply(route, {
-        modules: [{ id: "module-1", title: "水循环", sourceRange: "第 1 段" }],
-        knowledgeItems: [item],
+        modules: [{ id: "module-1", title: "水循环", sourceUnitIds }],
+        knowledgeItems: [
+          {
+            id: "item-1",
+            moduleId: "module-1",
+            title: item.title,
+            summary: item.summary,
+            sourceUnitIds,
+            commonMisconceptions: [],
+          },
+        ],
+        topicDrafts: [
+          {
+            id: "topic-1",
+            moduleId: "module-1",
+            title: node.title,
+            objective: node.objective,
+            knowledgeItemIds: ["item-1"],
+          },
+        ],
+        sourceCoverage: sourceUnitIds,
       });
-    case "AUDIT_KNOWLEDGE_MAP":
+    }
+    case "COMPILE_KNOWLEDGE_MAP":
       return reply(route, {
-        modules: [{ id: "module-1", title: "水循环", sourceRange: "第 1 段" }],
-        knowledgeItems: [item],
-        nodes: [node],
+        modules: [{ id: "s1-m1", title: "水循环", sourceRange: "第 1 段" }],
+        knowledgeItems: [{ ...item, id: "s1-i1", moduleId: "s1-m1" }],
+        nodes: [{ ...node, moduleId: "s1-m1", knowledgeItemIds: ["s1-i1"] }],
         coverageAssignments: [
           {
-            knowledgeItemId: item.id,
+            knowledgeItemId: "s1-i1",
             disposition: "DIAGNOSED_IN_NODE",
             nodeId: node.id,
           },

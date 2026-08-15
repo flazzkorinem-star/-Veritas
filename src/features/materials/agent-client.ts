@@ -8,8 +8,6 @@ import {
   pendingNodeOrderSchema,
 } from "@/domain/agents/contracts";
 import {
-  type ChunkExtraction,
-  chunkExtractionSchema,
   type KnowledgeMap,
   knowledgeMapSchema,
   type FirstQuestion,
@@ -19,6 +17,7 @@ import {
   type CompactExtraction,
   compactExtractionSchema,
 } from "@/domain/knowledge-map/compact-contracts";
+import { compactMergedItemsSchema } from "@/domain/knowledge-map/compact-merge";
 import {
   type HintResponse,
   hintResponseSchema,
@@ -54,15 +53,18 @@ interface AgentClientDependencies {
   signal?: AbortSignal;
 }
 
-type ExtractionRequest = Extract<
-  AgentOperationRequest,
-  { operation: "EXTRACT_KNOWLEDGE" }
->;
 type CompactExtractionRequest = Extract<
   AgentOperationRequest,
   { operation: "EXTRACT_COMPACT_KNOWLEDGE" }
 >;
-type AuditRequest = Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>;
+type CompileKnowledgeMapRequest = Extract<
+  AgentOperationRequest,
+  { operation: "COMPILE_KNOWLEDGE_MAP" }
+>;
+type MergeCompactCandidatesRequest = Extract<
+  AgentOperationRequest,
+  { operation: "MERGE_COMPACT_CANDIDATES" }
+>;
 type QuestionRequest = Extract<
   AgentOperationRequest,
   { operation: "CREATE_FIRST_QUESTION" }
@@ -84,10 +86,10 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
   switch (operation) {
     case "EXTRACT_COMPACT_KNOWLEDGE":
       return compactExtractionSchema;
-    case "EXTRACT_KNOWLEDGE":
-      return chunkExtractionSchema;
-    case "AUDIT_KNOWLEDGE_MAP":
+    case "COMPILE_KNOWLEDGE_MAP":
       return knowledgeMapSchema;
+    case "MERGE_COMPACT_CANDIDATES":
+      return compactMergedItemsSchema;
     case "CREATE_FIRST_QUESTION":
       return firstQuestionSchema;
     case "CREATE_STAGE_QUESTION":
@@ -111,13 +113,13 @@ export function callAgent(
   dependencies?: AgentClientDependencies,
 ): Promise<CompactExtraction>;
 export function callAgent(
-  request: ExtractionRequest,
-  dependencies?: AgentClientDependencies,
-): Promise<ChunkExtraction>;
-export function callAgent(
-  request: AuditRequest,
+  request: CompileKnowledgeMapRequest,
   dependencies?: AgentClientDependencies,
 ): Promise<KnowledgeMap>;
+export function callAgent(
+  request: MergeCompactCandidatesRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<z.infer<typeof compactMergedItemsSchema>>;
 export function callAgent(
   request: QuestionRequest,
   dependencies?: AgentClientDependencies,
@@ -150,8 +152,8 @@ export function callAgent(
   request: AgentOperationRequest,
   dependencies?: AgentClientDependencies,
 ): Promise<
-  | ChunkExtraction
   | CompactExtraction
+  | z.infer<typeof compactMergedItemsSchema>
   | KnowledgeMap
   | FirstQuestion
   | StageQuestion

@@ -4,6 +4,7 @@ import { createPublicError } from "@/lib/errors/public-error";
 import { AgentServiceError, runAgentOperation } from "@/server/agents/service";
 import {
   acquireAgentRequest,
+  agentRequestCategory,
   AgentRequestGuardError,
 } from "@/server/agents/request-guard";
 import { DeepSeekError } from "@/server/deepseek/client";
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
 
   let release: (() => void) | undefined;
   try {
-    release = acquireAgentRequest(clientId(request));
+    release = acquireAgentRequest(clientId(request), agentRequestCategory(body));
     return json(
       { result: await runAgentOperation(body, apiKey, undefined, request.signal) },
       200,
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
       return error.code === "INVALID_REQUEST"
         ? errorResponse("VALIDATION_ERROR", "提交的学习内容无效。", 400)
         : errorResponse(
-            "UPSTREAM_UNAVAILABLE",
+            "MODEL_OUTPUT_INVALID",
             "模型结果暂时无法使用，请重试。",
             502,
             error.errorId,

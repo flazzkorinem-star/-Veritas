@@ -3,7 +3,34 @@ import { describe, expect, it, vi } from "vitest";
 import { processTextMaterial } from "./process-text-material";
 
 const source = { label: "第 1 段", excerpt: "太阳驱动蒸发。" };
-const extraction = {
+function extractionFor(sourceUnits: Array<{ id: string }>) {
+  const sourceUnitIds = sourceUnits.map(({ id }) => id);
+  return {
+    modules: [{ id: "module-1", title: "模块", sourceUnitIds }],
+    knowledgeItems: [
+      {
+        id: "item-1",
+        moduleId: "module-1",
+        title: "循环动力",
+        summary: "太阳能驱动蒸发。",
+        sourceUnitIds,
+        commonMisconceptions: [],
+      },
+    ],
+    topicDrafts: [
+      {
+        id: "topic-1",
+        moduleId: "module-1",
+        title: "循环动力",
+        objective: "解释循环动力。",
+        knowledgeItemIds: ["item-1"],
+      },
+    ],
+    sourceCoverage: sourceUnitIds,
+  };
+}
+const extraction = extractionFor([{ id: "source-1" }]);
+const map = {
   modules: [{ id: "module-1", title: "模块", sourceRange: "第 1 段" }],
   knowledgeItems: [
     {
@@ -17,9 +44,6 @@ const extraction = {
       commonMisconceptions: [],
     },
   ],
-};
-const map = {
-  ...extraction,
   nodes: [
     {
       id: "node-1",
@@ -49,7 +73,7 @@ const map = {
 };
 
 describe("文本材料处理编排", () => {
-  it("依次完成读取、分块提取、覆盖审计和有意义的首问生成", async () => {
+  it("依次完成读取、紧凑提取、知识编译和有意义的首问生成", async () => {
     const callAgent = vi
       .fn()
       .mockResolvedValueOnce(extraction)
@@ -79,8 +103,8 @@ describe("文本材料处理编排", () => {
       },
     });
     expect(callAgent.mock.calls.map(([request]) => request.operation)).toEqual([
-      "EXTRACT_KNOWLEDGE",
-      "AUDIT_KNOWLEDGE_MAP",
+      "EXTRACT_COMPACT_KNOWLEDGE",
+      "COMPILE_KNOWLEDGE_MAP",
       "CREATE_FIRST_QUESTION",
     ]);
     expect(callAgent.mock.calls[2]![0].input.materialContext).toEqual({
@@ -128,23 +152,28 @@ describe("文本材料处理编排", () => {
     expect(callAgent).toHaveBeenCalledTimes(2);
   });
 
-  it("最多并行提取两个分块，并保持审计输入顺序", async () => {
+  it("最多并行提取四个分片，并保持编译输入顺序", async () => {
     let activeExtractions = 0;
     let maxActiveExtractions = 0;
-    const callAgent = vi.fn(async (request: { operation: string; input: unknown }) => {
-      if (request.operation === "EXTRACT_KNOWLEDGE") {
-        activeExtractions += 1;
-        maxActiveExtractions = Math.max(maxActiveExtractions, activeExtractions);
-        await Promise.resolve();
-        activeExtractions -= 1;
-        return extraction;
-      }
-      if (request.operation === "AUDIT_KNOWLEDGE_MAP") return map;
-      return { assistantMessage: "这份材料有一个核心主题。" };
-    });
+    const callAgent = vi.fn(
+      async (request: {
+        operation: string;
+        input: { sourceUnits?: Array<{ id: string }> };
+      }) => {
+        if (request.operation === "EXTRACT_COMPACT_KNOWLEDGE") {
+          activeExtractions += 1;
+          maxActiveExtractions = Math.max(maxActiveExtractions, activeExtractions);
+          await Promise.resolve();
+          activeExtractions -= 1;
+          return extractionFor(request.input.sourceUnits!);
+        }
+        if (request.operation === "COMPILE_KNOWLEDGE_MAP") return map;
+        return { opening: "材料重点清楚。", question: "主要动力是什么？" };
+      },
+    );
     const blocks = Array.from({ length: 4 }, (_, index) => ({
       sourceLabel: `第 ${index + 1} 部分`,
-      text: String(index + 1).repeat(15_000),
+      text: ["水", "汽", "云", "雨"][index]!.repeat(20_000),
     }));
 
     await processTextMaterial(new File(["材料"], "notes.txt"), vi.fn(), {
@@ -157,41 +186,54 @@ describe("文本材料处理编排", () => {
       }) as never,
     });
 
-    expect(maxActiveExtractions).toBe(2);
-    const auditRequest = callAgent.mock.calls.find(
-      ([request]) => request.operation === "AUDIT_KNOWLEDGE_MAP",
+    expect(maxActiveExtractions).toBe(4);
+    const compileRequest = callAgent.mock.calls.find(
+      ([request]) => request.operation === "COMPILE_KNOWLEDGE_MAP",
     )?.[0] as
       | {
           input: {
-            chunks: Array<{ chunkId: string; extraction: typeof extraction }>;
+            shards: Array<{ shardId: string; extraction: typeof extraction }>;
           };
         }
       | undefined;
-    expect(auditRequest?.input.chunks.map(({ chunkId }) => chunkId)).toEqual([
-      "chunk-1",
-      "chunk-2",
-      "chunk-3",
-      "chunk-4",
+    expect(compileRequest?.input.shards.map(({ shardId }) => shardId)).toEqual([
+      "shard-1",
+      "shard-2",
+      "shard-3",
+      "shard-4",
     ]);
     expect(
-      auditRequest?.input.chunks.flatMap(({ extraction }) =>
+      compileRequest?.input.shards.flatMap(({ extraction }) =>
         extraction.knowledgeItems.map((item) => item.id),
       ),
-    ).toEqual(["c1-i1", "c2-i1", "c3-i1", "c4-i1"]);
+    ).toEqual(["s1-i1", "s2-i1", "s3-i1", "s4-i1"]);
   });
 
   it("只按实际完成的分块数量上报提取进度", async () => {
-    const pending = new Map<string, (value: typeof extraction) => void>();
+    const pending = new Map<
+      string,
+      {
+        sourceUnits: Array<{ id: string }>;
+        resolve: (value: typeof extraction) => void;
+      }
+    >();
     const callAgent = vi.fn(
-      (request: { operation: string; input: { chunkId?: string } }) => {
-        if (request.operation === "EXTRACT_KNOWLEDGE") {
+      (request: {
+        operation: string;
+        input: { shardId?: string; sourceUnits?: Array<{ id: string }> };
+      }) => {
+        if (request.operation === "EXTRACT_COMPACT_KNOWLEDGE") {
           return new Promise((resolve) => {
-            pending.set(request.input.chunkId!, resolve);
+            pending.set(request.input.shardId!, {
+              sourceUnits: request.input.sourceUnits!,
+              resolve,
+            });
           });
         }
-        if (request.operation === "AUDIT_KNOWLEDGE_MAP") return Promise.resolve(map);
+        if (request.operation === "COMPILE_KNOWLEDGE_MAP") return Promise.resolve(map);
         return Promise.resolve({
-          assistantMessage: "这份材料有一个核心主题。",
+          opening: "材料重点清楚。",
+          question: "主要动力是什么？",
         });
       },
     );
@@ -203,8 +245,8 @@ describe("文本材料处理编排", () => {
         mimeType: "text/plain",
         text: "第一部分\n\n第二部分",
         sourceBlocks: [
-          { sourceLabel: "第一部分", text: "一".repeat(15_000) },
-          { sourceLabel: "第二部分", text: "二".repeat(15_000) },
+          { sourceLabel: "第一部分", text: "一".repeat(20_000) },
+          { sourceLabel: "第二部分", text: "二".repeat(20_000) },
         ],
       }) as never,
     });
@@ -217,9 +259,11 @@ describe("文本材料处理编排", () => {
         .map((progress) => progress.currentChunk);
     expect(completedCounts()).toEqual([0]);
 
-    pending.get("chunk-2")!(extraction);
+    const second = pending.get("shard-2")!;
+    second.resolve(extractionFor(second.sourceUnits));
     await vi.waitFor(() => expect(completedCounts()).toEqual([0, 1]));
-    pending.get("chunk-1")!(extraction);
+    const first = pending.get("shard-1")!;
+    first.resolve(extractionFor(first.sourceUnits));
     await processing;
 
     expect(completedCounts()).toEqual([0, 1, 2]);

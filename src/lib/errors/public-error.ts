@@ -4,6 +4,7 @@ export const publicErrorCodeSchema = z.enum([
   "CONFIGURATION_ERROR",
   "VALIDATION_ERROR",
   "RATE_LIMITED",
+  "MODEL_OUTPUT_INVALID",
   "UPSTREAM_UNAVAILABLE",
   "INTERNAL_ERROR",
 ]);

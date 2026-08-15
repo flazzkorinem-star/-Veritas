@@ -17,7 +17,7 @@ export const materialSourceUnitSchema = z
   })
   .strict();
 
-const compactModuleSchema = z
+export const compactModuleSchema = z
   .object({
     id: idSchema,
     title: shortTextSchema,
@@ -25,7 +25,7 @@ const compactModuleSchema = z
   })
   .strict();
 
-const compactKnowledgeItemSchema = z
+export const compactKnowledgeItemSchema = z
   .object({
     id: idSchema,
     moduleId: idSchema,
@@ -36,7 +36,7 @@ const compactKnowledgeItemSchema = z
   })
   .strict();
 
-const compactTopicDraftSchema = z
+export const compactTopicDraftSchema = z
   .object({
     id: idSchema,
     moduleId: idSchema,
@@ -52,9 +52,9 @@ function hasDuplicates(values: readonly string[]) {
 
 export const compactExtractionSchema = z
   .object({
-    modules: z.array(compactModuleSchema).min(1).max(40),
+    modules: z.array(compactModuleSchema).min(1).max(120),
     knowledgeItems: z.array(compactKnowledgeItemSchema).min(1).max(120),
-    topicDrafts: z.array(compactTopicDraftSchema).min(1).max(80),
+    topicDrafts: z.array(compactTopicDraftSchema).min(1).max(120),
     sourceCoverage: z.array(sourceUnitIdSchema).min(1).max(400),
   })
   .strict()

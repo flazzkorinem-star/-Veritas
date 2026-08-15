@@ -1,5 +1,4 @@
 import type { FirstQuestion, KnowledgeMap } from "@/domain/knowledge-map/contracts";
-import { namespaceChunkExtraction } from "@/domain/knowledge-map/stable-extraction-ids";
 import { buildBudgetedMaterialRequest } from "@/domain/agents/context-budget";
 import {
   EXTRACTION_CONCURRENCY,
@@ -8,10 +7,12 @@ import {
 } from "@/config/agent-limits";
 
 import { callAgent } from "./agent-client";
-import { chunkSourceBlocks } from "./chunk-source-blocks";
+import { buildMaterialShards } from "./build-material-shards";
+import { extractMaterialShards } from "./extract-material-shards";
 import { MaterialFileError } from "./material-file";
 import { parseMaterial } from "./parse-material";
 import type { ParsingProgress } from "./parsed-material";
+import { prepareCompactCompile } from "./prepare-compact-compile";
 
 export type MaterialProcessingProgress =
   | { stage: "READING"; loadedBytes: number; totalBytes: number }
@@ -34,8 +35,8 @@ export class TextProcessingError extends Error {
       code === "NO_RELIABLE_NODE"
         ? "没有从材料中找到可靠的学习主题，请检查内容后重试。"
         : code === "MODEL_PROCESSING_TIMEOUT"
-          ? "整理材料超过 4 分钟，请重试或拆分材料。"
-          : "整份材料处理超过 5 分钟，请重试或拆分材料。",
+          ? "整理材料超过 170 秒，请重试或拆分材料。"
+          : "整份材料处理超过 3 分钟，请重试或拆分材料。",
     );
     this.name = "TextProcessingError";
   }
@@ -84,7 +85,8 @@ export async function processTextMaterial(
       onProgress,
       totalSignal,
     );
-    const chunks = chunkSourceBlocks(material.sourceBlocks);
+    const shards = buildMaterialShards(material.sourceBlocks);
+    const sourceUnits = shards.flatMap(({ sourceUnits }) => sourceUnits);
     const startedAt = now();
     const modelDeadline = deadline(
       dependencies.modelTimeoutMs ?? MODEL_PROCESSING_MAX_MS,
@@ -96,46 +98,37 @@ export async function processTextMaterial(
       operationController.signal,
     );
     try {
-      const extractedChunks = [];
-      let completedChunks = 0;
       onProgress({
         stage: "EXTRACTING",
-        currentChunk: completedChunks,
-        totalChunks: chunks.length,
+        currentChunk: 0,
+        totalChunks: shards.length,
         startedAt,
       });
-      for (let start = 0; start < chunks.length; start += EXTRACTION_CONCURRENCY) {
-        const batch = chunks.slice(start, start + EXTRACTION_CONCURRENCY);
-        const extracted = await Promise.all(
-          batch.map(async (chunk) => {
-            if (modelSignal.aborted) {
-              throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
-            }
-            const extraction = await runAgent(
-              { operation: "EXTRACT_KNOWLEDGE", input: chunk },
-              { signal: modelSignal },
-            );
-            completedChunks += 1;
-            onProgress({
-              stage: "EXTRACTING",
-              currentChunk: completedChunks,
-              totalChunks: chunks.length,
-              startedAt,
-            });
-            return {
-              chunkId: chunk.chunkId,
-              extraction: namespaceChunkExtraction(chunk.chunkId, extraction),
-            };
-          }),
-        );
-        extractedChunks.push(...extracted);
+      if (modelSignal.aborted) {
+        throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
       }
+      const extractedShards = await extractMaterialShards(shards, {
+        callAgent: runAgent,
+        maxConcurrency: EXTRACTION_CONCURRENCY,
+        signal: modelSignal,
+        onProgress: (currentChunk, totalChunks) =>
+          onProgress({
+            stage: "EXTRACTING",
+            currentChunk,
+            totalChunks,
+            startedAt,
+          }),
+      });
 
       onProgress({ stage: "AUDITING", startedAt });
+      const compileShards = await prepareCompactCompile(extractedShards, {
+        callAgent: runAgent,
+        signal: modelSignal,
+      });
       const knowledgeMap = await runAgent(
         {
-          operation: "AUDIT_KNOWLEDGE_MAP",
-          input: { chunks: extractedChunks },
+          operation: "COMPILE_KNOWLEDGE_MAP",
+          input: { sourceUnits, shards: compileShards },
         },
         { signal: modelSignal },
       );

@@ -2,79 +2,56 @@ import { describe, expect, it, vi } from "vitest";
 
 import { callAgent } from "./agent-client";
 
-const extraction = {
-  modules: [{ id: "module-1", title: "模块", sourceRange: "第 1 段" }],
+const compactExtraction = {
+  modules: [{ id: "module-1", title: "模块", sourceUnitIds: ["source-1"] }],
   knowledgeItems: [
     {
       id: "item-1",
       moduleId: "module-1",
       title: "条目",
       summary: "摘要",
-      kind: "CORE" as const,
-      diagnosticRationale: "值得诊断",
-      sourceReferences: [{ label: "第 1 段", excerpt: "材料摘录" }],
+      sourceUnitIds: ["source-1"],
       commonMisconceptions: [],
     },
   ],
+  topicDrafts: [
+    {
+      id: "topic-1",
+      moduleId: "module-1",
+      title: "主题",
+      objective: "理解条目。",
+      knowledgeItemIds: ["item-1"],
+    },
+  ],
+  sourceCoverage: ["source-1"],
+};
+
+const compactOperation = {
+  operation: "EXTRACT_COMPACT_KNOWLEDGE" as const,
+  input: {
+    shardId: "shard-1",
+    sourceUnits: [{ id: "source-1", sourceLabel: "第 1 页", text: "材料" }],
+  },
 };
 
 describe("浏览器 Agent 客户端", () => {
   it("校验紧凑提取响应，而不是把未知模型字段带入编排层", async () => {
-    const compactExtraction = {
-      modules: [
-        { id: "module-1", title: "模块", sourceUnitIds: ["source-1"] },
-      ],
-      knowledgeItems: [
-        {
-          id: "item-1",
-          moduleId: "module-1",
-          title: "条目",
-          summary: "摘要",
-          sourceUnitIds: ["source-1"],
-          commonMisconceptions: [],
-        },
-      ],
-      topicDrafts: [
-        {
-          id: "topic-1",
-          moduleId: "module-1",
-          title: "主题",
-          objective: "理解条目。",
-          knowledgeItemIds: ["item-1"],
-        },
-      ],
-      sourceCoverage: ["source-1"],
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(
-      Response.json({ result: compactExtraction }, { status: 200 }),
-    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
 
-    await expect(
-      callAgent(
-        {
-          operation: "EXTRACT_COMPACT_KNOWLEDGE",
-          input: {
-            shardId: "shard-1",
-            sourceUnits: [
-              { id: "source-1", sourceLabel: "第 1 页", text: "材料" },
-            ],
-          },
-        },
-        { fetchImpl },
-      ),
-    ).resolves.toEqual(compactExtraction);
+    await expect(callAgent(compactOperation, { fetchImpl })).resolves.toEqual(
+      compactExtraction,
+    );
   });
 
   it("只向同源路由发送固定业务操作，并校验结果", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(Response.json({ result: extraction }, { status: 200 }));
-    const operation = {
-      operation: "EXTRACT_KNOWLEDGE" as const,
-      input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
-    };
+      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
+    const operation = compactOperation;
 
-    await expect(callAgent(operation, { fetchImpl })).resolves.toEqual(extraction);
+    await expect(callAgent(operation, { fetchImpl })).resolves.toEqual(compactExtraction);
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe("/api/agents");
     expect(JSON.parse(init.body)).toEqual(operation);
@@ -86,18 +63,15 @@ describe("浏览器 Agent 客户端", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
-        Response.json({ result: { ...extraction, secret: "不应出现" } }, { status: 200 }),
+        Response.json(
+          { result: { ...compactExtraction, secret: "不应出现" } },
+          { status: 200 },
+        ),
       );
 
-    await expect(
-      callAgent(
-        {
-          operation: "EXTRACT_KNOWLEDGE",
-          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
-        },
-        { fetchImpl },
-      ),
-    ).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+    await expect(callAgent(compactOperation, { fetchImpl })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+    });
   });
 
   it("只显示服务端稳定错误，不采用原始响应正文", async () => {
@@ -114,15 +88,7 @@ describe("浏览器 Agent 客户端", () => {
       ),
     );
 
-    await expect(
-      callAgent(
-        {
-          operation: "EXTRACT_KNOWLEDGE",
-          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
-        },
-        { fetchImpl },
-      ),
-    ).rejects.toMatchObject({
+    await expect(callAgent(compactOperation, { fetchImpl })).rejects.toMatchObject({
       code: "RATE_LIMITED",
       message: "请求较多，请稍等片刻再试。",
     });
@@ -131,16 +97,10 @@ describe("浏览器 Agent 客户端", () => {
   it("请求体超过同源 API 上限时不发送网络请求", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(Response.json({ result: extraction }, { status: 200 }));
+      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
 
     await expect(
-      callAgent(
-        {
-          operation: "EXTRACT_KNOWLEDGE",
-          input: { chunkId: "chunk-1", sourceLabel: "第 1 段", text: "材料" },
-        },
-        { fetchImpl, maxRequestBytes: 10 },
-      ),
+      callAgent(compactOperation, { fetchImpl, maxRequestBytes: 10 }),
     ).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
       message: "提交给模型的内容过大，请拆分材料后重试。",

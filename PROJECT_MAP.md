@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-面向“学过材料后发现并补齐遗漏”的本地正式版已经完成收尾，并通过完整 Mock 与定向真实 DeepSeek 验收；后续改动从当前稳定基线继续。
+本地正式版已采用紧凑分层材料编译器；用户提供的六份真实材料已在生产 Edge 中走通上传、对话、主题完成与报告，约 5 MB / 28 万中文字符的容量样本在 142.1 秒完成知识地图和首问。
 
 ## 根目录
 
@@ -23,6 +23,7 @@
 - `SECURITY.md`：安全实现与测试底线。
 - `归档文件/`：只保存历史探索、首版实施过程和早期参考；日常开发不得读取、搜索或引用。
 - `docs/acceptance/first-e2e.md`：首条纵向验收材料的预期行为。
+- `docs/acceptance/六份材料真实链路验收.md`：六份用户材料的真实上传耗时、完整验收对话和最终学习报告。
 - `docs/brand/vita-assets.md`：记录维塔最终身份锁、七态动作、聊天头像与资产来源。
 - `tests/fixtures/end-to-end/water-cycle.md`：首条纵向验收用 Markdown 材料。
 - `public/vita/*-final.png`、`*-avatar-final.png`：从最终维塔母版直接提取的七态动作与聊天近景头像。
@@ -37,7 +38,7 @@
 - `src/app/page.tsx`：挂载本地学习工作区。
 - `src/app/globals.css`：全局令牌、两区工作区、固定视口内的消息滚动与输入区、按需主题/进度浮层、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
-- `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、Agent 2 浏览器与上游整包字节预算、最近消息预算、路由总并发数、材料处理总预算、模型阶段预算和 Agent 1 分块并发数。
+- `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、Agent 2 浏览器与上游整包字节预算、最近消息预算、路由总并发与分类容量、3 分钟材料总预算、170 秒模型预算和 Agent 1 四路提取并发。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
@@ -46,8 +47,12 @@
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、自动答案后的同层验证、完成与计分；主动索要答案可直接推进，自动答案必须验证答对后推进。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
 - `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；单个分块内的模块与条目 ID 必须唯一。
-- `src/domain/knowledge-map/stable-extraction-ids.ts`：按分块和原始顺序为抽取结果重分配稳定命名空间 ID，并同步条目到模块的引用。
-- `src/domain/knowledge-map/audit-assembly.ts`：校验只含合并谱系、诊断主题和条目归属的精简审计；由代码确定性组装最终知识地图、条目类型、节点顺序和来源覆盖。
+- `src/domain/knowledge-map/compact-contracts.ts`：定义来源单元、紧凑模块、知识候选和主题草案的严格 Zod 契约。
+- `src/domain/knowledge-map/stable-compact-ids.ts`：按分片和原始顺序为紧凑结果分配稳定命名空间 ID，并同步全部内部引用。
+- `src/domain/knowledge-map/knowledge-audit-contracts.ts`：定义最终编译的合并谱系、诊断主题和条目归属契约。
+- `src/domain/knowledge-map/compact-merge.ts`：校验局部归并谱系并确定性恢复规范候选。
+- `src/domain/knowledge-map/compact-assembly.ts`：展开最终谱系并确定性恢复模块、来源、条目类型、主题顺序和完整覆盖。
+- `src/domain/knowledge-map/compact-fallback-extraction.ts`、`compact-fallback-audit.ts`：在模型结构连续失败时，从已验证来源和候选生成仍满足来源守恒与唯一归属的紧凑降级结果。
 - `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助、待开始主题排序与报告操作；Agent 2 的线上材料上下文只接受精简目录。
 - `src/domain/agents/context-budget.ts`：按整包 JSON 字节预算确定性组装 Agent 2 请求，优先保留当前主题、最新消息和模块/条目目录，剩余空间再加入摘要。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
@@ -66,11 +71,14 @@
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
-- `src/features/materials/process-text-material.ts`：在材料与模型总预算内编排多格式解析、固定两路分块提取、稳定 ID 重分配、精简覆盖审计和首个有意义问题，按实际完成数报告进度、保持原文顺序并传播取消信号。
+- `src/features/materials/build-material-shards.ts`：将解析块转换为稳定来源单元，合并连续短段，并按实际 UTF-8 请求字节与单片 120 来源上限生成自适应分片。
+- `src/features/materials/extract-material-shards.ts`：以最多四路并发提取紧凑候选，保留成功结果，对结构失败只隔离二分一层并在叶级确定性降级。
+- `src/features/materials/prepare-compact-compile.ts`：按每批最多 60 条候选执行分层归并，隔离失败批次并为最终编译准备受控输入。
+- `src/features/materials/process-text-material.ts`：在 3 分钟材料总预算和 170 秒模型预算内编排解析、紧凑提取、分层归并、最终编译和首问，按实际完成数报告进度并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示、答案、三轮停滞后的自动讲解与同层小验证，以及学习目标驱动的待开始主题排序；状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
-- `src/server/agents/service.ts`：组装材料处理、精简知识审计、通用 Vita 对话、诊断辅助与报告的隔离提示，确定性恢复最终知识地图；作为唯一重试所有者统一限制尝试次数和绝对截止时间，限制 Agent 2 上游整包字节数，反馈脱敏校验路径、剥离白名单空字段、校验业务状态，并记录不含材料与模型正文的操作元数据。
+- `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，提供确定性最终降级，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源，调用 Agent 3 并保存覆盖整份材料范围的任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围，不解析模型 HTML。
@@ -100,8 +108,8 @@
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
 - `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、单次物理请求与调用方取消传播。
 - `src/domain/agents/context-budget.test.ts`：验证 Agent 2 整包 JSON 字节上限、确定性裁剪、当前主题完整保留、最新消息优先和目录先于摘要。
-- `src/domain/knowledge-map/stable-extraction-ids.test.ts`、`audit-assembly.test.ts`：验证多分块重复 ID 隔离，以及精简审计到完整知识地图、类型、节点顺序和来源覆盖的确定性恢复。
-- `src/server/agents/service.test.ts`：验证提示隔离、精简审计、覆盖完整性、Zod 拒绝、单一重试预算、共享截止时间、定向结构修复、白名单归一化与日志脱敏。
+- `src/domain/knowledge-map/compact-*.test.ts`：验证稳定 ID、分层归并、最终知识地图装配、来源覆盖和确定性降级边界。
+- `src/server/agents/service.test.ts`、`service-compact.test.ts`：验证提示隔离、紧凑提取与编译、覆盖完整性、Zod 拒绝、单一重试预算、共享截止时间、定向结构修复和日志脱敏。
 - `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。
 - `src/storage/material-processing-repository.test.ts`：验证处理任务、原始文件、知识地图、会话、消息和失败状态的事务持久化。
@@ -124,6 +132,8 @@
 - `e2e/phase13-acceptance.spec.ts`：在生产 Edge 验证键盘与语义基线、减少动效偏好、1024×768 平板断点、全同源首屏网络和初始 JavaScript 资源预算。
 - `e2e/phase14-real-journey.spec.ts`：显式启用时在同一个生产 Edge 任务中调用真实 DeepSeek，连续验收上传、知识地图、默认首问、通用对话绕行、语义提示/答案、四层推进、未诊断范围和报告。
 - `e2e/phase15-performance-real.spec.ts`：仅显式启用时串行生成并处理 10、50、200 KiB 合成 Markdown，记录端到端耗时、同源请求字节数、调用数、状态和主题数，不进入普通 CI 的真实模型调用。
+- `e2e/material-compiler-capacity-real.spec.ts`：显式启用时生成约 5 MB、28 万中文字符 DOCX，在生产 Edge 中验证 180 秒内完成、首问可用和来源覆盖。
+- `e2e/six-material-real-journey.spec.ts`：显式启用时逐份上传 `测试文件/` 中六份真实材料，完成主题对话并生成最终报告，结果汇总写入 `docs/acceptance/六份材料真实链路验收.md`。
 - `e2e/evaluation-a0691c1.spec.ts`：显式启用时在本地生产 Edge 中串行执行 20 个真实用户评测 session，并把逐轮输入输出、确定性状态、Agent 操作、报告和截图保存到版本化评测目录。
 - `e2e/agent2-answer-coverage-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S15、S20 的目标问题，保存用户输入、Vita 输出、结构化判断和前后状态，并用完整答案验证正常推进。
 - `e2e/agent2-no-answer-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 区分六种无法作答表达、用户提问、暂停和带尝试的回答，并从真实首问连续验证三轮停滞、自动答案、同层小验证、答对后推进、分数与四层持久化状态。

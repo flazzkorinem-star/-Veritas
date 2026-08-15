@@ -1,18 +1,21 @@
 import { z } from "zod";
 
 import {
-  chunkExtractionSchema,
   diagnosticNodeSchema,
   knowledgeItemSchema,
   materialModuleSchema,
 } from "@/domain/knowledge-map/contracts";
-import { materialSourceUnitSchema } from "@/domain/knowledge-map/compact-contracts";
+import {
+  compactExtractionSchema,
+  compactKnowledgeItemSchema,
+  materialSourceUnitSchema,
+} from "@/domain/knowledge-map/compact-contracts";
 import { reportAgentInputSchema } from "@/domain/report/contracts";
 import { STAGE_ORDER, STAGE_STATUSES } from "@/domain/types";
 
-const chunkIdSchema = z.string().regex(/^chunk-[1-9][0-9]*$/);
 const stageSchema = z.enum(STAGE_ORDER);
 const learningGoalSchema = z.string().trim().min(1).max(500).nullable();
+const materialShardIdSchema = z.string().regex(/^shard-[1-9][0-9]*(?:-[12])*$/);
 const agentTwoContext = {
   node: diagnosticNodeSchema,
   knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),
@@ -50,6 +53,15 @@ const conversationContext = {
     )
     .max(20),
 };
+const materialSourceUnitsSchema = z
+  .array(materialSourceUnitSchema)
+  .min(1)
+  .max(1_000)
+  .superRefine((units, context) => {
+    if (new Set(units.map(({ id }) => id)).size !== units.length) {
+      context.addIssue({ code: "custom", message: "来源单元 ID 重复。" });
+    }
+  });
 
 export const pendingNodeOrderSchema = z
   .object({ nodeIds: z.array(z.string().trim().min(1).max(120)).min(1).max(40) })
@@ -62,45 +74,44 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
       operation: z.literal("EXTRACT_COMPACT_KNOWLEDGE"),
       input: z
         .object({
-          shardId: z.string().regex(/^shard-[1-9][0-9]*$/),
-          sourceUnits: z
-            .array(materialSourceUnitSchema)
-            .min(1)
-            .max(120)
-            .superRefine((units, context) => {
-              if (new Set(units.map(({ id }) => id)).size !== units.length) {
-                context.addIssue({ code: "custom", message: "来源单元 ID 重复。" });
-              }
-            }),
+          shardId: materialShardIdSchema,
+          sourceUnits: materialSourceUnitsSchema.max(120),
         })
         .strict(),
     })
     .strict(),
   z
     .object({
-      operation: z.literal("EXTRACT_KNOWLEDGE"),
+      operation: z.literal("MERGE_COMPACT_CANDIDATES"),
       input: z
         .object({
-          chunkId: chunkIdSchema,
-          sourceLabel: z.string().trim().min(1).max(200),
-          text: z.string().trim().min(1).max(20_000),
+          knowledgeItems: z.array(compactKnowledgeItemSchema).min(2).max(120),
         })
         .strict(),
     })
     .strict(),
   z
     .object({
-      operation: z.literal("AUDIT_KNOWLEDGE_MAP"),
+      operation: z.literal("COMPILE_KNOWLEDGE_MAP"),
       input: z
         .object({
-          chunks: z
+          sourceUnits: materialSourceUnitsSchema,
+          shards: z
             .array(
               z
-                .object({ chunkId: chunkIdSchema, extraction: chunkExtractionSchema })
+                .object({
+                  shardId: materialShardIdSchema,
+                  extraction: compactExtractionSchema,
+                })
                 .strict(),
             )
             .min(1)
-            .max(40),
+            .max(100)
+            .superRefine((shards, context) => {
+              if (new Set(shards.map(({ shardId }) => shardId)).size !== shards.length) {
+                context.addIssue({ code: "custom", message: "分片 ID 重复。" });
+              }
+            }),
         })
         .strict(),
     })

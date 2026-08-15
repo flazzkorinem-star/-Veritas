@@ -1,27 +1,27 @@
 import { z } from "zod";
 
-import {
-  AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES,
-  AUDIT_OPERATION_MAX_MS,
-} from "@/config/agent-limits";
+import { AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import {
   type AgentOperationRequest,
   agentOperationRequestSchema,
   pendingNodeOrderSchema,
 } from "@/domain/agents/contracts";
-import {
-  chunkExtractionSchema,
-  firstQuestionSchema,
-} from "@/domain/knowledge-map/contracts";
+import { firstQuestionSchema } from "@/domain/knowledge-map/contracts";
 import {
   type CompactExtraction,
   compactExtractionSchema,
 } from "@/domain/knowledge-map/compact-contracts";
 import {
-  assembleKnowledgeAudit,
-  KnowledgeAuditAssemblyError,
-  knowledgeAuditSchema,
-} from "@/domain/knowledge-map/audit-assembly";
+  assembleCompactMerge,
+  compactMergeSchema,
+  CompactMergeError,
+} from "@/domain/knowledge-map/compact-merge";
+import { knowledgeAuditSchema } from "@/domain/knowledge-map/knowledge-audit-contracts";
+import {
+  assembleCompactKnowledgeMap,
+  CompactAssemblyError,
+} from "@/domain/knowledge-map/compact-assembly";
+import { buildCompactFallbackAudit } from "@/domain/knowledge-map/compact-fallback-audit";
 import {
   hintResponseSchema,
   stageAnswerSchema,
@@ -123,6 +123,8 @@ function defaultLog(entry: AgentOperationLogEntry) {
 
 function operationMaxAttempts(operation: AgentOperationRequest["operation"]) {
   return operation === "EXTRACT_COMPACT_KNOWLEDGE" ||
+    operation === "MERGE_COMPACT_CANDIDATES" ||
+    operation === "COMPILE_KNOWLEDGE_MAP" ||
     operation === "CREATE_STAGE_QUESTION" ||
     operation === "CREATE_STAGE_VERIFICATION" ||
     operation === "RESPOND_TO_USER" ||
@@ -161,13 +163,28 @@ function zodPaths(details: string[]) {
   ];
 }
 
+function allowedRepairShape(operation: AgentOperationRequest["operation"]) {
+  if (operation === "EXTRACT_COMPACT_KNOWLEDGE") {
+    return '{"modules":[{"id":"module-1","title":"...","sourceUnitIds":["source-1"]}],"knowledgeItems":[{"id":"item-1","moduleId":"module-1","title":"...","summary":"...","sourceUnitIds":["source-1"],"commonMisconceptions":[]}],"topicDrafts":[{"id":"topic-1","moduleId":"module-1","title":"...","objective":"...","knowledgeItemIds":["item-1"]}],"sourceCoverage":["source-1"]}';
+  }
+  if (operation === "COMPILE_KNOWLEDGE_MAP") {
+    return '{"mergeGroups":[{"id":"group-1","sourceKnowledgeItemIds":["s1-i1"],"diagnosticRationale":"..."}],"nodes":[{"id":"draft-node-1","title":"...","objective":"...","canonicalUnderstanding":"...","commonMisconceptions":[],"bloomTargets":{"memory":"...","understanding":"...","application":"...","analysis":"..."},"order":1}],"assignments":[{"groupId":"group-1","disposition":"DIAGNOSED_IN_NODE","nodeId":"draft-node-1"}]}';
+  }
+  if (operation === "MERGE_COMPACT_CANDIDATES") {
+    return '{"mergeGroups":[{"id":"group-1","sourceKnowledgeItemIds":["s1-i1"],"canonical":{"title":"...","summary":"...","commonMisconceptions":[]}}]}';
+  }
+  return null;
+}
+
 function repairRequest(
+  operation: AgentOperationRequest["operation"],
   request: DeepSeekJsonRequest,
   error: AgentServiceError | DeepSeekError,
 ) {
+  const shape = allowedRepairShape(operation);
   const repair =
     error instanceof AgentServiceError
-      ? `上一次输出未通过结构校验。失败字段路径：${sanitizeDetails(error.details).join(", ") || "root"}。只修正这些字段并重新输出完整 JSON，不要解释，也不要增加未声明字段。`
+      ? `上一次输出未通过结构校验。失败字段路径：${sanitizeDetails(error.details).join(", ") || "root"}。只修正这些字段并重新输出完整 JSON，不要解释，也不要增加未声明字段。${shape ? `允许的完整形状：${shape}` : ""}`
       : "上一次输出为空、截断或不是合法 JSON。请按原定结构重新输出完整 JSON，不要解释。";
   return {
     ...request,
@@ -282,7 +299,7 @@ async function callValidated<T>(
           (error instanceof DeepSeekError && error.code === "INVALID_RESPONSE")
         ) {
           finalRequest = {
-            ...repairRequest(baseRequest, error),
+            ...repairRequest(operation, baseRequest, error),
             signal: controller.signal,
           };
         }
@@ -345,23 +362,13 @@ async function callValidated<T>(
   }
 }
 
-function extractionPrompt(
-  input: Extract<AgentOperationRequest, { operation: "EXTRACT_KNOWLEDGE" }>["input"],
-) {
-  return `从下列单个来源块提取材料模块与原子知识条目。Markdown 标题代表来源结构，必须保留标题对应的模块；不要把不同标题下的内容合成一个模块。保留概念、机制、因果、边界、区别、案例和常见误解，不要为了减少数量而丢弃内容。CORE 只用于真正影响理解和迁移的内容；代码、编号、名单和孤立数字默认只作参考，不能因为容易提问就标成 CORE。diagnosticRationale 必须说明理解价值，不能只写“材料中出现过”或“需要记忆”。每项必须有短来源摘录。输出 json 形状：{"modules":[{"id":"module-1","title":"...","sourceRange":"..."}],"knowledgeItems":[{"id":"item-1","moduleId":"module-1","title":"...","summary":"...","kind":"CORE或SUPPORTING","diagnosticRationale":"...","sourceReferences":[{"label":"...","excerpt":"..."}],"commonMisconceptions":[]}]}
-
-<UNTRUSTED_MATERIAL chunkId=${JSON.stringify(input.chunkId)} source=${JSON.stringify(input.sourceLabel)}>
-${input.text}
-</UNTRUSTED_MATERIAL>`;
-}
-
 function compactExtractionPrompt(
   input: Extract<
     AgentOperationRequest,
     { operation: "EXTRACT_COMPACT_KNOWLEDGE" }
   >["input"],
 ) {
-  return `从下列来源单元提取紧凑、完整的材料候选。保留概念、机制、因果、边界、区别、案例和材料明确出现的常见误解；代码、编号、名单和孤立数字可以作为辅助知识候选，但不要因为容易出题而提升价值。每个来源单元 ID 必须至少被一个 knowledgeItem 引用，并在 sourceCoverage 中恰好出现一次。module、knowledgeItem 与 topicDraft 的 ID 只需在本次输出内唯一。
+  return `从下列来源单元提取紧凑、完整的材料候选。Markdown 标题、页码、幻灯片和段落标签代表原文件结构；标题不同的主要章节必须保留为不同 module，不能为了压缩输出合成一个模块。保留概念、机制、因果、边界、区别、案例和材料明确出现的常见误解；代码、编号、名单和孤立数字可以作为辅助知识候选，但不要因为容易出题而提升价值。每个来源单元 ID 必须至少被一个 knowledgeItem 引用，并在 sourceCoverage 中恰好出现一次。module、knowledgeItem 与 topicDraft 的 ID 只需在本次输出内唯一。
 
 只输出这个 JSON 形状，不得增加最终归并阶段字段：{"modules":[{"id":"module-1","title":"...","sourceUnitIds":["source-1"]}],"knowledgeItems":[{"id":"item-1","moduleId":"module-1","title":"...","summary":"一句话摘要","sourceUnitIds":["source-1"],"commonMisconceptions":[]}],"topicDrafts":[{"id":"topic-1","moduleId":"module-1","title":"...","objective":"...","knowledgeItemIds":["item-1"]}],"sourceCoverage":["source-1"]}
 
@@ -382,24 +389,63 @@ function validateCompactCoverage(
   if (expected.length !== actual.length || expected.join("\n") !== actual.join("\n")) {
     invalidModelOutput(["EXTRACT_COMPACT_KNOWLEDGE:sourceCoverage:custom"]);
   }
+  const markdownSections = new Map(
+    input.sourceUnits.flatMap(({ id, text }) => {
+      const title = /^#{2,6}[ \t]+(.+)$/mu.exec(text)?.[1]?.trim().toLocaleLowerCase();
+      return title ? [[id, title] as const] : [];
+    }),
+  );
+  for (const sourceUnitId of markdownSections.keys()) {
+    const owners = extraction.modules.filter(({ sourceUnitIds }) =>
+      sourceUnitIds.includes(sourceUnitId),
+    );
+    if (owners.length !== 1) {
+      invalidModelOutput(["EXTRACT_COMPACT_KNOWLEDGE:modules:custom"]);
+    }
+  }
+  for (const materialModule of extraction.modules) {
+    const sectionTitles = new Set(
+      materialModule.sourceUnitIds.flatMap((id) => {
+        const title = markdownSections.get(id);
+        return title ? [title] : [];
+      }),
+    );
+    if (sectionTitles.size > 1) {
+      invalidModelOutput(["EXTRACT_COMPACT_KNOWLEDGE:modules:custom"]);
+    }
+  }
   return extraction;
 }
 
-function auditPrompt(
-  input: Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>["input"],
+function compactCompilePrompt(
+  input: Extract<AgentOperationRequest, { operation: "COMPILE_KNOWLEDGE_MAP" }>["input"],
 ) {
-  return `整理、去重并审计所有分块提取结果。输入 ID 已由代码加上分块命名空间。不得复述 modules、knowledgeItems、sourceReferences 或来源覆盖；代码会从原始提取和你的合并谱系确定性组装它们。每个原始知识条目必须且只能出现在一个 mergeGroup，每个 mergeGroup 必须且只能有一个 assignment。主题通常聚合 2—5 个高度相关核心条目，独立概念不得强并。
+  return `整理、去重并编译下列紧凑候选。每个原始 knowledgeItem ID 必须且只能出现在一个 mergeGroup，每个 mergeGroup 必须且只能有一个 assignment。参考 topicDrafts 判断主题边界，但必须重新核对跨分片同义项、前置关系和学习价值。主题通常聚合 2—5 个高度相关核心条目，独立概念不得强并。
 
-先判断学习价值，再设计四层目标。代码、编号、产品名名单和随时可查询的孤立事实默认归为 SUPPORTING 与 REFERENCE_ONLY；除非它们本身影响概念判断，否则不得拿来做记忆测试。memory 只检验后续理解真正需要调用的核心定义或关系；understanding、application、analysis 必须逐步检验解释、迁移和机制，不能只是换一种方式复述材料。
+先判断学习价值，再设计四层目标。代码、编号、产品名名单和随时可查询的孤立事实默认归为 SUPPORTING 与 REFERENCE_ONLY；memory 只检验后续理解真正需要调用的核心定义或关系，其他三层分别检验解释、迁移和机制。
 
-只输出符合下列精简骨架的 json，不得改字段名、不得增加字段。canonical 仅在合并后确实需要规范化时填写必要字段；不得复制来源：
-{"mergeGroups":[{"id":"group-1","sourceKnowledgeItemIds":["c1-i1"],"diagnosticRationale":"...","canonical":{"title":"...","summary":"...","commonMisconceptions":[]}}],"nodes":[{"id":"draft-node-1","title":"...","objective":"...","canonicalUnderstanding":"...","commonMisconceptions":[],"bloomTargets":{"memory":"...","understanding":"...","application":"...","analysis":"..."},"order":1}],"assignments":[{"groupId":"group-1","disposition":"DIAGNOSED_IN_NODE","nodeId":"draft-node-1"}]}
+只输出这个 JSON 形状，不得增加字段或复述来源正文：{"mergeGroups":[{"id":"group-1","sourceKnowledgeItemIds":["s1-i1"],"diagnosticRationale":"...","canonical":{"title":"...","summary":"...","commonMisconceptions":[]}}],"nodes":[{"id":"draft-node-1","title":"...","objective":"...","canonicalUnderstanding":"...","commonMisconceptions":[],"bloomTargets":{"memory":"...","understanding":"...","application":"...","analysis":"..."},"order":1}],"assignments":[{"groupId":"group-1","disposition":"DIAGNOSED_IN_NODE","nodeId":"draft-node-1"}]}
 
-diagnosticRationale 必须说明合并条目的最终学习价值。disposition 只能是 DIAGNOSED_IN_NODE、SUPPORTING_IN_NODE 或 REFERENCE_ONLY；前两种必须有 nodeId，REFERENCE_ONLY 必须有非空 reason 且不能有 nodeId。每个诊断主题至少有一个 DIAGNOSED_IN_NODE 合并组；节点 order 从 1 开始且不重复。最终 kind 由代码根据 disposition 推导。
+disposition 只能是 DIAGNOSED_IN_NODE、SUPPORTING_IN_NODE 或 REFERENCE_ONLY；前两种必须有 nodeId，REFERENCE_ONLY 必须有非空 reason。每个主题至少有一个 DIAGNOSED_IN_NODE 合并组。
 
-<UNTRUSTED_EXTRACTIONS>
-${JSON.stringify(input.chunks)}
-</UNTRUSTED_EXTRACTIONS>`;
+<UNTRUSTED_COMPACT_CANDIDATES>
+${JSON.stringify(input.shards)}
+</UNTRUSTED_COMPACT_CANDIDATES>`;
+}
+
+function compactCandidateMergePrompt(
+  input: Extract<
+    AgentOperationRequest,
+    { operation: "MERGE_COMPACT_CANDIDATES" }
+  >["input"],
+) {
+  return `合并下列紧凑知识候选中的同义项和同一原子事实，不设计诊断主题，不判断最终 CORE 或 SUPPORTING。独立概念、不同边界和不同因果关系不得为了减少数量而强行合并。每个输入 knowledgeItem ID 必须且只能出现在一个 mergeGroup；canonical 必须给出合并后的短标题、一句话摘要和材料明确支持的常见误解。
+
+只输出这个 JSON 形状，不得增加字段：{"mergeGroups":[{"id":"group-1","sourceKnowledgeItemIds":["s1-i1"],"canonical":{"title":"...","summary":"...","commonMisconceptions":[]}}]}
+
+<UNTRUSTED_COMPACT_ITEMS>
+${JSON.stringify(input.knowledgeItems)}
+</UNTRUSTED_COMPACT_ITEMS>`;
 }
 
 function firstQuestionPrompt(
@@ -557,61 +603,94 @@ export async function runAgentOperation(
         (output) =>
           validateCompactCoverage(
             extractionInput,
-            parseOutput(
-              compactExtractionSchema,
-              output,
-              "EXTRACT_COMPACT_KNOWLEDGE",
-            ),
+            parseOutput(compactExtractionSchema, output, "EXTRACT_COMPACT_KNOWLEDGE"),
           ),
         dependencies,
       );
     }
-    case "EXTRACT_KNOWLEDGE":
+    case "COMPILE_KNOWLEDGE_MAP": {
+      const compileInput = request.data.input;
+      try {
+        return await callValidated(
+          request.data.operation,
+          callModel,
+          {
+            apiKey,
+            system: AGENT_ONE_SYSTEM,
+            user: compactCompilePrompt(compileInput),
+            thinking: false,
+            maxTokens: 24_000,
+            timeoutMs: 90_000,
+            signal,
+          },
+          (value) => {
+            const audit = parseOutput(
+              knowledgeAuditSchema,
+              value,
+              "COMPILE_KNOWLEDGE_MAP",
+            );
+            try {
+              return assembleCompactKnowledgeMap(
+                compileInput.sourceUnits,
+                compileInput.shards,
+                audit,
+              ).knowledgeMap;
+            } catch (error) {
+              return invalidModelOutput(
+                error instanceof CompactAssemblyError
+                  ? error.details
+                  : ["COMPILE_KNOWLEDGE_MAP:assembly:custom"],
+              );
+            }
+          },
+          dependencies,
+        );
+      } catch (error) {
+        if (
+          !(error instanceof AgentServiceError) ||
+          error.code !== "INVALID_MODEL_OUTPUT"
+        ) {
+          throw error;
+        }
+        return assembleCompactKnowledgeMap(
+          compileInput.sourceUnits,
+          compileInput.shards,
+          buildCompactFallbackAudit(compileInput.shards),
+        ).knowledgeMap;
+      }
+    }
+    case "MERGE_COMPACT_CANDIDATES": {
+      const mergeInput = request.data.input;
       return callValidated(
         request.data.operation,
         callModel,
         {
           apiKey,
           system: AGENT_ONE_SYSTEM,
-          user: extractionPrompt(request.data.input),
+          user: compactCandidateMergePrompt(mergeInput),
           thinking: false,
-          maxTokens: 12_000,
-          timeoutMs: 90_000,
-          signal,
-        },
-        (output) => parseOutput(chunkExtractionSchema, output, "EXTRACT_KNOWLEDGE"),
-        dependencies,
-      );
-    case "AUDIT_KNOWLEDGE_MAP": {
-      const auditInput = request.data.input;
-      const knowledgeMap = await callValidated(
-        request.data.operation,
-        callModel,
-        {
-          apiKey,
-          system: AGENT_ONE_SYSTEM,
-          user: auditPrompt(auditInput),
-          thinking: true,
-          reasoningEffort: "low",
-          maxTokens: 24_000,
-          timeoutMs: AUDIT_OPERATION_MAX_MS,
+          maxTokens: 8_000,
+          timeoutMs: 45_000,
           signal,
         },
         (value) => {
-          const audit = parseOutput(knowledgeAuditSchema, value, "AUDIT_KNOWLEDGE_MAP");
+          const merge = parseOutput(
+            compactMergeSchema,
+            value,
+            "MERGE_COMPACT_CANDIDATES",
+          );
           try {
-            return assembleKnowledgeAudit(auditInput.chunks, audit).knowledgeMap;
+            return assembleCompactMerge(mergeInput.knowledgeItems, merge);
           } catch (error) {
             return invalidModelOutput(
-              error instanceof KnowledgeAuditAssemblyError
+              error instanceof CompactMergeError
                 ? error.details
-                : ["AUDIT_KNOWLEDGE_MAP:lineage:custom"],
+                : ["MERGE_COMPACT_CANDIDATES:lineage:custom"],
             );
           }
         },
         dependencies,
       );
-      return knowledgeMap;
     }
     case "CREATE_FIRST_QUESTION":
       return callValidated(

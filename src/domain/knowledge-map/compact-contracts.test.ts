@@ -36,9 +36,7 @@ function validExtraction() {
 
 describe("紧凑提取契约", () => {
   it("只保留叶级提取负责的候选字段", () => {
-    expect(compactExtractionSchema.parse(validExtraction())).toEqual(
-      validExtraction(),
-    );
+    expect(compactExtractionSchema.parse(validExtraction())).toEqual(validExtraction());
   });
 
   it.each([

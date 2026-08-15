@@ -1,78 +1,77 @@
 import { expect, test, type Browser, type Page, type Route } from "@playwright/test";
 import JSZip from "jszip";
 
-interface MockExtraction {
-  modules: Array<{
-    id: string;
-    title: string;
-    sourceRange: string;
-    [key: string]: unknown;
-  }>;
-  knowledgeItems: Array<{
-    id: string;
-    moduleId: string;
-    sourceReferences: Array<{ label: string; excerpt: string }>;
-    [key: string]: unknown;
-  }>;
-}
-
 function mockAgentResult(route: Route) {
   const request = route.request().postDataJSON() as {
     operation: string;
     input: {
       sourceLabel?: unknown;
       text?: unknown;
-      chunks?: Array<{ extraction?: MockExtraction }>;
+      sourceUnits?: Array<{ id: string; sourceLabel: string; text: string }>;
     };
   };
-  if (request.operation === "EXTRACT_KNOWLEDGE") {
-    const source = {
-      label: String(request.input.sourceLabel),
-      excerpt: String(request.input.text).slice(0, 120),
-    };
+  if (request.operation === "EXTRACT_COMPACT_KNOWLEDGE") {
+    const sourceUnitIds = request.input.sourceUnits!.map(({ id }) => id);
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         result: {
-          modules: [{ id: "module-1", title: "水循环", sourceRange: source.label }],
+          modules: [{ id: "module-1", title: "水循环", sourceUnitIds }],
           knowledgeItems: [
             {
               id: "item-1",
               moduleId: "module-1",
               title: "水循环过程",
               summary: "水在太阳能作用下循环。",
-              kind: "CORE",
-              diagnosticRationale: "这是理解材料的基础。",
-              sourceReferences: [source],
+              sourceUnitIds,
               commonMisconceptions: [],
             },
           ],
+          topicDrafts: [
+            {
+              id: "topic-1",
+              moduleId: "module-1",
+              title: "水循环过程",
+              objective: "解释水循环的主要过程。",
+              knowledgeItemIds: ["item-1"],
+            },
+          ],
+          sourceCoverage: sourceUnitIds,
         },
       }),
     });
   }
-  if (request.operation === "AUDIT_KNOWLEDGE_MAP") {
-    const extractions =
-      request.input.chunks?.flatMap((chunk) =>
-        chunk.extraction ? [chunk.extraction] : [],
-      ) ?? [];
-    const modules = extractions.flatMap((extraction) => extraction.modules);
-    const knowledgeItems = extractions.flatMap((extraction) => extraction.knowledgeItems);
-    const knowledgeItemIds = knowledgeItems.map((item) => item.id);
-    const sourceReferences = knowledgeItems.flatMap((item) => item.sourceReferences);
+  if (request.operation === "COMPILE_KNOWLEDGE_MAP") {
+    const sourceReferences = request.input.sourceUnits!.map((unit) => ({
+      label: unit.sourceLabel,
+      excerpt: unit.text.slice(0, 120),
+    }));
     return route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         result: {
-          modules,
-          knowledgeItems,
+          modules: [
+            { id: "s1-m1", title: "水循环", sourceRange: sourceReferences[0]!.label },
+          ],
+          knowledgeItems: [
+            {
+              id: "s1-i1",
+              moduleId: "s1-m1",
+              title: "水循环过程",
+              summary: "水在太阳能作用下循环。",
+              kind: "CORE",
+              diagnosticRationale: "这是理解材料的基础。",
+              sourceReferences,
+              commonMisconceptions: [],
+            },
+          ],
           nodes: [
             {
               id: "node-1",
-              moduleId: modules[0]!.id,
+              moduleId: "s1-m1",
               title: "水循环过程",
               objective: "解释水循环的主要过程。",
-              knowledgeItemIds,
+              knowledgeItemIds: ["s1-i1"],
               sourceReferences,
               canonicalUnderstanding: "水在太阳能作用下发生蒸发、凝结和降水。",
               commonMisconceptions: [],
@@ -85,11 +84,13 @@ function mockAgentResult(route: Route) {
               order: 1,
             },
           ],
-          coverageAssignments: knowledgeItemIds.map((knowledgeItemId) => ({
-            knowledgeItemId,
-            disposition: "DIAGNOSED_IN_NODE",
-            nodeId: "node-1",
-          })),
+          coverageAssignments: [
+            {
+              knowledgeItemId: "s1-i1",
+              disposition: "DIAGNOSED_IN_NODE",
+              nodeId: "node-1",
+            },
+          ],
         },
       }),
     });

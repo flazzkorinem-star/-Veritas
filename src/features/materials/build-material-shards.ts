@@ -13,6 +13,7 @@ export interface MaterialShard {
 interface ShardOptions {
   maxSourceUnitBytes?: number;
   maxShardBytes?: number;
+  maxSourceUnits?: number;
 }
 
 const utf8 = new TextEncoder();
@@ -48,7 +49,12 @@ function splitByUtf8Bytes(text: string, maxBytes: number) {
       }
     }
     if (end === start) throw new Error("来源单元字节预算过小，无法容纳一个字符。");
-    const cut = preferredBreak > start + (end - start) / 2 ? preferredBreak : end;
+    const cut =
+      end === text.length
+        ? end
+        : preferredBreak > start + (end - start) / 2
+          ? preferredBreak
+          : end;
     parts.push(text.slice(start, cut));
     start = cut;
   }
@@ -60,18 +66,57 @@ function requestBytes(sourceUnits: readonly MaterialSourceUnit[]) {
   return utf8Bytes(JSON.stringify({ sourceUnits }));
 }
 
+function containsMarkdownHeading(text: string) {
+  return /^#{1,6}[ \t]+\S/mu.test(text);
+}
+
+function packShortBlocks(blocks: readonly ParsedSourceBlock[], maxBytes: number) {
+  const packed: Array<{
+    firstLabel: string;
+    lastLabel: string;
+    text: string;
+  }> = [];
+  for (const block of blocks) {
+    const current = packed.at(-1);
+    const combinedText = current ? `${current.text}\n\n${block.text}` : block.text;
+    if (
+      current &&
+      !containsMarkdownHeading(current.text) &&
+      !containsMarkdownHeading(block.text) &&
+      utf8Bytes(combinedText) <= maxBytes
+    ) {
+      current.lastLabel = block.sourceLabel;
+      current.text = combinedText;
+    } else {
+      packed.push({
+        firstLabel: block.sourceLabel,
+        lastLabel: block.sourceLabel,
+        text: block.text,
+      });
+    }
+  }
+  return packed.map(({ firstLabel, lastLabel, text }) => ({
+    sourceLabel: (firstLabel === lastLabel
+      ? firstLabel
+      : `${firstLabel} 至 ${lastLabel}`
+    ).slice(0, 300),
+    text,
+  }));
+}
+
 export function buildMaterialShards(
   blocks: readonly ParsedSourceBlock[],
   options: ShardOptions = {},
 ): MaterialShard[] {
   const maxSourceUnitBytes = options.maxSourceUnitBytes ?? DEFAULT_SOURCE_UNIT_BYTES;
   const maxShardBytes = options.maxShardBytes ?? DEFAULT_MATERIAL_SHARD_BYTES;
+  const maxSourceUnits = options.maxSourceUnits ?? 120;
   if (maxSourceUnitBytes > maxShardBytes) {
     throw new Error("来源单元字节预算不能大于分片字节预算。");
   }
 
   let nextSourceId = 1;
-  const sourceUnits = blocks.flatMap((block) => {
+  const sourceUnits = packShortBlocks(blocks, maxSourceUnitBytes).flatMap((block) => {
     const parts = splitByUtf8Bytes(block.text, maxSourceUnitBytes);
     return parts.map((text, index) => ({
       id: `source-${nextSourceId++}`,
@@ -86,7 +131,11 @@ export function buildMaterialShards(
   const groups: MaterialSourceUnit[][] = [];
   for (const sourceUnit of sourceUnits) {
     const current = groups.at(-1);
-    if (!current || requestBytes([...current, sourceUnit]) > maxShardBytes) {
+    if (
+      !current ||
+      current.length >= maxSourceUnits ||
+      requestBytes([...current, sourceUnit]) > maxShardBytes
+    ) {
       if (requestBytes([sourceUnit]) > maxShardBytes) {
         throw new Error("来源单元连同结构信息后超过分片字节预算。");
       }

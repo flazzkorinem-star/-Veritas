@@ -9,6 +9,7 @@ import {
   type ParsingProgress,
 } from "./parsed-material";
 import { decodeTextMaterial } from "./text-reader";
+import { chunkText } from "./chunk-text";
 
 export type MaterialParserProgress =
   { stage: "READING"; loadedBytes: number; totalBytes: number } | ParsingProgress;
@@ -29,9 +30,15 @@ export async function parseMaterial(
     switch (inspected.kind) {
       case "TEXT": {
         const material = decodeTextMaterial(file, bytes);
-        return finishParsedMaterial(file.name, file.type, [
-          { sourceLabel: "全文", text: material.text },
-        ]);
+        const blocks = /\.md$/iu.test(material.fileName)
+          ? chunkText(material.text).map(({ sourceLabel, text }) => ({
+              sourceLabel:
+                /^#{2,6}[ \t]+(.+)$/mu.exec(text)?.[1]?.trim().slice(0, 300) ??
+                sourceLabel,
+              text,
+            }))
+          : [{ sourceLabel: "全文", text: material.text }];
+        return finishParsedMaterial(material.fileName, file.type, blocks);
       }
       case "DOCX": {
         const { parseDocx } = await import("./docx-parser");
