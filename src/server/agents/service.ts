@@ -14,6 +14,10 @@ import {
   firstQuestionSchema,
 } from "@/domain/knowledge-map/contracts";
 import {
+  type CompactExtraction,
+  compactExtractionSchema,
+} from "@/domain/knowledge-map/compact-contracts";
+import {
   assembleKnowledgeAudit,
   KnowledgeAuditAssemblyError,
   knowledgeAuditSchema,
@@ -118,7 +122,8 @@ function defaultLog(entry: AgentOperationLogEntry) {
 }
 
 function operationMaxAttempts(operation: AgentOperationRequest["operation"]) {
-  return operation === "CREATE_STAGE_QUESTION" ||
+  return operation === "EXTRACT_COMPACT_KNOWLEDGE" ||
+    operation === "CREATE_STAGE_QUESTION" ||
     operation === "CREATE_STAGE_VERIFICATION" ||
     operation === "RESPOND_TO_USER" ||
     operation === "CREATE_HINT" ||
@@ -350,6 +355,36 @@ ${input.text}
 </UNTRUSTED_MATERIAL>`;
 }
 
+function compactExtractionPrompt(
+  input: Extract<
+    AgentOperationRequest,
+    { operation: "EXTRACT_COMPACT_KNOWLEDGE" }
+  >["input"],
+) {
+  return `从下列来源单元提取紧凑、完整的材料候选。保留概念、机制、因果、边界、区别、案例和材料明确出现的常见误解；代码、编号、名单和孤立数字可以作为辅助知识候选，但不要因为容易出题而提升价值。每个来源单元 ID 必须至少被一个 knowledgeItem 引用，并在 sourceCoverage 中恰好出现一次。module、knowledgeItem 与 topicDraft 的 ID 只需在本次输出内唯一。
+
+只输出这个 JSON 形状，不得增加最终归并阶段字段：{"modules":[{"id":"module-1","title":"...","sourceUnitIds":["source-1"]}],"knowledgeItems":[{"id":"item-1","moduleId":"module-1","title":"...","summary":"一句话摘要","sourceUnitIds":["source-1"],"commonMisconceptions":[]}],"topicDrafts":[{"id":"topic-1","moduleId":"module-1","title":"...","objective":"...","knowledgeItemIds":["item-1"]}],"sourceCoverage":["source-1"]}
+
+<UNTRUSTED_SOURCE_UNITS shardId=${JSON.stringify(input.shardId)}>
+${JSON.stringify(input.sourceUnits)}
+</UNTRUSTED_SOURCE_UNITS>`;
+}
+
+function validateCompactCoverage(
+  input: Extract<
+    AgentOperationRequest,
+    { operation: "EXTRACT_COMPACT_KNOWLEDGE" }
+  >["input"],
+  extraction: CompactExtraction,
+) {
+  const expected = input.sourceUnits.map(({ id }) => id).toSorted();
+  const actual = extraction.sourceCoverage.toSorted();
+  if (expected.length !== actual.length || expected.join("\n") !== actual.join("\n")) {
+    invalidModelOutput(["EXTRACT_COMPACT_KNOWLEDGE:sourceCoverage:custom"]);
+  }
+  return extraction;
+}
+
 function auditPrompt(
   input: Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>["input"],
 ) {
@@ -505,6 +540,32 @@ export async function runAgentOperation(
   if (!request.success) throw new AgentServiceError("INVALID_REQUEST");
 
   switch (request.data.operation) {
+    case "EXTRACT_COMPACT_KNOWLEDGE": {
+      const extractionInput = request.data.input;
+      return callValidated(
+        request.data.operation,
+        callModel,
+        {
+          apiKey,
+          system: AGENT_ONE_SYSTEM,
+          user: compactExtractionPrompt(extractionInput),
+          thinking: false,
+          maxTokens: 8_000,
+          timeoutMs: 70_000,
+          signal,
+        },
+        (output) =>
+          validateCompactCoverage(
+            extractionInput,
+            parseOutput(
+              compactExtractionSchema,
+              output,
+              "EXTRACT_COMPACT_KNOWLEDGE",
+            ),
+          ),
+        dependencies,
+      );
+    }
     case "EXTRACT_KNOWLEDGE":
       return callValidated(
         request.data.operation,

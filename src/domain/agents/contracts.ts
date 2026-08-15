@@ -6,6 +6,7 @@ import {
   knowledgeItemSchema,
   materialModuleSchema,
 } from "@/domain/knowledge-map/contracts";
+import { materialSourceUnitSchema } from "@/domain/knowledge-map/compact-contracts";
 import { reportAgentInputSchema } from "@/domain/report/contracts";
 import { STAGE_ORDER, STAGE_STATUSES } from "@/domain/types";
 
@@ -56,6 +57,25 @@ export const pendingNodeOrderSchema = z
 export type PendingNodeOrder = z.infer<typeof pendingNodeOrderSchema>;
 
 export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
+  z
+    .object({
+      operation: z.literal("EXTRACT_COMPACT_KNOWLEDGE"),
+      input: z
+        .object({
+          shardId: z.string().regex(/^shard-[1-9][0-9]*$/),
+          sourceUnits: z
+            .array(materialSourceUnitSchema)
+            .min(1)
+            .max(120)
+            .superRefine((units, context) => {
+              if (new Set(units.map(({ id }) => id)).size !== units.length) {
+                context.addIssue({ code: "custom", message: "来源单元 ID 重复。" });
+              }
+            }),
+        })
+        .strict(),
+    })
+    .strict(),
   z
     .object({
       operation: z.literal("EXTRACT_KNOWLEDGE"),

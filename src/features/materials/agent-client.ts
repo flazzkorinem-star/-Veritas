@@ -16,6 +16,10 @@ import {
   firstQuestionSchema,
 } from "@/domain/knowledge-map/contracts";
 import {
+  type CompactExtraction,
+  compactExtractionSchema,
+} from "@/domain/knowledge-map/compact-contracts";
+import {
   type HintResponse,
   hintResponseSchema,
   type StageAnswer,
@@ -54,6 +58,10 @@ type ExtractionRequest = Extract<
   AgentOperationRequest,
   { operation: "EXTRACT_KNOWLEDGE" }
 >;
+type CompactExtractionRequest = Extract<
+  AgentOperationRequest,
+  { operation: "EXTRACT_COMPACT_KNOWLEDGE" }
+>;
 type AuditRequest = Extract<AgentOperationRequest, { operation: "AUDIT_KNOWLEDGE_MAP" }>;
 type QuestionRequest = Extract<
   AgentOperationRequest,
@@ -74,6 +82,8 @@ type PendingNodeOrderRequest = Extract<
 
 function resultSchema(operation: AgentOperationRequest["operation"]) {
   switch (operation) {
+    case "EXTRACT_COMPACT_KNOWLEDGE":
+      return compactExtractionSchema;
     case "EXTRACT_KNOWLEDGE":
       return chunkExtractionSchema;
     case "AUDIT_KNOWLEDGE_MAP":
@@ -96,6 +106,10 @@ function resultSchema(operation: AgentOperationRequest["operation"]) {
   }
 }
 
+export function callAgent(
+  request: CompactExtractionRequest,
+  dependencies?: AgentClientDependencies,
+): Promise<CompactExtraction>;
 export function callAgent(
   request: ExtractionRequest,
   dependencies?: AgentClientDependencies,
@@ -137,6 +151,7 @@ export function callAgent(
   dependencies?: AgentClientDependencies,
 ): Promise<
   | ChunkExtraction
+  | CompactExtraction
   | KnowledgeMap
   | FirstQuestion
   | StageQuestion

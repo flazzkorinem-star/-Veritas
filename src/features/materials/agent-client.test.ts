@@ -19,6 +19,52 @@ const extraction = {
 };
 
 describe("浏览器 Agent 客户端", () => {
+  it("校验紧凑提取响应，而不是把未知模型字段带入编排层", async () => {
+    const compactExtraction = {
+      modules: [
+        { id: "module-1", title: "模块", sourceUnitIds: ["source-1"] },
+      ],
+      knowledgeItems: [
+        {
+          id: "item-1",
+          moduleId: "module-1",
+          title: "条目",
+          summary: "摘要",
+          sourceUnitIds: ["source-1"],
+          commonMisconceptions: [],
+        },
+      ],
+      topicDrafts: [
+        {
+          id: "topic-1",
+          moduleId: "module-1",
+          title: "主题",
+          objective: "理解条目。",
+          knowledgeItemIds: ["item-1"],
+        },
+      ],
+      sourceCoverage: ["source-1"],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(
+      Response.json({ result: compactExtraction }, { status: 200 }),
+    );
+
+    await expect(
+      callAgent(
+        {
+          operation: "EXTRACT_COMPACT_KNOWLEDGE",
+          input: {
+            shardId: "shard-1",
+            sourceUnits: [
+              { id: "source-1", sourceLabel: "第 1 页", text: "材料" },
+            ],
+          },
+        },
+        { fetchImpl },
+      ),
+    ).resolves.toEqual(compactExtraction);
+  });
+
   it("只向同源路由发送固定业务操作，并校验结果", async () => {
     const fetchImpl = vi
       .fn()
