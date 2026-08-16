@@ -4,6 +4,7 @@ import {
 } from "@/domain/knowledge-map/compact-contracts";
 
 import { AgentClientError, callAgent } from "./agent-client";
+import { createSemaphore } from "./concurrency";
 
 export interface CompactCompileShard {
   shardId: string;
@@ -13,6 +14,7 @@ export interface CompactCompileShard {
 interface PrepareDependencies {
   callAgent?: typeof callAgent;
   maxBatchItems?: number;
+  maxConcurrency?: number;
   maxFinalItems?: number;
   onBypass?: () => void;
   signal?: AbortSignal;
@@ -81,6 +83,7 @@ export async function prepareCompactCompile(
   if (itemCount(shards) <= maxFinalItems) return shards;
 
   const invokeAgent = dependencies.callAgent ?? callAgent;
+  const acquire = createSemaphore(dependencies.maxConcurrency ?? 4);
   let usedBypass = false;
   async function mergeGroup(
     group: CompactCompileShard[],
@@ -90,15 +93,26 @@ export async function prepareCompactCompile(
     if (knowledgeItems.length < 2) return group;
 
     try {
-      const canonicalItems = await invokeAgent(
-        {
-          operation: "MERGE_COMPACT_CANDIDATES",
-          input: { knowledgeItems },
-        },
-        { signal: dependencies.signal },
-      );
+      const release = await acquire();
+      let canonicalItems: CompactExtraction["knowledgeItems"];
+      try {
+        canonicalItems = await invokeAgent(
+          {
+            operation: "MERGE_COMPACT_CANDIDATES",
+            input: { knowledgeItems },
+          },
+          { signal: dependencies.signal },
+        );
+      } finally {
+        release();
+      }
       return [rebuildPartition(group, canonicalItems, index)];
     } catch (error) {
+      if (error instanceof AgentClientError && error.code === "UPSTREAM_UNAVAILABLE") {
+        usedBypass = true;
+        dependencies.onBypass?.();
+        return group;
+      }
       if (!(error instanceof AgentClientError) || error.code !== "MODEL_OUTPUT_INVALID") {
         throw error;
       }

@@ -3,6 +3,7 @@ import { namespaceCompactExtraction } from "@/domain/knowledge-map/stable-compac
 
 import { AgentClientError, callAgent } from "./agent-client";
 import type { MaterialShard } from "./build-material-shards";
+import { createSemaphore } from "./concurrency";
 
 interface ExtractionResult {
   shardId: string;
@@ -15,28 +16,6 @@ interface ExtractionDependencies {
   onProgress?: (completedLeafShards: number, totalLeafShards: number) => void;
   onSplit?: () => void;
   signal?: AbortSignal;
-}
-
-function createSemaphore(limit: number) {
-  let active = 0;
-  const waiting: Array<(release: () => void) => void> = [];
-  const createRelease = () => {
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      const next = waiting.shift();
-      if (next) next(createRelease());
-      else active -= 1;
-    };
-  };
-  return () => {
-    if (active >= limit) {
-      return new Promise<() => void>((resolve) => waiting.push(resolve));
-    }
-    active += 1;
-    return Promise.resolve(createRelease());
-  };
 }
 
 function splitShard(shard: MaterialShard): [MaterialShard, MaterialShard] | null {

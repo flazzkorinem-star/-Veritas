@@ -622,11 +622,7 @@ export async function runAgentOperation(
           signal,
         },
         (value) => {
-          const audit = parseOutput(
-            knowledgeAuditSchema,
-            value,
-            "COMPILE_KNOWLEDGE_MAP",
-          );
+          const audit = parseOutput(knowledgeAuditSchema, value, "COMPILE_KNOWLEDGE_MAP");
           try {
             return assembleCompactKnowledgeMap(
               compileInput.sourceUnits,

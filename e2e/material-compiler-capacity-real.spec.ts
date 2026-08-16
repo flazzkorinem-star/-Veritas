@@ -79,12 +79,10 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
   page.on("response", (response) => {
     if (!response.url().endsWith("/api/agents")) return;
     const request = response.request();
-    const body = request.postDataJSON() as
-      | {
-          operation?: string;
-          input?: { shardId?: string; shards?: Array<{ shardId?: string }> };
-        }
-      | null;
+    const body = request.postDataJSON() as {
+      operation?: string;
+      input?: { shardId?: string; shards?: Array<{ shardId?: string }> };
+    } | null;
     const operation = body?.operation ?? "UNKNOWN";
     requests.push({
       operation,
@@ -124,7 +122,10 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
     requests.filter(
       ({ operation, status }) =>
         status !== 200 &&
-        !(["EXTRACT_COMPACT_KNOWLEDGE", "MERGE_COMPACT_CANDIDATES"].includes(operation) && status === 502),
+        !(
+          ["EXTRACT_COMPACT_KNOWLEDGE", "MERGE_COMPACT_CANDIDATES"].includes(operation) &&
+          status === 502
+        ),
     ),
   ).toEqual([]);
   expect(requests.at(-1)).toMatchObject({
@@ -196,6 +197,6 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
   });
   expect(stored.processingTrace!.compilePartitionCount).toBeGreaterThan(1);
   console.log(
-    `REAL_CAPACITY_RESULT ${JSON.stringify({ fileBytes: buffer.byteLength, parsedCharacters, elapsedMs, requests })}`,
+    `REAL_CAPACITY_RESULT ${JSON.stringify({ fileBytes: buffer.byteLength, parsedCharacters, elapsedMs, processingTrace: stored.processingTrace, requests })}`,
   );
 });

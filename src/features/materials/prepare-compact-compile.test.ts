@@ -90,6 +90,42 @@ describe("最终编译前的分层紧凑归并", () => {
     ).toBe(true);
   });
 
+  it("递归归并与批次竞争时仍不突破四路材料并发", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const callAgent = vi.fn(
+      async (request: {
+        input: {
+          knowledgeItems: ReturnType<typeof shard>["extraction"]["knowledgeItems"];
+        };
+      }) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        active -= 1;
+        return [
+          {
+            ...request.input.knowledgeItems[0]!,
+            sourceUnitIds: request.input.knowledgeItems.flatMap(
+              ({ sourceUnitIds }) => sourceUnitIds,
+            ),
+          },
+        ];
+      },
+    );
+
+    await prepareCompactCompile(
+      [shard(1, 2), shard(2, 2), shard(3, 2), shard(4, 2), shard(5, 2)],
+      {
+        callAgent: callAgent as never,
+        maxBatchItems: 2,
+        maxFinalItems: 1,
+      },
+    );
+
+    expect(maxActive).toBe(4);
+  });
+
   it("中间归并结构失败时二分分片组，单分片失败则保留原候选", async () => {
     const onBypass = vi.fn();
     const callAgent = vi.fn(
@@ -120,6 +156,26 @@ describe("最终编译前的分层紧凑归并", () => {
 
     expect(result.flatMap(({ extraction }) => extraction.knowledgeItems)).toHaveLength(4);
     expect(result.flatMap(({ extraction }) => extraction.sourceCoverage)).toHaveLength(6);
+    expect(onBypass).toHaveBeenCalledTimes(1);
+  });
+
+  it("可选归并上游失败时保留已验证候选并记录旁路", async () => {
+    const input = [shard(1, 2), shard(2, 2)];
+    const onBypass = vi.fn();
+    const callAgent = vi
+      .fn()
+      .mockRejectedValue(
+        new AgentClientError("UPSTREAM_UNAVAILABLE", "模型服务暂时不可用。"),
+      );
+
+    await expect(
+      prepareCompactCompile(input, {
+        callAgent: callAgent as never,
+        maxBatchItems: 4,
+        maxFinalItems: 2,
+        onBypass,
+      }),
+    ).resolves.toEqual(input);
     expect(onBypass).toHaveBeenCalledTimes(1);
   });
 });

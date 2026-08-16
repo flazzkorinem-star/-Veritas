@@ -147,16 +147,14 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
   );
   page.on("response", (response) => {
     if (!response.url().endsWith("/api/agents")) return;
-    const body = response.request().postDataJSON() as
-      | {
-          operation?: string;
-          input?: {
-            shardId?: string;
-            shards?: Array<{ shardId?: string }>;
-            knowledgeItems?: Array<{ id?: string }>;
-          };
-        }
-      | null;
+    const body = response.request().postDataJSON() as {
+      operation?: string;
+      input?: {
+        shardId?: string;
+        shards?: Array<{ shardId?: string }>;
+        knowledgeItems?: Array<{ id?: string }>;
+      };
+    } | null;
     const operation = body?.operation ?? "UNKNOWN";
     const requestUnit =
       body?.input?.shardId ??
@@ -226,11 +224,12 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
               const report = transaction.objectStore("reports").get(taskId);
               transaction.oncomplete = () => {
                 const storedMaterial = material.result as
-                  {
-                    parsedText?: string;
-                    nodes?: unknown[];
-                    processingTrace?: ProcessingTrace | null;
-                  } | undefined;
+                  | {
+                      parsedText?: string;
+                      nodes?: unknown[];
+                      processingTrace?: ProcessingTrace | null;
+                    }
+                  | undefined;
                 const storedMessages = (
                   allMessages.result as Array<{
                     taskId: string;

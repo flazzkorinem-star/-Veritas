@@ -8,13 +8,19 @@ import {
   MODEL_PROCESSING_MAX_MS,
 } from "@/config/agent-limits";
 
-import { callAgent, type AgentClientDependencies } from "./agent-client";
+import {
+  AgentClientError,
+  callAgent,
+  type AgentClientDependencies,
+} from "./agent-client";
 import { buildMaterialShards } from "./build-material-shards";
 import { extractMaterialShards } from "./extract-material-shards";
 import { MaterialFileError } from "./material-file";
 import { parseMaterial } from "./parse-material";
 import type { ParsingProgress } from "./parsed-material";
 import { prepareCompactCompile } from "./prepare-compact-compile";
+import { createSemaphore } from "./concurrency";
+import { splitCompactCompileShard } from "./split-compact-compile";
 
 export type MaterialProcessingProgress =
   | { stage: "READING"; loadedBytes: number; totalBytes: number }
@@ -156,32 +162,47 @@ export async function processTextMaterial(
         },
         signal: modelSignal,
       });
-      trace.compilePartitionCount = compileShards.length;
-      const localMaps = new Array<KnowledgeMap>(compileShards.length);
-      let nextPartition = 0;
-      await Promise.all(
-        Array.from(
-          { length: Math.min(EXTRACTION_CONCURRENCY, compileShards.length) },
-          async () => {
-            while (nextPartition < compileShards.length) {
-              const index = nextPartition;
-              nextPartition += 1;
-              const shard = compileShards[index]!;
-              const covered = new Set(shard.extraction.sourceCoverage);
-              localMaps[index] = await tracedAgent(
-                {
-                  operation: "COMPILE_KNOWLEDGE_MAP",
-                  input: {
-                    sourceUnits: sourceUnits.filter(({ id }) => covered.has(id)),
-                    shards: [shard],
-                  },
+      const acquireCompile = createSemaphore(EXTRACTION_CONCURRENCY);
+      const compilePartition = async (
+        shard: (typeof compileShards)[number],
+        splitDepth = 0,
+      ): Promise<KnowledgeMap[]> => {
+        const release = await acquireCompile();
+        try {
+          const covered = new Set(shard.extraction.sourceCoverage);
+          return [
+            await tracedAgent(
+              {
+                operation: "COMPILE_KNOWLEDGE_MAP",
+                input: {
+                  sourceUnits: sourceUnits.filter(({ id }) => covered.has(id)),
+                  shards: [shard],
                 },
-                { signal: modelSignal },
-              );
-            }
-          },
-        ),
-      );
+              },
+              { signal: modelSignal },
+            ),
+          ];
+        } catch (error) {
+          const children =
+            error instanceof AgentClientError &&
+            error.code === "MODEL_OUTPUT_INVALID" &&
+            splitDepth < 2
+              ? splitCompactCompileShard(shard)
+              : null;
+          if (!children) throw error;
+          trace.splitCount += 1;
+          release();
+          return (
+            await Promise.all(
+              children.map((child) => compilePartition(child, splitDepth + 1)),
+            )
+          ).flat();
+        } finally {
+          release();
+        }
+      };
+      const localMaps = (await Promise.all(compileShards.map(compilePartition))).flat();
+      trace.compilePartitionCount = localMaps.length;
       if (localMaps.every(({ nodes }) => nodes.length === 0)) {
         throw new TextProcessingError("NO_RELIABLE_NODE");
       }

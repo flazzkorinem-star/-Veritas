@@ -94,27 +94,24 @@ export async function POST(request: Request) {
   try {
     release = acquireAgentRequest(clientId(request), agentRequestCategory(body));
     let operationLog: AgentOperationLogEntry | undefined;
-    const result = await runAgentOperation(
-      body,
-      apiKey,
-      undefined,
-      request.signal,
+    const result = await runAgentOperation(body, apiKey, undefined, request.signal, {
+      log(entry) {
+        operationLog = entry;
+        if (process.env.NODE_ENV !== "test") console.info("agent_operation", entry);
+      },
+    });
+    const attempts = operationLog?.attempts ?? 1;
+    return json(
       {
-        log(entry) {
-          operationLog = entry;
-          if (process.env.NODE_ENV !== "test") console.info("agent_operation", entry);
+        result,
+        meta: {
+          attempts,
+          repaired: attempts > 1,
+          validationSource: "MODEL_VALIDATED",
         },
       },
+      200,
     );
-    const attempts = operationLog?.attempts ?? 1;
-    return json({
-      result,
-      meta: {
-        attempts,
-        repaired: attempts > 1,
-        validationSource: "MODEL_VALIDATED",
-      },
-    }, 200);
   } catch (error) {
     if (error instanceof AgentRequestGuardError) {
       return errorResponse("RATE_LIMITED", "请求较多，请稍等片刻再试。", 429);

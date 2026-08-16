@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { AgentClientError } from "./agent-client";
 import { processTextMaterial } from "./process-text-material";
 
 const source = { label: "第 1 段", excerpt: "太阳驱动蒸发。" };
@@ -82,10 +83,17 @@ function mapForCompile(request: {
   const materialModule = extraction.modules[0]!;
   const item = extraction.knowledgeItems[0]!;
   const sourceUnit = request.input.sourceUnits[0]!;
-  const reference = { label: sourceUnit.sourceLabel, excerpt: sourceUnit.text.slice(0, 800) };
+  const reference = {
+    label: sourceUnit.sourceLabel,
+    excerpt: sourceUnit.text.slice(0, 800),
+  };
   return {
     modules: [
-      { id: materialModule.id, title: materialModule.title, sourceRange: reference.label },
+      {
+        id: materialModule.id,
+        title: materialModule.title,
+        sourceRange: reference.label,
+      },
     ],
     knowledgeItems: [
       {
@@ -255,23 +263,20 @@ describe("文本材料处理编排", () => {
     });
 
     expect(maxActiveExtractions).toBe(4);
-    const compileRequests = callAgent.mock.calls.filter(
-      ([request]) => request.operation === "COMPILE_KNOWLEDGE_MAP",
-    ).map(([request]) => request) as unknown as Array<{
+    const compileRequests = callAgent.mock.calls
+      .filter(([request]) => request.operation === "COMPILE_KNOWLEDGE_MAP")
+      .map(([request]) => request) as unknown as Array<{
       input: { shards: Array<{ shardId: string; extraction: typeof extraction }> };
     }>;
-    expect(compileRequests.flatMap(({ input }) => input.shards.map(({ shardId }) => shardId))).toEqual([
-      "shard-1",
-      "shard-2",
-      "shard-3",
-      "shard-4",
-    ]);
+    expect(
+      compileRequests.flatMap(({ input }) => input.shards.map(({ shardId }) => shardId)),
+    ).toEqual(["shard-1", "shard-2", "shard-3", "shard-4"]);
     expect(
       compileRequests.flatMap(({ input }) =>
         input.shards.flatMap(({ extraction }) =>
           extraction.knowledgeItems.map((item) => item.id),
         ),
-      )
+      ),
     ).toEqual(["s1-i1", "s2-i1", "s3-i1", "s4-i1"]);
     expect(result.knowledgeMap.nodes.map(({ id }) => id)).toEqual([
       "node-1",
@@ -280,6 +285,80 @@ describe("文本材料处理编排", () => {
       "node-4",
     ]);
     expect(result.processingTrace.compilePartitionCount).toBe(4);
+  });
+
+  it("只二分重试结构失败的编译分区并复用其他成功结果", async () => {
+    const compileShardIds: string[] = [];
+    const callAgent = vi.fn(
+      async (request: {
+        operation: string;
+        input: {
+          sourceUnits?: Array<{ id: string; sourceLabel: string; text: string }>;
+          shards?: Array<{
+            shardId: string;
+            extraction: ReturnType<typeof extractionFor>;
+          }>;
+        };
+      }) => {
+        if (request.operation === "EXTRACT_COMPACT_KNOWLEDGE") {
+          const units = request.input.sourceUnits!;
+          return {
+            modules: units.map((unit, index) => ({
+              id: `m${index + 1}`,
+              title: unit.sourceLabel,
+              sourceUnitIds: [unit.id],
+            })),
+            knowledgeItems: units.map((unit, index) => ({
+              id: `i${index + 1}`,
+              moduleId: `m${index + 1}`,
+              title: `条目 ${index + 1}`,
+              summary: unit.text,
+              sourceUnitIds: [unit.id],
+              commonMisconceptions: [],
+            })),
+            topicDrafts: units.map((_unit, index) => ({
+              id: `t${index + 1}`,
+              moduleId: `m${index + 1}`,
+              title: `主题 ${index + 1}`,
+              objective: `理解条目 ${index + 1}`,
+              knowledgeItemIds: [`i${index + 1}`],
+            })),
+            sourceCoverage: units.map(({ id }) => id),
+          };
+        }
+        if (request.operation === "COMPILE_KNOWLEDGE_MAP") {
+          const shardId = request.input.shards![0]!.shardId;
+          compileShardIds.push(shardId);
+          if (shardId === "shard-1") {
+            throw new AgentClientError("MODEL_OUTPUT_INVALID", "模型结构无效。");
+          }
+          return mapForCompile(request as never);
+        }
+        return { opening: "材料重点清楚。", question: "最基本的概念是什么？" };
+      },
+    );
+
+    const result = await processTextMaterial(new File(["材料"], "notes.txt"), vi.fn(), {
+      callAgent: callAgent as never,
+      parseMaterial: vi.fn().mockResolvedValue({
+        fileName: "notes.txt",
+        mimeType: "text/plain",
+        text: "## 第一段\n正文一\n\n## 第二段\n正文二",
+        sourceBlocks: [
+          { sourceLabel: "第一段", text: "## 第一段\n正文一" },
+          { sourceLabel: "第二段", text: "## 第二段\n正文二" },
+        ],
+      }) as never,
+    });
+
+    expect(compileShardIds).toEqual(["shard-1", "shard-1-1", "shard-1-2"]);
+    expect(result.knowledgeMap.nodes).toHaveLength(2);
+    expect(result.processingTrace).toMatchObject({
+      splitCount: 1,
+      compilePartitionCount: 2,
+      deterministicFallbackCount: 0,
+      finalCompileSource: "MODEL_VALIDATED",
+    });
   });
 
   it("只按实际完成的分块数量上报提取进度", async () => {
