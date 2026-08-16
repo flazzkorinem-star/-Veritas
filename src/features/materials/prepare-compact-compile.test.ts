@@ -91,6 +91,7 @@ describe("最终编译前的分层紧凑归并", () => {
   });
 
   it("中间归并结构失败时二分分片组，单分片失败则保留原候选", async () => {
+    const onBypass = vi.fn();
     const callAgent = vi.fn(
       async (request: {
         input: {
@@ -114,9 +115,11 @@ describe("最终编译前的分层紧凑归并", () => {
       callAgent: callAgent as never,
       maxBatchItems: 6,
       maxFinalItems: 2,
+      onBypass,
     });
 
     expect(result.flatMap(({ extraction }) => extraction.knowledgeItems)).toHaveLength(4);
     expect(result.flatMap(({ extraction }) => extraction.sourceCoverage)).toHaveLength(6);
+    expect(onBypass).toHaveBeenCalledTimes(1);
   });
 });

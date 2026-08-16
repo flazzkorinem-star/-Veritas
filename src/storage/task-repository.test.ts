@@ -230,6 +230,7 @@ describe("本地任务仓储", () => {
       sizeBytes: 9,
       originalFile: new Blob(["水循环"]),
       parsedText: "水循环",
+      processingTrace: null,
       modules: [],
       knowledgeItems: [],
       nodes: [],

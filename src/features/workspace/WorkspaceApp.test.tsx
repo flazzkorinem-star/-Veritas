@@ -39,6 +39,16 @@ function processingResult() {
   const source = { label: "第 1 段", excerpt: "太阳驱动蒸发。" };
   return {
     parsedText: "# 水循环\n\n太阳驱动蒸发。",
+    processingTrace: {
+      extractionRequestCount: 1,
+      splitCount: 0,
+      mergeRequestCount: 0,
+      mergeBypassCount: 0,
+      compilePartitionCount: 1,
+      repairedRequestCount: 0,
+      deterministicFallbackCount: 0 as const,
+      finalCompileSource: "MODEL_VALIDATED" as const,
+    },
     knowledgeMap: {
       modules: [{ id: "module-1", title: "自然水循环", sourceRange: "第 1 段" }],
       knowledgeItems: [
@@ -354,6 +364,7 @@ describe("主工作区", () => {
       existingResult.parsedText,
       existingResult.knowledgeMap,
       existingResult.firstQuestion,
+      existingResult.processingTrace,
     );
     let finishProcessing!: (result: ReturnType<typeof processingResult>) => void;
     const processor: TextMaterialProcessor = async (_file, onProgress) => {

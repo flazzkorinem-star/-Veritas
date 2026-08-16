@@ -52,14 +52,17 @@
 - `src/domain/knowledge-map/knowledge-audit-contracts.ts`：定义最终编译的合并谱系、诊断主题和条目归属契约。
 - `src/domain/knowledge-map/compact-merge.ts`：校验局部归并谱系并确定性恢复规范候选。
 - `src/domain/knowledge-map/compact-assembly.ts`：展开最终谱系并确定性恢复模块、来源、条目类型、主题顺序和完整覆盖。
+- `src/domain/knowledge-map/combine-knowledge-maps.ts`：把多个已验证局部知识地图稳定重编号并组合，保持模型生成的诊断语义不变。
 - `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助、待开始主题排序与报告操作；Agent 2 的线上材料上下文只接受精简目录。
+- `src/domain/agents/operation-meta.ts`：校验同源 Agent 成功响应中的尝试次数、修复标记和模型验证来源。
+- `src/domain/materials/processing-trace.ts`：定义可持久化材料处理轨迹，并禁止成功记录包含确定性语义降级。
 - `src/domain/agents/context-budget.ts`：按整包 JSON 字节预算确定性组装 Agent 2 请求，优先保留当前主题、最新消息和模块/条目目录，剩余空间再加入摘要。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
 - `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话、每层问题与答案来源；报告结论只能落入独立通过、提示或引导后通过、自动讲解后验证通过、主动看答案未验证四类，并拒绝伪造原话、支架和来源。
 - `src/domain/report/build-report.ts`：由本地确定性证据回填整份材料的任务级报告，使用自然中文呈现四类学习结果、误解和覆盖范围，并生成转义后的 Markdown 下载文本。
-- `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例。
-- `src/storage/types.ts`：定义带显式 `taskId` 的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务、材料、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、界面状态和事务性删除/撤销；保存报告时重新核对分数、四层状态、学习证据分类、用户原话、支架、来源和 Markdown。
+- `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例；版本 5 为历史材料补齐空处理轨迹。
+- `src/storage/types.ts`：定义带显式 `taskId`、材料处理轨迹的本地记录与短时删除快照。
+- `src/storage/task-repository.ts`：负责任务、材料、处理轨迹、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、界面状态和事务性删除/撤销；保存处理成功和报告时分别校验模型路径与学习证据。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
@@ -69,13 +72,13 @@
 - `src/features/materials/pdf-parser.ts`：使用 PDF.js 逐页提取文字，并将无文字页面渲染为受限像素交给 OCR。
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
-- `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
+- `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由，校验稳定结果与不含正文的操作元数据。
 - `src/features/materials/build-material-shards.ts`：将解析块转换为稳定来源单元，合并连续短段，并按实际 UTF-8 请求字节与单片 120 来源上限生成自适应分片。
 - `src/features/materials/extract-material-shards.ts`：以最多四路并发提取紧凑候选，保留成功结果，对结构失败只隔离二分一层；叶级或上游失败明确终止，禁止伪造候选覆盖。
 - `src/features/materials/prepare-compact-compile.ts`：按每批最多 60 条候选执行分层归并，隔离失败批次并为最终编译准备受控输入。
-- `src/features/materials/process-text-material.ts`：在 3 分钟材料总预算和 170 秒模型预算内编排解析、紧凑提取、分层归并、最终编译和首问，按实际完成数报告进度并传播取消信号。
+- `src/features/materials/process-text-material.ts`：在 3 分钟材料总预算和 170 秒模型预算内编排解析、紧凑提取、分层归并、最多四路局部编译、完整地图组合和首问，按实际完成数报告进度、聚合处理轨迹并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示、答案、三轮停滞后的自动讲解与同层小验证，以及学习目标驱动的待开始主题排序；状态变化只交给唯一 reducer。
-- `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
+- `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，成功时返回模型验证元数据，失败时返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
 - `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，连续无效时返回受控失败，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源，调用 Agent 3 并保存覆盖整份材料范围的任务级报告。

@@ -70,13 +70,28 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
   const fixturePath = testInfo.outputPath("large-text-native.docx");
   writeFileSync(fixturePath, buffer);
 
-  const requests: Array<{ operation: string; status: number; bytes: number }> = [];
+  const requests: Array<{
+    operation: string;
+    requestUnit: string;
+    status: number;
+    bytes: number;
+  }> = [];
   page.on("response", (response) => {
     if (!response.url().endsWith("/api/agents")) return;
     const request = response.request();
+    const body = request.postDataJSON() as
+      | {
+          operation?: string;
+          input?: { shardId?: string; shards?: Array<{ shardId?: string }> };
+        }
+      | null;
+    const operation = body?.operation ?? "UNKNOWN";
     requests.push({
-      operation:
-        (request.postDataJSON() as { operation?: string } | null)?.operation ?? "UNKNOWN",
+      operation,
+      requestUnit:
+        body?.input?.shardId ??
+        body?.input?.shards?.map(({ shardId }) => shardId).join(",") ??
+        operation,
       status: response.status(),
       bytes: Buffer.byteLength(request.postData() ?? ""),
     });
@@ -109,10 +124,7 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
     requests.filter(
       ({ operation, status }) =>
         status !== 200 &&
-        !(
-          ["EXTRACT_COMPACT_KNOWLEDGE", "MERGE_COMPACT_CANDIDATES"].includes(operation) &&
-          [502, 503].includes(status)
-        ),
+        !(["EXTRACT_COMPACT_KNOWLEDGE", "MERGE_COMPACT_CANDIDATES"].includes(operation) && status === 502),
     ),
   ).toEqual([]);
   expect(requests.at(-1)).toMatchObject({
@@ -126,6 +138,11 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
         parsedLength: number;
         allItemsHaveSources: boolean;
         coreItemsAssignedOnce: boolean;
+        processingTrace: {
+          compilePartitionCount: number;
+          deterministicFallbackCount: number;
+          finalCompileSource: string;
+        } | null;
       }>((resolve, reject) => {
         const request = indexedDB.open("veritas");
         request.onerror = () => reject(request.error);
@@ -160,6 +177,7 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
                         assignment.disposition === "DIAGNOSED_IN_NODE",
                     ).length === 1,
                 ),
+              processingTrace: material.processingTrace ?? null,
             });
             database.close();
           };
@@ -170,7 +188,13 @@ test("约 5 MiB 文本型 DOCX 在三分钟内生成完整地图与首问", asyn
     parsedLength: parsedCharacters,
     allItemsHaveSources: true,
     coreItemsAssignedOnce: true,
+    processingTrace: expect.objectContaining({
+      compilePartitionCount: expect.any(Number),
+      deterministicFallbackCount: 0,
+      finalCompileSource: "MODEL_VALIDATED",
+    }),
   });
+  expect(stored.processingTrace!.compilePartitionCount).toBeGreaterThan(1);
   console.log(
     `REAL_CAPACITY_RESULT ${JSON.stringify({ fileBytes: buffer.byteLength, parsedCharacters, elapsedMs, requests })}`,
   );

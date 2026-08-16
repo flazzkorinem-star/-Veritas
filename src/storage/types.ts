@@ -1,4 +1,5 @@
 import type { NodeSession } from "@/domain/diagnostic/contracts";
+import type { MaterialProcessingTrace } from "@/domain/materials/processing-trace";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
 import type {
   CoverageAssignment,
@@ -25,6 +26,7 @@ export interface StoredMaterial {
   sizeBytes: number;
   originalFile: Blob;
   parsedText: string | null;
+  processingTrace: MaterialProcessingTrace | null;
   modules: MaterialModule[];
   knowledgeItems: KnowledgeItem[];
   nodes: DiagnosticNode[];

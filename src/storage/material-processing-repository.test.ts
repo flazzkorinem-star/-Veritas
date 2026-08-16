@@ -55,6 +55,16 @@ const knowledgeMap = {
     },
   ],
 };
+const processingTrace = {
+  extractionRequestCount: 1,
+  splitCount: 0,
+  mergeRequestCount: 0,
+  mergeBypassCount: 0,
+  compilePartitionCount: 1,
+  repairedRequestCount: 0,
+  deterministicFallbackCount: 0 as const,
+  finalCompileSource: "MODEL_VALIDATED" as const,
+};
 
 afterEach(async () => {
   await Promise.all(databaseNames.splice(0).map((name) => Dexie.delete(name)));
@@ -93,10 +103,16 @@ describe("材料处理仓储", () => {
       new File(["材料"], "notes.txt", { type: "text/plain" }),
     );
 
-    await repository.completeTextProcessing(task.id, "材料", knowledgeMap, {
-      opening: "这份材料真正值得抓的是循环动力。",
-      question: "水循环最基本的动力来源是什么？",
-    });
+    await repository.completeTextProcessing(
+      task.id,
+      "材料",
+      knowledgeMap,
+      {
+        opening: "这份材料真正值得抓的是循环动力。",
+        question: "水循环最基本的动力来源是什么？",
+      },
+      processingTrace,
+    );
     const learning = await repository.getTaskLearningData(task.id);
 
     expect(learning.task).toMatchObject({
@@ -106,6 +122,7 @@ describe("材料处理仓储", () => {
     expect(learning.material).toMatchObject({
       parsedText: "材料",
       nodes: knowledgeMap.nodes,
+      processingTrace,
     });
     expect(learning.session?.session.stages.MEMORY).toMatchObject({
       status: "ACTIVE",

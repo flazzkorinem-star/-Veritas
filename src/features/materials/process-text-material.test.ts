@@ -72,6 +72,62 @@ const map = {
   ],
 };
 
+function mapForCompile(request: {
+  input: {
+    sourceUnits: Array<{ sourceLabel: string; text: string }>;
+    shards: Array<{ extraction: ReturnType<typeof extractionFor> }>;
+  };
+}) {
+  const extraction = request.input.shards[0]!.extraction;
+  const materialModule = extraction.modules[0]!;
+  const item = extraction.knowledgeItems[0]!;
+  const sourceUnit = request.input.sourceUnits[0]!;
+  const reference = { label: sourceUnit.sourceLabel, excerpt: sourceUnit.text.slice(0, 800) };
+  return {
+    modules: [
+      { id: materialModule.id, title: materialModule.title, sourceRange: reference.label },
+    ],
+    knowledgeItems: [
+      {
+        id: item.id,
+        moduleId: item.moduleId,
+        title: item.title,
+        summary: item.summary,
+        kind: "CORE" as const,
+        diagnosticRationale: `${item.title} 是理解材料主线的基础。`,
+        sourceReferences: [reference],
+        commonMisconceptions: [],
+      },
+    ],
+    nodes: [
+      {
+        id: "node-1",
+        moduleId: materialModule.id,
+        title: item.title,
+        objective: `理解${item.title}`,
+        knowledgeItemIds: [item.id],
+        sourceReferences: [reference],
+        canonicalUnderstanding: item.summary,
+        commonMisconceptions: [],
+        bloomTargets: {
+          memory: `识别${item.title}的基本概念。`,
+          understanding: `解释${item.title}的核心机制。`,
+          application: `在具体场景中使用${item.title}。`,
+          analysis: `分析${item.title}的条件与边界。`,
+        },
+        order: 1,
+      },
+    ],
+    coverageAssignments: [
+      {
+        knowledgeItemId: item.id,
+        disposition: "DIAGNOSED_IN_NODE" as const,
+        nodeId: "node-1",
+      },
+    ],
+  };
+}
+
 describe("文本材料处理编排", () => {
   it("依次完成读取、紧凑提取、知识编译和有意义的首问生成", async () => {
     const callAgent = vi
@@ -100,6 +156,16 @@ describe("文本材料处理编排", () => {
       firstQuestion: {
         opening: "这份材料真正值得抓的是水循环的动力机制。",
         question: "水循环最基本的动力来源是什么？",
+      },
+      processingTrace: {
+        extractionRequestCount: 1,
+        splitCount: 0,
+        mergeRequestCount: 0,
+        mergeBypassCount: 0,
+        compilePartitionCount: 1,
+        repairedRequestCount: 0,
+        deterministicFallbackCount: 0,
+        finalCompileSource: "MODEL_VALIDATED",
       },
     });
     expect(callAgent.mock.calls.map(([request]) => request.operation)).toEqual([
@@ -167,7 +233,9 @@ describe("文本材料处理编排", () => {
           activeExtractions -= 1;
           return extractionFor(request.input.sourceUnits!);
         }
-        if (request.operation === "COMPILE_KNOWLEDGE_MAP") return map;
+        if (request.operation === "COMPILE_KNOWLEDGE_MAP") {
+          return mapForCompile(request as never);
+        }
         return { opening: "材料重点清楚。", question: "主要动力是什么？" };
       },
     );
@@ -176,7 +244,7 @@ describe("文本材料处理编排", () => {
       text: ["水", "汽", "云", "雨"][index]!.repeat(20_000),
     }));
 
-    await processTextMaterial(new File(["材料"], "notes.txt"), vi.fn(), {
+    const result = await processTextMaterial(new File(["材料"], "notes.txt"), vi.fn(), {
       callAgent: callAgent as never,
       parseMaterial: vi.fn().mockResolvedValue({
         fileName: "notes.txt",
@@ -187,26 +255,31 @@ describe("文本材料处理编排", () => {
     });
 
     expect(maxActiveExtractions).toBe(4);
-    const compileRequest = callAgent.mock.calls.find(
+    const compileRequests = callAgent.mock.calls.filter(
       ([request]) => request.operation === "COMPILE_KNOWLEDGE_MAP",
-    )?.[0] as
-      | {
-          input: {
-            shards: Array<{ shardId: string; extraction: typeof extraction }>;
-          };
-        }
-      | undefined;
-    expect(compileRequest?.input.shards.map(({ shardId }) => shardId)).toEqual([
+    ).map(([request]) => request) as unknown as Array<{
+      input: { shards: Array<{ shardId: string; extraction: typeof extraction }> };
+    }>;
+    expect(compileRequests.flatMap(({ input }) => input.shards.map(({ shardId }) => shardId))).toEqual([
       "shard-1",
       "shard-2",
       "shard-3",
       "shard-4",
     ]);
     expect(
-      compileRequest?.input.shards.flatMap(({ extraction }) =>
-        extraction.knowledgeItems.map((item) => item.id),
-      ),
+      compileRequests.flatMap(({ input }) =>
+        input.shards.flatMap(({ extraction }) =>
+          extraction.knowledgeItems.map((item) => item.id),
+        ),
+      )
     ).toEqual(["s1-i1", "s2-i1", "s3-i1", "s4-i1"]);
+    expect(result.knowledgeMap.nodes.map(({ id }) => id)).toEqual([
+      "node-1",
+      "node-2",
+      "node-3",
+      "node-4",
+    ]);
+    expect(result.processingTrace.compilePartitionCount).toBe(4);
   });
 
   it("只按实际完成的分块数量上报提取进度", async () => {
@@ -230,7 +303,9 @@ describe("文本材料处理编排", () => {
             });
           });
         }
-        if (request.operation === "COMPILE_KNOWLEDGE_MAP") return Promise.resolve(map);
+        if (request.operation === "COMPILE_KNOWLEDGE_MAP") {
+          return Promise.resolve(mapForCompile(request as never));
+        }
         return Promise.resolve({
           opening: "材料重点清楚。",
           question: "主要动力是什么？",

@@ -251,6 +251,7 @@ export function useWorkspace(
         result.parsedText,
         result.knowledgeMap,
         result.firstQuestion,
+        result.processingTrace,
       );
     } catch (reason) {
       await repository.failTaskProcessing(

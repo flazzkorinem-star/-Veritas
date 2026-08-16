@@ -1,12 +1,14 @@
 import type { FirstQuestion, KnowledgeMap } from "@/domain/knowledge-map/contracts";
 import { buildBudgetedMaterialRequest } from "@/domain/agents/context-budget";
+import { combineKnowledgeMaps } from "@/domain/knowledge-map/combine-knowledge-maps";
+import type { MaterialProcessingTrace } from "@/domain/materials/processing-trace";
 import {
   EXTRACTION_CONCURRENCY,
   MATERIAL_PROCESSING_MAX_MS,
   MODEL_PROCESSING_MAX_MS,
 } from "@/config/agent-limits";
 
-import { callAgent } from "./agent-client";
+import { callAgent, type AgentClientDependencies } from "./agent-client";
 import { buildMaterialShards } from "./build-material-shards";
 import { extractMaterialShards } from "./extract-material-shards";
 import { MaterialFileError } from "./material-file";
@@ -46,6 +48,7 @@ export interface TextProcessingResult {
   parsedText: string;
   knowledgeMap: KnowledgeMap;
   firstQuestion: FirstQuestion;
+  processingTrace: MaterialProcessingTrace;
 }
 
 interface ProcessingDependencies {
@@ -97,6 +100,28 @@ export async function processTextMaterial(
       modelDeadline.signal,
       operationController.signal,
     );
+    const trace = {
+      extractionRequestCount: 0,
+      splitCount: 0,
+      mergeRequestCount: 0,
+      mergeBypassCount: 0,
+      compilePartitionCount: 0,
+      repairedRequestCount: 0,
+    };
+    const tracedAgent = ((request, options: AgentClientDependencies = {}) => {
+      if (request.operation === "EXTRACT_COMPACT_KNOWLEDGE") {
+        trace.extractionRequestCount += 1;
+      } else if (request.operation === "MERGE_COMPACT_CANDIDATES") {
+        trace.mergeRequestCount += 1;
+      }
+      return runAgent(request, {
+        ...options,
+        onMeta(meta) {
+          if (meta.repaired) trace.repairedRequestCount += 1;
+          options.onMeta?.(meta);
+        },
+      });
+    }) as typeof callAgent;
     try {
       onProgress({
         stage: "EXTRACTING",
@@ -108,8 +133,11 @@ export async function processTextMaterial(
         throw new MaterialFileError("CANCELLED", "已取消处理这份材料。 ");
       }
       const extractedShards = await extractMaterialShards(shards, {
-        callAgent: runAgent,
+        callAgent: tracedAgent,
         maxConcurrency: EXTRACTION_CONCURRENCY,
+        onSplit: () => {
+          trace.splitCount += 1;
+        },
         signal: modelSignal,
         onProgress: (currentChunk, totalChunks) =>
           onProgress({
@@ -122,16 +150,42 @@ export async function processTextMaterial(
 
       onProgress({ stage: "AUDITING", startedAt });
       const compileShards = await prepareCompactCompile(extractedShards, {
-        callAgent: runAgent,
+        callAgent: tracedAgent,
+        onBypass: () => {
+          trace.mergeBypassCount += 1;
+        },
         signal: modelSignal,
       });
-      const knowledgeMap = await runAgent(
-        {
-          operation: "COMPILE_KNOWLEDGE_MAP",
-          input: { sourceUnits, shards: compileShards },
-        },
-        { signal: modelSignal },
+      trace.compilePartitionCount = compileShards.length;
+      const localMaps = new Array<KnowledgeMap>(compileShards.length);
+      let nextPartition = 0;
+      await Promise.all(
+        Array.from(
+          { length: Math.min(EXTRACTION_CONCURRENCY, compileShards.length) },
+          async () => {
+            while (nextPartition < compileShards.length) {
+              const index = nextPartition;
+              nextPartition += 1;
+              const shard = compileShards[index]!;
+              const covered = new Set(shard.extraction.sourceCoverage);
+              localMaps[index] = await tracedAgent(
+                {
+                  operation: "COMPILE_KNOWLEDGE_MAP",
+                  input: {
+                    sourceUnits: sourceUnits.filter(({ id }) => covered.has(id)),
+                    shards: [shard],
+                  },
+                },
+                { signal: modelSignal },
+              );
+            }
+          },
+        ),
       );
+      if (localMaps.every(({ nodes }) => nodes.length === 0)) {
+        throw new TextProcessingError("NO_RELIABLE_NODE");
+      }
+      const knowledgeMap = combineKnowledgeMaps(localMaps);
       const firstNode = knowledgeMap.nodes.toSorted(
         (left, right) => left.order - right.order,
       )[0];
@@ -159,10 +213,19 @@ export async function processTextMaterial(
             },
           }) as const,
       });
-      const firstQuestion = await runAgent(firstQuestionRequest, {
+      const firstQuestion = await tracedAgent(firstQuestionRequest, {
         signal: modelSignal,
       });
-      return { parsedText: material.text, knowledgeMap, firstQuestion };
+      return {
+        parsedText: material.text,
+        knowledgeMap,
+        firstQuestion,
+        processingTrace: {
+          ...trace,
+          deterministicFallbackCount: 0,
+          finalCompileSource: "MODEL_VALIDATED",
+        },
+      };
     } catch (error) {
       operationController.abort();
       if (dependencies.signal?.aborted) throw error;

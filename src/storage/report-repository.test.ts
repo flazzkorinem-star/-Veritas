@@ -70,6 +70,7 @@ describe("报告仓储", () => {
       sizeBytes: 10,
       originalFile: new Blob(["材料"]),
       parsedText: "材料",
+      processingTrace: null,
       modules: [{ id: "module-1", title: "水循环", sourceRange: "第 1 段" }],
       knowledgeItems: [
         {

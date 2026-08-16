@@ -14,7 +14,19 @@ const FILE_NAMES = [
 interface AgentMetric {
   fileName: string;
   operation: string;
+  requestUnit: string;
   status: number;
+}
+
+interface ProcessingTrace {
+  extractionRequestCount: number;
+  splitCount: number;
+  mergeRequestCount: number;
+  mergeBypassCount: number;
+  compilePartitionCount: number;
+  repairedRequestCount: number;
+  deterministicFallbackCount: 0;
+  finalCompileSource: "MODEL_VALIDATED";
 }
 
 interface JourneyResult {
@@ -27,6 +39,7 @@ interface JourneyResult {
   totalMs: number;
   messages: Array<{ role: "USER" | "ASSISTANT"; content: string }>;
   reportMarkdown: string;
+  processingTrace: ProcessingTrace | null;
   metrics: AgentMetric[];
   error?: string;
 }
@@ -81,7 +94,8 @@ function journeyMarkdown(results: JourneyResult[], browserProblems: string[]) {
       `- 上传到首问：${duration(result.uploadMs)}`,
       `- 首主题完成后生成报告：${duration(result.reportMs)}`,
       `- 全链路：${duration(result.totalMs)}`,
-      `- Agent 请求：${result.metrics.length} 次；${non200.length ? `其中 ${non200.length} 次中间请求失败后由自动修复、隔离或界面重试恢复（${non200.map(({ operation, status }) => `${operation} ${status}`).join("、")}）` : "全部 200"}`,
+      `- 处理轨迹：${result.processingTrace ? `提取请求 ${result.processingTrace.extractionRequestCount}、结构二分 ${result.processingTrace.splitCount}、归并请求 ${result.processingTrace.mergeRequestCount}、归并绕过 ${result.processingTrace.mergeBypassCount}、编译分区 ${result.processingTrace.compilePartitionCount}、模型修复 ${result.processingTrace.repairedRequestCount}、确定性语义降级 ${result.processingTrace.deterministicFallbackCount}、最终来源 ${result.processingTrace.finalCompileSource}` : "未保存"}`,
+      `- Agent 请求：${result.metrics.length} 次；${non200.length ? `其中 ${non200.length} 次经同一请求单元重试恢复（${non200.map(({ operation, requestUnit, status }) => `${operation}[${requestUnit}] ${status}`).join("、")}）` : "全部 200"}`,
       result.error ? `- 最终错误：${result.error}` : "- 最终结果：通过",
       "",
       "### 真实对话",
@@ -133,11 +147,26 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
   );
   page.on("response", (response) => {
     if (!response.url().endsWith("/api/agents")) return;
-    const operation = (response.request().postDataJSON() as { operation?: string } | null)
-      ?.operation;
+    const body = response.request().postDataJSON() as
+      | {
+          operation?: string;
+          input?: {
+            shardId?: string;
+            shards?: Array<{ shardId?: string }>;
+            knowledgeItems?: Array<{ id?: string }>;
+          };
+        }
+      | null;
+    const operation = body?.operation ?? "UNKNOWN";
+    const requestUnit =
+      body?.input?.shardId ??
+      body?.input?.shards?.map(({ shardId }) => shardId).join(",") ??
+      body?.input?.knowledgeItems?.map(({ id }) => id).join(",") ??
+      operation;
     metrics.push({
       fileName: activeFileName,
-      operation: operation ?? "UNKNOWN",
+      operation,
+      requestUnit,
       status: response.status(),
     });
   });
@@ -174,6 +203,7 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
           topicCount: number;
           messages: Array<{ role: "USER" | "ASSISTANT"; content: string }>;
           reportMarkdown: string;
+          processingTrace: ProcessingTrace | null;
         }>((resolve, reject) => {
           const open = indexedDB.open("veritas");
           open.onerror = () => reject(open.error);
@@ -196,7 +226,11 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
               const report = transaction.objectStore("reports").get(taskId);
               transaction.oncomplete = () => {
                 const storedMaterial = material.result as
-                  { parsedText?: string; nodes?: unknown[] } | undefined;
+                  {
+                    parsedText?: string;
+                    nodes?: unknown[];
+                    processingTrace?: ProcessingTrace | null;
+                  } | undefined;
                 const storedMessages = (
                   allMessages.result as Array<{
                     taskId: string;
@@ -208,6 +242,7 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
                 resolve({
                   parsedCharacters: storedMaterial?.parsedText?.length ?? 0,
                   topicCount: storedMaterial?.nodes?.length ?? 0,
+                  processingTrace: storedMaterial?.processingTrace ?? null,
                   messages: storedMessages
                     .toSorted((left, right) =>
                       left.createdAt.localeCompare(right.createdAt),
@@ -239,6 +274,7 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
       totalMs: 0,
       messages: [],
       reportMarkdown: "",
+      processingTrace: null,
       metrics: [],
     };
     const journeyStartedAt = Date.now();
@@ -321,6 +357,10 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
       expect(result.parsedCharacters).toBeGreaterThan(0);
       expect(result.topicCount).toBeGreaterThan(0);
       expect(result.reportMarkdown).not.toBe("");
+      expect(result.processingTrace).toMatchObject({
+        deterministicFallbackCount: 0,
+        finalCompileSource: "MODEL_VALIDATED",
+      });
       await page.screenshot({
         path: testInfo.outputPath(`${FILE_NAMES.indexOf(fileName) + 1}-report.png`),
         fullPage: false,
@@ -363,6 +403,7 @@ test("六份用户材料逐份跑通上传、对话和学习报告", async ({ pa
         (candidate) =>
           candidate.fileName === metric.fileName &&
           candidate.operation === metric.operation &&
+          candidate.requestUnit === metric.requestUnit &&
           candidate.status === 200,
       );
   });

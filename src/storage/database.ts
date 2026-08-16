@@ -90,6 +90,26 @@ export class VeritasDatabase extends Dexie {
             }
           }),
       );
+
+    this.version(5)
+      .stores({
+        tasks: "&id, title, fileName, updatedAt",
+        materials: "&taskId",
+        sessions: "[taskId+nodeId], taskId, nodeId",
+        messages: "&id, taskId, nodeId, createdAt",
+        drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+        reports: "&taskId",
+        uiStates: "&taskId, updatedAt",
+        workspaceStates: "&id, updatedAt",
+      })
+      .upgrade((transaction) =>
+        transaction
+          .table<StoredMaterial, string>("materials")
+          .toCollection()
+          .modify((material) => {
+            material.processingTrace ??= null;
+          }),
+      );
   }
 }
 

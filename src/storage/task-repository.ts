@@ -17,6 +17,7 @@ import {
   type ReportDocument,
 } from "@/domain/report/build-report";
 import { expectedLearningEvidenceCategory } from "@/domain/report/contracts";
+import { materialProcessingTraceSchema } from "@/domain/materials/processing-trace";
 import type { VeritasDatabase } from "@/storage/database";
 import type {
   DeletedTaskSnapshot,
@@ -231,6 +232,7 @@ export function createTaskRepository(database: VeritasDatabase) {
               sizeBytes: file.size,
               originalFile: file,
               parsedText: null,
+              processingTrace: null,
               modules: [],
               knowledgeItems: [],
               nodes: [],
@@ -253,19 +255,22 @@ export function createTaskRepository(database: VeritasDatabase) {
       parsedText: string,
       mapValue: unknown,
       questionValue: unknown,
+      traceValue: unknown,
     ) {
       return run(async () => {
         const task = await getExistingTask(taskId);
         const material = await database.materials.get(taskId);
         const knowledgeMap = knowledgeMapSchema.safeParse(mapValue);
         const firstQuestion = firstQuestionSchema.safeParse(questionValue);
+        const processingTrace = materialProcessingTraceSchema.safeParse(traceValue);
         if (
           task.status !== "PROCESSING" ||
           !material ||
           !parsedText.trim() ||
           parsedText.length > 300_000 ||
           !knowledgeMap.success ||
-          !firstQuestion.success
+          !firstQuestion.success ||
+          !processingTrace.success
         ) {
           throw new LocalStoreError(
             "RELATION_MISMATCH",
@@ -306,6 +311,7 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.materials.put({
               ...material,
               parsedText: parsedText.trim(),
+              processingTrace: processingTrace.data,
               ...knowledgeMap.data,
             });
             await database.sessions.put({

@@ -13,6 +13,7 @@ interface ExtractionDependencies {
   callAgent?: typeof callAgent;
   maxConcurrency?: number;
   onProgress?: (completedLeafShards: number, totalLeafShards: number) => void;
+  onSplit?: () => void;
   signal?: AbortSignal;
 }
 
@@ -93,6 +94,7 @@ export async function extractMaterialShards(
       }
       release();
       released = true;
+      dependencies.onSplit?.();
       total += 1;
       dependencies.onProgress?.(completed, total);
       return (

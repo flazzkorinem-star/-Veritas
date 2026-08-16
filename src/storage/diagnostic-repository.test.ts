@@ -71,10 +71,25 @@ async function setup() {
   const task = await repository.createProcessingTask(
     new File(["材料"], "notes.txt", { type: "text/plain" }),
   );
-  await repository.completeTextProcessing(task.id, "材料", map, {
-    opening: "这份材料真正值得抓的是循环动力。",
-    question: "主要动力是什么？",
-  });
+  await repository.completeTextProcessing(
+    task.id,
+    "材料",
+    map,
+    {
+      opening: "这份材料真正值得抓的是循环动力。",
+      question: "主要动力是什么？",
+    },
+    {
+      extractionRequestCount: 1,
+      splitCount: 0,
+      mergeRequestCount: 0,
+      mergeBypassCount: 0,
+      compilePartitionCount: 1,
+      repairedRequestCount: 0,
+      deterministicFallbackCount: 0,
+      finalCompileSource: "MODEL_VALIDATED",
+    },
+  );
   const learning = await repository.getTaskLearningData(task.id);
   await repository.saveConversationTurn({
     taskId: task.id,

@@ -84,6 +84,7 @@ describe("紧凑分片提取编排", () => {
       { id: "source-5", sourceLabel: "第 5 段", text: "正文 5" },
     ];
     const calls = new Map<string, number>();
+    const onSplit = vi.fn();
     const callAgent = vi.fn(
       async (request: { input: { shardId: string; sourceUnits: [] } }) => {
         const { shardId, sourceUnits } = request.input;
@@ -101,6 +102,7 @@ describe("紧凑分片提取编排", () => {
     const results = await extractMaterialShards(materialShards, {
       callAgent: callAgent as never,
       maxConcurrency: 4,
+      onSplit,
     });
 
     expect(results.map(({ shardId }) => shardId)).toEqual([
@@ -110,6 +112,7 @@ describe("紧凑分片提取编排", () => {
     ]);
     expect(calls.get("shard-1")).toBe(1);
     expect(calls.get("shard-2")).toBe(1);
+    expect(onSplit).toHaveBeenCalledTimes(1);
     expect(results.flatMap(({ extraction }) => extraction.sourceCoverage)).toEqual([
       "source-1",
       "source-2",

@@ -14,6 +14,7 @@ interface PrepareDependencies {
   callAgent?: typeof callAgent;
   maxBatchItems?: number;
   maxFinalItems?: number;
+  onBypass?: () => void;
   signal?: AbortSignal;
 }
 
@@ -80,7 +81,7 @@ export async function prepareCompactCompile(
   if (itemCount(shards) <= maxFinalItems) return shards;
 
   const invokeAgent = dependencies.callAgent ?? callAgent;
-  let usedFallback = false;
+  let usedBypass = false;
   async function mergeGroup(
     group: CompactCompileShard[],
     index: number,
@@ -102,7 +103,8 @@ export async function prepareCompactCompile(
         throw error;
       }
       if (group.length === 1) {
-        usedFallback = true;
+        usedBypass = true;
+        dependencies.onBypass?.();
         return group;
       }
 
@@ -124,7 +126,7 @@ export async function prepareCompactCompile(
     );
     partitions = merged.flat();
     const after = itemCount(partitions);
-    if (after <= maxFinalItems || after >= before || usedFallback) break;
+    if (after <= maxFinalItems || after >= before || usedBypass) break;
   }
   return partitions.map((partition, index) => ({
     ...partition,
