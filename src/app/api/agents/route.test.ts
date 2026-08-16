@@ -34,10 +34,26 @@ describe("同源 Agent API", () => {
   });
 
   it("只把通过边界校验的操作交给服务端 Agent", async () => {
-    runAgentOperation.mockResolvedValue({
-      opening: "这份材料值得先理解核心机制。",
-      question: "这个机制解决了什么问题？",
-    });
+    runAgentOperation.mockImplementation(
+      async (_body, _key, _model, _signal, dependencies) => {
+        dependencies.log({
+          operation: "CREATE_FIRST_QUESTION",
+          requestBytes: 100,
+          durationMs: 20,
+          attempts: 2,
+          endReason: "SUCCESS",
+          status: 200,
+          failureType: null,
+          outcome: "SUCCESS",
+          zodPaths: [],
+          errorId: null,
+        });
+        return {
+          opening: "这份材料值得先理解核心机制。",
+          question: "这个机制解决了什么问题？",
+        };
+      },
+    );
     const body = JSON.stringify({
       operation: "CREATE_FIRST_QUESTION",
       input: {
@@ -60,12 +76,18 @@ describe("同源 Agent API", () => {
         opening: "这份材料值得先理解核心机制。",
         question: "这个机制解决了什么问题？",
       },
+      meta: {
+        attempts: 2,
+        repaired: true,
+        validationSource: "MODEL_VALIDATED",
+      },
     });
     expect(runAgentOperation).toHaveBeenCalledWith(
       JSON.parse(body),
       "server-only-key",
       undefined,
       expect.any(AbortSignal),
+      expect.objectContaining({ log: expect.any(Function) }),
     );
   });
 

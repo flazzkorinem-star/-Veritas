@@ -1,7 +1,11 @@
 import { readServerEnv } from "@/lib/env/server";
 import { AGENT_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import { createPublicError } from "@/lib/errors/public-error";
-import { AgentServiceError, runAgentOperation } from "@/server/agents/service";
+import {
+  type AgentOperationLogEntry,
+  AgentServiceError,
+  runAgentOperation,
+} from "@/server/agents/service";
 import {
   acquireAgentRequest,
   agentRequestCategory,
@@ -89,10 +93,28 @@ export async function POST(request: Request) {
   let release: (() => void) | undefined;
   try {
     release = acquireAgentRequest(clientId(request), agentRequestCategory(body));
-    return json(
-      { result: await runAgentOperation(body, apiKey, undefined, request.signal) },
-      200,
+    let operationLog: AgentOperationLogEntry | undefined;
+    const result = await runAgentOperation(
+      body,
+      apiKey,
+      undefined,
+      request.signal,
+      {
+        log(entry) {
+          operationLog = entry;
+          if (process.env.NODE_ENV !== "test") console.info("agent_operation", entry);
+        },
+      },
     );
+    const attempts = operationLog?.attempts ?? 1;
+    return json({
+      result,
+      meta: {
+        attempts,
+        repaired: attempts > 1,
+        validationSource: "MODEL_VALIDATED",
+      },
+    }, 200);
   } catch (error) {
     if (error instanceof AgentRequestGuardError) {
       return errorResponse("RATE_LIMITED", "请求较多，请稍等片刻再试。", 429);

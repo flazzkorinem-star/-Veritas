@@ -45,6 +45,23 @@ describe("浏览器 Agent 客户端", () => {
     );
   });
 
+  it("把服务端的模型验证元数据交给编排层观测", async () => {
+    const onMeta = vi.fn();
+    const meta = {
+      attempts: 2,
+      repaired: true,
+      validationSource: "MODEL_VALIDATED",
+    } as const;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.json({ result: compactExtraction, meta }));
+
+    await expect(callAgent(compactOperation, { fetchImpl, onMeta })).resolves.toEqual(
+      compactExtraction,
+    );
+    expect(onMeta).toHaveBeenCalledWith(meta);
+  });
+
   it("只向同源路由发送固定业务操作，并校验结果", async () => {
     const fetchImpl = vi
       .fn()

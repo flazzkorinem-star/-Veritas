@@ -8,6 +8,10 @@ import {
   pendingNodeOrderSchema,
 } from "@/domain/agents/contracts";
 import {
+  type AgentOperationMeta,
+  agentOperationMetaSchema,
+} from "@/domain/agents/operation-meta";
+import {
   type KnowledgeMap,
   knowledgeMapSchema,
   type FirstQuestion,
@@ -47,9 +51,10 @@ export class AgentClientError extends Error {
   }
 }
 
-interface AgentClientDependencies {
+export interface AgentClientDependencies {
   fetchImpl?: typeof fetch;
   maxRequestBytes?: number;
+  onMeta?: (meta: AgentOperationMeta) => void;
   signal?: AbortSignal;
 }
 
@@ -213,11 +218,15 @@ export async function callAgent(
   }
 
   const result = z
-    .object({ result: resultSchema(request.data.operation) })
+    .object({
+      result: resultSchema(request.data.operation),
+      meta: agentOperationMetaSchema.optional(),
+    })
     .strict()
     .safeParse(body);
   if (!result.success) {
     throw new AgentClientError("INVALID_RESPONSE", "模型结果暂时无法使用，请重试。");
   }
+  if (result.data.meta) dependencies.onMeta?.(result.data.meta);
   return result.data.result;
 }
