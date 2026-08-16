@@ -336,27 +336,24 @@ describe("Agent 1 紧凑归并", () => {
     expect(prompt).not.toContain("另一段逐字正文也不应发送");
   });
 
-  it("最终编译连续返回坏结构时使用已校验候选确定性完成地图", async () => {
+  it("最终编译连续返回坏结构时明确失败，不生成模板化教学内容", async () => {
     const callModel = vi.fn().mockResolvedValue({ invalid: true });
 
-    const result = await runAgentOperation(
-      {
-        operation: "COMPILE_KNOWLEDGE_MAP",
-        input: {
-          sourceUnits: request.input.sourceUnits,
-          shards: [{ shardId: "shard-1", extraction: namespacedExtraction }],
+    await expect(
+      runAgentOperation(
+        {
+          operation: "COMPILE_KNOWLEDGE_MAP",
+          input: {
+            sourceUnits: request.input.sourceUnits,
+            shards: [{ shardId: "shard-1", extraction: namespacedExtraction }],
+          },
         },
-      },
-      "server-key",
-      callModel,
-      undefined,
-      { sleep: vi.fn().mockResolvedValue(undefined) },
-    );
-
+        "server-key",
+        callModel,
+        undefined,
+        { sleep: vi.fn().mockResolvedValue(undefined) },
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_MODEL_OUTPUT" });
     expect(callModel).toHaveBeenCalledTimes(2);
-    expect(result).toMatchObject({
-      nodes: [{ title: "水循环", knowledgeItemIds: ["s1-i1"] }],
-      knowledgeItems: [{ id: "s1-i1", kind: "CORE" }],
-    });
   });
 });

@@ -21,7 +21,6 @@ import {
   assembleCompactKnowledgeMap,
   CompactAssemblyError,
 } from "@/domain/knowledge-map/compact-assembly";
-import { buildCompactFallbackAudit } from "@/domain/knowledge-map/compact-fallback-audit";
 import {
   hintResponseSchema,
   stageAnswerSchema,
@@ -610,54 +609,40 @@ export async function runAgentOperation(
     }
     case "COMPILE_KNOWLEDGE_MAP": {
       const compileInput = request.data.input;
-      try {
-        return await callValidated(
-          request.data.operation,
-          callModel,
-          {
-            apiKey,
-            system: AGENT_ONE_SYSTEM,
-            user: compactCompilePrompt(compileInput),
-            thinking: false,
-            maxTokens: 24_000,
-            timeoutMs: 90_000,
-            signal,
-          },
-          (value) => {
-            const audit = parseOutput(
-              knowledgeAuditSchema,
-              value,
-              "COMPILE_KNOWLEDGE_MAP",
+      return callValidated(
+        request.data.operation,
+        callModel,
+        {
+          apiKey,
+          system: AGENT_ONE_SYSTEM,
+          user: compactCompilePrompt(compileInput),
+          thinking: false,
+          maxTokens: 24_000,
+          timeoutMs: 90_000,
+          signal,
+        },
+        (value) => {
+          const audit = parseOutput(
+            knowledgeAuditSchema,
+            value,
+            "COMPILE_KNOWLEDGE_MAP",
+          );
+          try {
+            return assembleCompactKnowledgeMap(
+              compileInput.sourceUnits,
+              compileInput.shards,
+              audit,
+            ).knowledgeMap;
+          } catch (error) {
+            return invalidModelOutput(
+              error instanceof CompactAssemblyError
+                ? error.details
+                : ["COMPILE_KNOWLEDGE_MAP:assembly:custom"],
             );
-            try {
-              return assembleCompactKnowledgeMap(
-                compileInput.sourceUnits,
-                compileInput.shards,
-                audit,
-              ).knowledgeMap;
-            } catch (error) {
-              return invalidModelOutput(
-                error instanceof CompactAssemblyError
-                  ? error.details
-                  : ["COMPILE_KNOWLEDGE_MAP:assembly:custom"],
-              );
-            }
-          },
-          dependencies,
-        );
-      } catch (error) {
-        if (
-          !(error instanceof AgentServiceError) ||
-          error.code !== "INVALID_MODEL_OUTPUT"
-        ) {
-          throw error;
-        }
-        return assembleCompactKnowledgeMap(
-          compileInput.sourceUnits,
-          compileInput.shards,
-          buildCompactFallbackAudit(compileInput.shards),
-        ).knowledgeMap;
-      }
+          }
+        },
+        dependencies,
+      );
     }
     case "MERGE_COMPACT_CANDIDATES": {
       const mergeInput = request.data.input;

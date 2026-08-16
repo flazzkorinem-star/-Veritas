@@ -52,7 +52,6 @@
 - `src/domain/knowledge-map/knowledge-audit-contracts.ts`：定义最终编译的合并谱系、诊断主题和条目归属契约。
 - `src/domain/knowledge-map/compact-merge.ts`：校验局部归并谱系并确定性恢复规范候选。
 - `src/domain/knowledge-map/compact-assembly.ts`：展开最终谱系并确定性恢复模块、来源、条目类型、主题顺序和完整覆盖。
-- `src/domain/knowledge-map/compact-fallback-extraction.ts`、`compact-fallback-audit.ts`：在模型结构连续失败时，从已验证来源和候选生成仍满足来源守恒与唯一归属的紧凑降级结果。
 - `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助、待开始主题排序与报告操作；Agent 2 的线上材料上下文只接受精简目录。
 - `src/domain/agents/context-budget.ts`：按整包 JSON 字节预算确定性组装 Agent 2 请求，优先保留当前主题、最新消息和模块/条目目录，剩余空间再加入摘要。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
@@ -72,13 +71,13 @@
 - `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由并再次校验稳定响应。
 - `src/features/materials/build-material-shards.ts`：将解析块转换为稳定来源单元，合并连续短段，并按实际 UTF-8 请求字节与单片 120 来源上限生成自适应分片。
-- `src/features/materials/extract-material-shards.ts`：以最多四路并发提取紧凑候选，保留成功结果，对结构失败只隔离二分一层并在叶级确定性降级。
+- `src/features/materials/extract-material-shards.ts`：以最多四路并发提取紧凑候选，保留成功结果，对结构失败只隔离二分一层；叶级或上游失败明确终止，禁止伪造候选覆盖。
 - `src/features/materials/prepare-compact-compile.ts`：按每批最多 60 条候选执行分层归并，隔离失败批次并为最终编译准备受控输入。
 - `src/features/materials/process-text-material.ts`：在 3 分钟材料总预算和 170 秒模型预算内编排解析、紧凑提取、分层归并、最终编译和首问，按实际完成数报告进度并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示、答案、三轮停滞后的自动讲解与同层小验证，以及学习目标驱动的待开始主题排序；状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，并返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
-- `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，提供确定性最终降级，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
+- `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，连续无效时返回受控失败，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源，调用 Agent 3 并保存覆盖整份材料范围的任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围，不解析模型 HTML。
@@ -108,7 +107,7 @@
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
 - `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、单次物理请求与调用方取消传播。
 - `src/domain/agents/context-budget.test.ts`：验证 Agent 2 整包 JSON 字节上限、确定性裁剪、当前主题完整保留、最新消息优先和目录先于摘要。
-- `src/domain/knowledge-map/compact-*.test.ts`：验证稳定 ID、分层归并、最终知识地图装配、来源覆盖和确定性降级边界。
+- `src/domain/knowledge-map/compact-*.test.ts`：验证稳定 ID、分层归并、最终知识地图装配和来源覆盖边界。
 - `src/server/agents/service.test.ts`、`service-compact.test.ts`：验证提示隔离、紧凑提取与编译、覆盖完整性、Zod 拒绝、单一重试预算、共享截止时间、定向结构修复和日志脱敏。
 - `src/server/agents/request-guard.test.ts`：验证每分钟请求上限、全局并发上限和幂等释放。
 - `src/app/api/agents/route.test.ts`：验证同源、Content-Type、声明与实际请求体限制，以及稳定错误响应。

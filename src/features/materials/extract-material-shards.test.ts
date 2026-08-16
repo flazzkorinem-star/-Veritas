@@ -119,7 +119,7 @@ describe("紧凑分片提取编排", () => {
     ]);
   });
 
-  it("二分后的子片仍结构失败时确定性保留正文，不再递归爆炸", async () => {
+  it("二分后的子片仍结构失败时明确失败，不用模板候选伪装覆盖", async () => {
     const materialShards = shards(1);
     materialShards[0]!.sourceUnits = Array.from({ length: 4 }, (_, index) => ({
       id: `source-${index + 1}`,
@@ -132,21 +132,13 @@ describe("紧凑分片提取编排", () => {
         new AgentClientError("MODEL_OUTPUT_INVALID", "模型结果暂时无法使用。"),
       );
 
-    const results = await extractMaterialShards(materialShards, {
-      callAgent: callAgent as never,
-    });
-
+    await expect(
+      extractMaterialShards(materialShards, { callAgent: callAgent as never }),
+    ).rejects.toMatchObject({ code: "MODEL_OUTPUT_INVALID" });
     expect(callAgent).toHaveBeenCalledTimes(3);
-    expect(results).toHaveLength(2);
-    expect(results.flatMap(({ extraction }) => extraction.sourceCoverage)).toEqual([
-      "source-1",
-      "source-2",
-      "source-3",
-      "source-4",
-    ]);
   });
 
-  it("单个提取请求上游不可用时保留正文候选，后续阶段仍会真实验证服务", async () => {
+  it("单个提取请求上游不可用时明确失败，不把未提取正文标成成功", async () => {
     const callAgent = vi
       .fn()
       .mockRejectedValue(
@@ -155,11 +147,7 @@ describe("紧凑分片提取编排", () => {
 
     await expect(
       extractMaterialShards(shards(1), { callAgent: callAgent as never }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        extraction: expect.objectContaining({ sourceCoverage: ["source-1"] }),
-      }),
-    ]);
+    ).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
     expect(callAgent).toHaveBeenCalledTimes(1);
   });
 

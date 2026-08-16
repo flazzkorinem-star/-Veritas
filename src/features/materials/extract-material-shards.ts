@@ -1,5 +1,4 @@
 import type { CompactExtraction } from "@/domain/knowledge-map/compact-contracts";
-import { buildCompactFallbackExtraction } from "@/domain/knowledge-map/compact-fallback-extraction";
 import { namespaceCompactExtraction } from "@/domain/knowledge-map/stable-compact-ids";
 
 import { AgentClientError, callAgent } from "./agent-client";
@@ -62,20 +61,6 @@ export async function extractMaterialShards(
   let completed = 0;
   let total = shards.length;
 
-  const fallbackResult = (shard: MaterialShard): ExtractionResult[] => {
-    completed += 1;
-    dependencies.onProgress?.(completed, total);
-    return [
-      {
-        shardId: shard.shardId,
-        extraction: namespaceCompactExtraction(
-          shard.shardId,
-          buildCompactFallbackExtraction(shard.sourceUnits),
-        ),
-      },
-    ];
-  };
-
   const extract = async (
     shard: MaterialShard,
     splitDepth = 0,
@@ -99,15 +84,12 @@ export async function extractMaterialShards(
         },
       ];
     } catch (error) {
-      if (error instanceof AgentClientError && error.code === "UPSTREAM_UNAVAILABLE") {
-        return fallbackResult(shard);
-      }
       const isStructuralFailure =
         error instanceof AgentClientError && error.code === "MODEL_OUTPUT_INVALID";
       if (!isStructuralFailure) throw error;
       const children = splitShard(shard);
       if (splitDepth >= 1 || !children) {
-        return fallbackResult(shard);
+        throw error;
       }
       release();
       released = true;
