@@ -76,7 +76,6 @@ npm start
 
 ```powershell
 $env:VERITAS_REAL_DEEPSEEK="1"
-$env:RUN_REAL_DEEPSEEK="1"
 node scripts/run-e2e.mjs "phase14-real-journey" --project=desktop-edge --workers=1
 ```
 

@@ -78,7 +78,8 @@ async function createReport(request: APIRequestContext) {
 
 test("真实 Agent 3 生成忠实且不越权的报告结构", async ({ request }, testInfo) => {
   test.skip(
-    process.env.RUN_REAL_DEEPSEEK !== "1" || testInfo.project.name !== "desktop-edge",
+    process.env.VERITAS_REAL_DEEPSEEK !== "1" ||
+      testInfo.project.name !== "desktop-edge",
     "仅在显式启用时调用本地服务端配置的真实 DeepSeek。",
   );
   test.setTimeout(180_000);

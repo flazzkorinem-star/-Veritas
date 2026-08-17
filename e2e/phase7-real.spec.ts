@@ -42,7 +42,8 @@ async function operation(request: APIRequestContext, value: unknown) {
 
 test("真实 Agent 2 返回可用且不越权的教学结果", async ({ request }, testInfo) => {
   test.skip(
-    process.env.RUN_REAL_DEEPSEEK !== "1" || testInfo.project.name !== "desktop-edge",
+    process.env.VERITAS_REAL_DEEPSEEK !== "1" ||
+      testInfo.project.name !== "desktop-edge",
     "仅在显式启用时调用本地服务端配置的真实 DeepSeek。",
   );
   test.setTimeout(240_000);
