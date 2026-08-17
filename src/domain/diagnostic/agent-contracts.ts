@@ -77,14 +77,6 @@ function validateEvaluation(
   }
 }
 
-export const evaluationDecisionSchema = z
-  .object({
-    ...evaluationFields,
-    assistantMessage: assistantMessageSchema,
-  })
-  .strict()
-  .superRefine(validateEvaluation);
-
 const learningGoalUpdateSchema = z.string().trim().min(1).max(500).nullable();
 const actionIntentFields = {
   learningGoalUpdate: learningGoalUpdateSchema.optional(),
@@ -144,7 +136,6 @@ export const stageAnswerSchema = z
 
 export type TeachingMove = (typeof TEACHING_MOVES)[number];
 export type ScaffoldType = (typeof SCAFFOLD_TYPES)[number];
-export type EvaluationDecision = z.infer<typeof evaluationDecisionSchema>;
 export type UserTurnDecision = z.infer<typeof userTurnDecisionSchema>;
 export type StageQuestion = z.infer<typeof stageQuestionSchema>;
 export type HintResponse = z.infer<typeof hintResponseSchema>;

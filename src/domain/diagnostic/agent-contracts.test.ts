@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  evaluationDecisionSchema,
   hintResponseSchema,
   stageAnswerSchema,
   stageQuestionSchema,
@@ -11,7 +10,9 @@ import {
 describe("Agent 2 结构化输出契约", () => {
   it("接收具体证据、缺口、误解、教学动作与家教文本", () => {
     expect(
-      evaluationDecisionSchema.parse({
+      userTurnDecisionSchema.parse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
         classification: "PARTIAL",
         isCorrect: false,
         progress: "ADVANCING",
@@ -38,7 +39,9 @@ describe("Agent 2 结构化输出契约", () => {
     },
   ])("拒绝互相矛盾的正确性与进展判断", (partial) => {
     expect(() =>
-      evaluationDecisionSchema.parse({
+      userTurnDecisionSchema.parse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
         ...partial,
         correctEvidence: [],
         missingPoints: [],
@@ -63,10 +66,20 @@ describe("Agent 2 结构化输出契约", () => {
     } as const;
 
     expect(
-      evaluationDecisionSchema.safeParse({ ...noAnswer, progress: "STALLED" }).success,
+      userTurnDecisionSchema.safeParse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        ...noAnswer,
+        progress: "STALLED",
+      }).success,
     ).toBe(true);
     expect(
-      evaluationDecisionSchema.safeParse({ ...noAnswer, progress: "ADVANCING" }).success,
+      userTurnDecisionSchema.safeParse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
+        ...noAnswer,
+        progress: "ADVANCING",
+      }).success,
     ).toBe(false);
   });
 
@@ -75,7 +88,9 @@ describe("Agent 2 结构化输出契约", () => {
     { correctEvidence: ["回答了一个相关点"], missingPoints: ["仍缺少主问题要求的因果"] },
   ])("拒绝没有通过证据或仍留有缺口的 CORRECT", (evidence) => {
     expect(() =>
-      evaluationDecisionSchema.parse({
+      userTurnDecisionSchema.parse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
         classification: "CORRECT",
         isCorrect: true,
         progress: "ADVANCING",
@@ -90,7 +105,9 @@ describe("Agent 2 结构化输出契约", () => {
 
   it("拒绝模型越权返回分数、层级或状态", () => {
     expect(() =>
-      evaluationDecisionSchema.parse({
+      userTurnDecisionSchema.parse({
+        responseMode: "EVALUATE_DIAGNOSTIC",
+        learningGoalUpdate: null,
         classification: "CORRECT",
         isCorrect: true,
         progress: "ADVANCING",
