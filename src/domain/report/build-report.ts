@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  MAX_DIAGNOSTIC_NODES,
+  MAX_KNOWLEDGE_ITEMS,
+} from "@/config/knowledge-map-limits";
+import { MAX_REPORT_SUMMARY_CHARACTERS } from "@/config/report-limits";
 import type { StageKey, StageStatus } from "@/domain/types";
 
 import {
@@ -50,6 +55,7 @@ export interface ReportDocument {
 }
 
 const storedText = z.string().trim().min(1).max(2_000);
+const storedSummary = z.string().trim().min(1).max(MAX_REPORT_SUMMARY_CHARACTERS);
 const storedStageStatus = z.enum(["PASSED", "PASSED_WITH_HINT", "PASSED_WITH_ANSWER"]);
 
 export const reportDocumentSchema: z.ZodType<ReportDocument> = z
@@ -59,19 +65,19 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
     generatedAt: z.string().datetime(),
     progress: z
       .object({
-        completed: z.number().int().min(1).max(40),
-        total: z.number().int().min(1).max(40),
+        completed: z.number().int().min(1).max(MAX_DIAGNOSTIC_NODES),
+        total: z.number().int().min(1).max(MAX_DIAGNOSTIC_NODES),
       })
       .strict(),
     coverage: z
       .object({
-        diagnosed: z.array(storedText).max(40),
-        undiagnosed: z.array(storedText).max(40),
-        supporting: z.array(storedText).max(200),
-        referenceOnly: z.array(storedText).max(200),
+        diagnosed: z.array(storedText).max(MAX_DIAGNOSTIC_NODES),
+        undiagnosed: z.array(storedText).max(MAX_DIAGNOSTIC_NODES),
+        supporting: z.array(storedText).max(MAX_KNOWLEDGE_ITEMS),
+        referenceOnly: z.array(storedText).max(MAX_KNOWLEDGE_ITEMS),
       })
       .strict(),
-    summary: storedText,
+    summary: storedSummary,
     nodes: z
       .array(
         z
@@ -149,7 +155,7 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
           .strict(),
       )
       .min(1)
-      .max(40),
+      .max(MAX_DIAGNOSTIC_NODES),
   })
   .strict();
 
@@ -163,7 +169,7 @@ export function buildReportDocument(options: {
 }): ReportDocument {
   const output = validateReportEvidence(options.input, options.output);
   const insightByNode = new Map(output.nodeInsights.map((node) => [node.nodeId, node]));
-  return {
+  return reportDocumentSchema.parse({
     taskId: options.taskId,
     materialTitle: options.input.materialTitle,
     generatedAt: options.generatedAt,
@@ -247,7 +253,7 @@ export function buildReportDocument(options: {
         ),
       };
     }),
-  };
+  });
 }
 
 function escapeMarkdown(value: string) {

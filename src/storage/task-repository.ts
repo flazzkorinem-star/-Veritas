@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MAX_DIAGNOSTIC_NODES } from "@/config/knowledge-map-limits";
 import {
   firstQuestionSchema,
   knowledgeMapSchema,
@@ -7,6 +8,7 @@ import {
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
 import { getNodeScore } from "@/domain/diagnostic/selectors";
 import { MAX_PARSED_TEXT_CHARACTERS } from "@/config/material-limits";
+import { MAX_REPORT_MARKDOWN_CHARACTERS } from "@/config/report-limits";
 import type { FirstQuestion } from "@/domain/knowledge-map/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
@@ -69,9 +71,11 @@ const storedReportSchema = z
   .object({
     id: z.uuid(),
     taskId: z.uuid(),
-    markdown: z.string().trim().min(1).max(200_000),
+    markdown: z.string().trim().min(1).max(MAX_REPORT_MARKDOWN_CHARACTERS),
     document: reportDocumentSchema,
-    completedNodeIds: z.array(z.string().trim().min(1).max(120)).max(40),
+    completedNodeIds: z
+      .array(z.string().trim().min(1).max(120))
+      .max(MAX_DIAGNOSTIC_NODES),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -426,11 +430,18 @@ export function createTaskRepository(database: VeritasDatabase) {
         if (!material) {
           throw new LocalStoreError("NOT_FOUND", "找不到这份任务的材料。");
         }
-        const [sessions, messages] = await Promise.all([
+        const [sessions, messages, storedReport] = await Promise.all([
           database.sessions.where("taskId").equals(taskId).toArray(),
           database.messages.where("taskId").equals(taskId).sortBy("createdAt"),
+          database.reports.get(taskId),
         ]);
-        return { task, material, sessions, messages };
+        return {
+          task,
+          material,
+          sessions,
+          messages,
+          report: storedReport ? readReport(storedReport) : undefined,
+        };
       });
     },
 
@@ -535,7 +546,7 @@ export function createTaskRepository(database: VeritasDatabase) {
               !document.success ||
               !material ||
               !markdown ||
-              markdown.length > 200_000 ||
+              markdown.length > MAX_REPORT_MARKDOWN_CHARACTERS ||
               markdown !== reportToMarkdown(document.data).trim() ||
               !factsMatch ||
               document.data.materialTitle !== task.fileName ||

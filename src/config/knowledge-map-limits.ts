@@ -1,0 +1,3 @@
+export const MAX_MATERIAL_MODULES = 500;
+export const MAX_KNOWLEDGE_ITEMS = 2_000;
+export const MAX_DIAGNOSTIC_NODES = 1_000;

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { generateTaskReport } from "./generate-report";
+import { reportDocumentSchema } from "@/domain/report/build-report";
+
+import { generateTaskReport, type ReportAgentCall } from "./generate-report";
 
 describe("报告生成编排", () => {
   it("把已完成主题的完整对话脉络交给 Agent 3，并保存代码回填的报告", async () => {
@@ -178,5 +180,159 @@ describe("报告生成编排", () => {
       }),
       expect.stringContaining("学习诊断报告"),
     );
+  });
+
+  it("把超过单次上限的已完成主题分批交给 Agent 3，并保存完整报告", async () => {
+    const taskId = "11111111-1111-4111-8111-111111111111";
+    const now = "2026-08-02T08:00:00.000Z";
+    const nodes = Array.from({ length: 41 }, (_, index) => ({
+      id: `node-${index + 1}`,
+      title: `主题 ${index + 1}`,
+      canonicalUnderstanding: `主题 ${index + 1} 的规范理解。`,
+      commonMisconceptions: [],
+      sourceReferences: [{ label: `第 ${index + 1} 段`, excerpt: `来源 ${index + 1}` }],
+      order: index + 1,
+    }));
+    const completedStages = {
+      MEMORY: {
+        status: "PASSED" as const,
+        mainQuestion: "记忆题？",
+        verificationQuestion: null,
+        answerOrigin: "NONE" as const,
+        hintLevel: 0,
+      },
+      UNDERSTANDING: {
+        status: "PASSED" as const,
+        mainQuestion: "理解题？",
+        verificationQuestion: null,
+        answerOrigin: "NONE" as const,
+        hintLevel: 0,
+      },
+      APPLICATION: {
+        status: "PASSED" as const,
+        mainQuestion: "应用题？",
+        verificationQuestion: null,
+        answerOrigin: "NONE" as const,
+        hintLevel: 0,
+      },
+      ANALYSIS: {
+        status: "PASSED" as const,
+        mainQuestion: "分析题？",
+        verificationQuestion: null,
+        answerOrigin: "NONE" as const,
+        hintLevel: 0,
+      },
+    };
+    const generationData = {
+      task: { id: taskId, fileName: "large.md", learningGoal: null },
+      material: { nodes, knowledgeItems: [], coverageAssignments: [] },
+      sessions: nodes.map((node) => ({
+        taskId,
+        nodeId: node.id,
+        session: { status: "COMPLETED", stages: completedStages },
+        scaffoldEvents: [],
+      })),
+      messages: nodes.map((node) => ({
+        id: `message-${node.id}`,
+        taskId,
+        nodeId: node.id,
+        role: "USER",
+        content: `我理解了${node.title}。`,
+      })),
+    };
+    const getReportGenerationData = vi.fn().mockResolvedValue(generationData);
+    const saveReport = vi.fn();
+    let batch = 0;
+    const callAgent = vi.fn(async (request: Parameters<ReportAgentCall>[0]) => {
+      batch += 1;
+      return {
+        summary: `批次 ${batch} 总结。`,
+        nodeInsights: request.input.completedNodes.map((node) => ({
+          nodeId: node.nodeId,
+          learningEvidence: ([
+            "MEMORY",
+            "UNDERSTANDING",
+            "APPLICATION",
+            "ANALYSIS",
+          ] as const).map((stage) => ({
+            stage,
+            category: "INDEPENDENT" as const,
+            statement: `${node.title} 的${stage}证据。`,
+            userMessageId: `message-${node.nodeId}`,
+          })),
+          misconceptions: [],
+          scaffoldNotes: [],
+          nextSteps: ["继续复习。"],
+          sourceReferenceIndexes: [0],
+        })),
+      };
+    });
+
+    const document = await generateTaskReport(
+      taskId,
+      { getReportGenerationData, saveReport },
+      callAgent,
+      () => now,
+    );
+
+    expect(callAgent).toHaveBeenCalledTimes(2);
+    expect(callAgent.mock.calls.map(([request]) => request.input.completedNodes.length)).toEqual([
+      40, 1,
+    ]);
+    expect(document).toMatchObject({
+      progress: { completed: 41, total: 41 },
+      summary: "批次 1 总结。\n\n批次 2 总结。",
+    });
+    expect(document?.nodes).toHaveLength(41);
+    expect(reportDocumentSchema.parse(document).nodes).toHaveLength(41);
+    expect(saveReport).toHaveBeenCalledOnce();
+
+    const nextNode = {
+      id: "node-42",
+      title: "主题 42",
+      canonicalUnderstanding: "主题 42 的规范理解。",
+      commonMisconceptions: [],
+      sourceReferences: [{ label: "第 42 段", excerpt: "来源 42" }],
+      order: 42,
+    };
+    getReportGenerationData.mockResolvedValue({
+      ...generationData,
+      material: { ...generationData.material, nodes: [...nodes, nextNode] },
+      sessions: [
+        ...generationData.sessions,
+        {
+          taskId,
+          nodeId: nextNode.id,
+          session: { status: "COMPLETED", stages: completedStages },
+          scaffoldEvents: [],
+        },
+      ],
+      messages: [
+        ...generationData.messages,
+        {
+          id: "message-node-42",
+          taskId,
+          nodeId: nextNode.id,
+          role: "USER",
+          content: "我理解了主题 42。",
+        },
+      ],
+      report: { document },
+    });
+
+    const updated = await generateTaskReport(
+      taskId,
+      { getReportGenerationData, saveReport },
+      callAgent,
+      () => now,
+    );
+
+    expect(callAgent).toHaveBeenCalledTimes(3);
+    expect(callAgent.mock.calls[2]![0].input.completedNodes).toHaveLength(1);
+    expect(updated).toMatchObject({
+      progress: { completed: 42, total: 42 },
+      summary: "批次 1 总结。\n\n批次 2 总结。\n\n批次 3 总结。",
+    });
+    expect(updated?.nodes).toHaveLength(42);
   });
 });

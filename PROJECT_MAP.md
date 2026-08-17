@@ -39,7 +39,9 @@
 - `src/app/globals.css`：全局令牌、两区工作区、固定视口内的消息滚动与输入区、按需主题/进度浮层、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
 - `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、Agent 2 浏览器与上游整包字节预算、最近消息预算、路由总并发与分类容量、3 分钟材料总预算、170 秒模型预算和 Agent 1 提取、归并与编译的四路并发。
+- `src/config/knowledge-map-limits.ts`：定义材料模块、知识条目和诊断主题的统一容量边界，供模型契约、本地报告与存储复用。
 - `src/config/material-limits.ts`：定义解析文本的 30 万字符统一上限，供文本入口、统一解析收尾和入库防线共享。
+- `src/config/report-limits.ts`：区分 Agent 3 单批主题与摘要上限，以及整份本地报告的摘要和 Markdown 上限。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
@@ -86,7 +88,7 @@
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，成功时返回模型验证元数据，失败时返回脱敏错误。
 - `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output，允许业务操作显式设置采样温度；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
 - `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；诊断判定只发送当前问题所需上下文并排除四层目标，首问、阶段题与小验证由代码收敛为单一可作答动作；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，连续无效时返回受控失败，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
-- `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源，调用 Agent 3 并保存覆盖整份材料范围的任务级报告。
+- `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源；复用仍有效的旧主题结果，只把新增主题按每批 40 个串行交给 Agent 3，并保存覆盖整份材料范围的任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。

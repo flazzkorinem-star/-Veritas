@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import {
+  REPORT_AGENT_NODE_LIMIT,
+  REPORT_AGENT_SUMMARY_CHARACTER_LIMIT,
+} from "@/config/report-limits";
 import { STAGE_ORDER } from "@/domain/types";
 
 const completedStageStatusSchema = z.enum([
@@ -101,7 +105,7 @@ export const reportAgentInputSchema = z
           .strict(),
       )
       .min(1)
-      .max(40),
+      .max(REPORT_AGENT_NODE_LIMIT),
   })
   .strict();
 
@@ -128,7 +132,7 @@ const internalReportTermPattern = /\bPASSED(?:_WITH_(?:HINT|ANSWER))?\b|确定�
 
 export const reportAgentOutputSchema = z
   .object({
-    summary: z.string().trim().min(1).max(2_000),
+    summary: z.string().trim().min(1).max(REPORT_AGENT_SUMMARY_CHARACTER_LIMIT),
     nodeInsights: z
       .array(
         z
@@ -143,7 +147,7 @@ export const reportAgentOutputSchema = z
           .strict(),
       )
       .min(1)
-      .max(40),
+      .max(REPORT_AGENT_NODE_LIMIT),
   })
   .strict()
   .superRefine((value, context) => {

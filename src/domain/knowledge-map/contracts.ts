@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  MAX_DIAGNOSTIC_NODES,
+  MAX_KNOWLEDGE_ITEMS,
+  MAX_MATERIAL_MODULES,
+} from "@/config/knowledge-map-limits";
+
 const idSchema = z
   .string()
   .trim()
@@ -72,10 +78,13 @@ export const coverageAssignmentSchema = z.discriminatedUnion("disposition", [
 
 export const knowledgeMapSchema = z
   .object({
-    modules: z.array(materialModuleSchema).min(1).max(500),
-    knowledgeItems: z.array(knowledgeItemSchema).min(1).max(2_000),
-    nodes: z.array(diagnosticNodeSchema).min(1).max(1_000),
-    coverageAssignments: z.array(coverageAssignmentSchema).min(1).max(2_000),
+    modules: z.array(materialModuleSchema).min(1).max(MAX_MATERIAL_MODULES),
+    knowledgeItems: z.array(knowledgeItemSchema).min(1).max(MAX_KNOWLEDGE_ITEMS),
+    nodes: z.array(diagnosticNodeSchema).min(1).max(MAX_DIAGNOSTIC_NODES),
+    coverageAssignments: z
+      .array(coverageAssignmentSchema)
+      .min(1)
+      .max(MAX_KNOWLEDGE_ITEMS),
   })
   .strict()
   .superRefine((value, context) => {

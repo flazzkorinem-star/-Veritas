@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  MAX_DIAGNOSTIC_NODES,
+  MAX_KNOWLEDGE_ITEMS,
+} from "@/config/knowledge-map-limits";
+
 const idSchema = z
   .string()
   .trim()
@@ -62,9 +67,9 @@ const auditAssignmentSchema = z.discriminatedUnion("disposition", [
 
 export const knowledgeAuditSchema = z
   .object({
-    mergeGroups: z.array(mergeGroupSchema).min(1).max(2_000),
-    nodes: z.array(auditNodeSchema).min(1).max(1_000),
-    assignments: z.array(auditAssignmentSchema).min(1).max(2_000),
+    mergeGroups: z.array(mergeGroupSchema).min(1).max(MAX_KNOWLEDGE_ITEMS),
+    nodes: z.array(auditNodeSchema).min(1).max(MAX_DIAGNOSTIC_NODES),
+    assignments: z.array(auditAssignmentSchema).min(1).max(MAX_KNOWLEDGE_ITEMS),
   })
   .strict()
   .superRefine((value, context) => {

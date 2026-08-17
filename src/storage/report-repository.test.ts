@@ -1,8 +1,12 @@
 import Dexie from "dexie";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildReportDocument, reportToMarkdown } from "@/domain/report/build-report";
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
+import {
+  generateTaskReport,
+  type ReportAgentCall,
+} from "@/features/report/generate-report";
 
 import { createVeritasDatabase } from "./database";
 import { createTaskRepository } from "./task-repository";
@@ -246,6 +250,121 @@ describe("报告仓储", () => {
       document,
       markdown: expect.stringContaining("学习诊断报告"),
     });
+    database.close();
+  });
+
+  it("保存超过 Agent 3 单批上限的完整报告并完成任务", async () => {
+    const name = `veritas-large-report-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const taskId = crypto.randomUUID();
+    const materialId = crypto.randomUUID();
+    const now = "2026-08-02T08:00:00.000Z";
+    const nodes = Array.from({ length: 41 }, (_, index) => ({
+      id: `node-${index + 1}`,
+      moduleId: "module-1",
+      title: `主题 ${index + 1}`,
+      objective: `解释主题 ${index + 1}。`,
+      knowledgeItemIds: [`item-${index + 1}`],
+      sourceReferences: [{ label: `第 ${index + 1} 段`, excerpt: `来源 ${index + 1}` }],
+      canonicalUnderstanding: `主题 ${index + 1} 的规范理解。`,
+      commonMisconceptions: [],
+      bloomTargets: {
+        memory: "记住事实。",
+        understanding: "解释事实。",
+        application: "应用事实。",
+        analysis: "分析事实。",
+      },
+      order: index + 1,
+    }));
+    await database.tasks.put({
+      id: taskId,
+      materialId,
+      title: "大报告",
+      fileName: "large.md",
+      status: "IN_PROGRESS",
+      currentNodeId: nodes.at(-1)!.id,
+      isPinned: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await database.materials.put({
+      taskId,
+      materialId,
+      fileName: "large.md",
+      mimeType: "text/markdown",
+      sizeBytes: 10,
+      originalFile: new Blob(["材料"]),
+      parsedText: "材料",
+      processingTrace: null,
+      modules: [{ id: "module-1", title: "大材料", sourceRange: "全文" }],
+      knowledgeItems: nodes.map((node, index) => ({
+        id: `item-${index + 1}`,
+        moduleId: "module-1",
+        title: node.title,
+        summary: node.canonicalUnderstanding,
+        kind: "CORE" as const,
+        diagnosticRationale: "核心主题",
+        sourceReferences: node.sourceReferences,
+        commonMisconceptions: [],
+      })),
+      nodes,
+      coverageAssignments: nodes.map((node, index) => ({
+        knowledgeItemId: `item-${index + 1}`,
+        disposition: "DIAGNOSED_IN_NODE" as const,
+        nodeId: node.id,
+      })),
+    });
+    await database.sessions.bulkPut(
+      nodes.map((node) => ({
+        taskId,
+        nodeId: node.id,
+        session: completeSession(node.id),
+        scaffoldEvents: [],
+      })),
+    );
+    await database.messages.bulkPut(
+      nodes.map((node) => ({
+        id: `message-${node.id}`,
+        taskId,
+        nodeId: node.id,
+        role: "USER" as const,
+        content: `我理解了${node.title}。`,
+        createdAt: now,
+      })),
+    );
+    const agent = vi.fn(async (request: Parameters<ReportAgentCall>[0]) => ({
+      summary: `已诊断 ${request.input.completedNodes.length} 个主题。`,
+      nodeInsights: request.input.completedNodes.map((node) => ({
+        nodeId: node.nodeId,
+        learningEvidence: ([
+          "MEMORY",
+          "UNDERSTANDING",
+          "APPLICATION",
+          "ANALYSIS",
+        ] as const).map((stage) => ({
+          stage,
+          category: "INDEPENDENT" as const,
+          statement: `${node.title} 的${stage}证据。`,
+          userMessageId: `message-${node.nodeId}`,
+        })),
+        misconceptions: [],
+        scaffoldNotes: [],
+        nextSteps: ["继续复习。"],
+        sourceReferenceIndexes: [0],
+      })),
+    }));
+
+    await generateTaskReport(taskId, repository, agent, () => now);
+
+    expect(agent).toHaveBeenCalledTimes(2);
+    await expect(repository.getReport(taskId)).resolves.toMatchObject({
+      document: { progress: { completed: 41, total: 41 }, nodes: expect.any(Array) },
+      completedNodeIds: expect.arrayContaining(nodes.map((node) => node.id)),
+    });
+    expect((await repository.getReport(taskId))?.document.nodes).toHaveLength(41);
+    expect((await repository.getTaskLearningData(taskId)).task.status).toBe("COMPLETED");
     database.close();
   });
 });
