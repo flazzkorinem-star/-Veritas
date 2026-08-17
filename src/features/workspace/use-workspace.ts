@@ -64,13 +64,16 @@ function processingErrorMessage(
   wasCancelled: boolean,
 ) {
   if (wasCancelled) return "已取消处理这份材料。";
+  if (error instanceof MaterialFileError && error.code === "UNSUPPORTED_TYPE") {
+    return `文件类型不支持：${error.message.trim()}`;
+  }
   const message =
     error instanceof MaterialReadError ||
     error instanceof MaterialFileError ||
     error instanceof MaterialParseError ||
     error instanceof AgentClientError ||
     error instanceof TextProcessingError
-      ? error.message
+      ? error.message.trim()
       : "暂时无法处理这份材料，请重试。";
   return `${processingStageLabel(progress)}时失败：${message}`;
 }
@@ -94,6 +97,7 @@ export function useWorkspace(
   const [processingTaskId, setProcessingTaskId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
+  const [preparingNodeId, setPreparingNodeId] = useState<string | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [failedReportTaskId, setFailedReportTaskId] = useState<string | null>(null);
   const [pendingDiagnosticAction, setPendingDiagnosticAction] =
@@ -106,6 +110,7 @@ export function useWorkspace(
   const processingController = useRef<AbortController | null>(null);
   const activeTaskIdRef = useRef<string | null>(null);
   const responding = useRef(false);
+  const selectingNode = useRef(false);
   const draftWrite = useRef<Promise<void>>(Promise.resolve());
   const reportWrite = useRef<Promise<void>>(Promise.resolve());
 
@@ -525,10 +530,11 @@ export function useWorkspace(
   }
 
   async function selectNode(nodeId: string) {
-    if (responding.current) return;
+    if (responding.current || selectingNode.current) return;
     if (!learningData?.material || !learningData.task) return;
     const node = learningData.material.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
+    selectingNode.current = true;
     setFailedDiagnosticAction(null);
     setError(null);
     try {
@@ -536,6 +542,7 @@ export function useWorkspace(
       const existing = learningData.sessions.some((stored) => stored.nodeId === nodeId);
       let question: FirstQuestion | undefined;
       if (!existing) {
+        setPreparingNodeId(nodeId);
         const itemIds = new Set(node.knowledgeItemIds);
         const input = {
           node,
@@ -563,6 +570,9 @@ export function useWorkspace(
           ? reason.message
           : "暂时无法打开这个主题，请重试。",
       );
+    } finally {
+      selectingNode.current = false;
+      setPreparingNodeId(null);
     }
   }
 
@@ -607,6 +617,7 @@ export function useWorkspace(
     canCancelProcessing: processingTaskId === activeTaskId,
     isImporting,
     isResponding,
+    preparingNodeId,
     isGeneratingReport,
     pendingUserMessage:
       pendingDiagnosticAction?.kind === "MESSAGE"

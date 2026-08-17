@@ -169,12 +169,24 @@ describe("Agent 2 服务", () => {
       ),
     ).resolves.toEqual(output);
 
-    const prompt = callModel.mock.calls[0]![0].user;
+    const modelRequest = callModel.mock.calls[0]![0];
+    const prompt = modelRequest.user;
+    expect(modelRequest.temperature).toBe(0);
+    expect(modelRequest.system).toContain(
+      "问题若只限定某几个比较维度，用户正确覆盖这些维度即为 CORRECT",
+    );
+    expect(modelRequest.system).toContain("只按答案内容判断");
     expect(prompt).toContain("当前评分对象是 currentQuestion");
     expect(prompt).toContain("识别题目要求的唯一回答动作和最低证据");
     expect(prompt).toContain("只有用户本轮证据完整满足要求时才是 CORRECT");
     expect(prompt).toContain("未完整满足时保留当前问题");
     expect(prompt).toContain("用户正在回答当前问题");
+    expect(prompt).toContain("missingPoints 只能来自 currentQuestion 明确要求的内容");
+    expect(prompt).toContain("不能成为通过条件或缺失点");
+    expect(prompt).not.toContain(node.bloomTargets.memory);
+    expect(prompt).not.toContain(node.bloomTargets.understanding);
+    expect(prompt).not.toContain(node.bloomTargets.application);
+    expect(prompt).not.toContain(node.bloomTargets.analysis);
   });
 
   it.each([

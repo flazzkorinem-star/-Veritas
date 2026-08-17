@@ -88,6 +88,8 @@ const VITA_SYSTEM = `你是 Vita，Veritas 中直接与用户对话的通用 AI�
 
 先完成用户这一轮真正想做的事。当前主问题是上下文，不是话题限制；用户没有在回答它时，就按普通通用对话完整回应，并保留原有学习进度。用户明确表示无法回答当前主问题时，仍属于在回应它，应按当前操作要求返回诊断评价并可主动提供支架。讨论、直接讲解、举例、比较、苏格拉底式引导和诊断提问都是可选方法，根据用户意图和当下效果自然切换。
 
+诊断评分时，先暂时忽略材料里没有被当前问题点名的其他知识，只把 currentQuestion 明确要求的回答槽位作为通过条件。问题若只限定某几个比较维度，用户正确覆盖这些维度即为 CORRECT；不得追加原因、机制、定义、背景、例子、前提、后果或其他比较维度，除非问题明确要求。用户使用“我猜”“不确定”等语气但同时给出实质答案时，只按答案内容判断。
+
 对材料要有判断。区分值得理解的概念、机制、因果和可迁移方法，与仅供查询的代码、编号、名单或孤立数字。材料混乱、信息不足或重点选择不当时，可以直接指出，并把帮助放在更有学习价值的部分。
 
 使用自然、具体、有判断的中文。直接进入内容，让句式和节奏贴合当前对话；说明真实依据和不确定性，少用仪式化开场、空泛肯定、机械分段和强行总结。不要为了显得口语化而牺牲事实、数字或术语。
@@ -181,9 +183,16 @@ function repairRequest(
   error: AgentServiceError | DeepSeekError,
 ) {
   const shape = allowedRepairShape(operation);
+  const questionRepair =
+    error instanceof AgentServiceError &&
+    error.details.some((detail) =>
+      /CREATE_(?:FIRST|STAGE)_(?:QUESTION|VERIFICATION):question:custom/u.test(detail),
+    )
+      ? "question 包含多个独立问点；只保留一个回答动作。"
+      : "";
   const repair =
     error instanceof AgentServiceError
-      ? `上一次输出未通过结构校验。失败字段路径：${sanitizeDetails(error.details).join(", ") || "root"}。只修正这些字段并重新输出完整 JSON，不要解释，也不要增加未声明字段。${shape ? `允许的完整形状：${shape}` : ""}`
+      ? `上一次输出未通过结构校验。失败字段路径：${sanitizeDetails(error.details).join(", ") || "root"}。${questionRepair}只修正这些字段并重新输出完整 JSON，不要解释，也不要增加未声明字段。${shape ? `允许的完整形状：${shape}` : ""}`
       : "上一次输出为空、截断或不是合法 JSON。请按原定结构重新输出完整 JSON，不要解释。";
   return {
     ...request,
@@ -466,6 +475,42 @@ ${JSON.stringify(input)}
 </UNTRUSTED_VERIFIED_CONTEXT>`;
 }
 
+function keepSingleQuestionAction<T extends { question: string }>(
+  value: T,
+  operation:
+    "CREATE_FIRST_QUESTION" | "CREATE_STAGE_QUESTION" | "CREATE_STAGE_VERIFICATION",
+) {
+  const questionEnd = value.question.indexOf("？");
+  if (questionEnd >= 0 && value.question.slice(questionEnd + 1).trim()) {
+    return { ...value, question: value.question.slice(0, questionEnd + 1).trim() };
+  }
+  const questionWords = [
+    ...value.question.matchAll(/为什么|怎么样|怎么|如何|哪些|哪个|哪种|什么|是否/gu),
+  ];
+  const secondQuestionWord = questionWords[1]?.index;
+  const addedAction = /(?:并|同时|还要|以及)(?:说明|解释|分析|指出|比较|回答|列出)/u.exec(
+    value.question,
+  );
+  const boundary = secondQuestionWord ?? addedAction?.index;
+  if (boundary !== undefined) {
+    const separator = Math.max(
+      value.question.lastIndexOf("，", boundary),
+      value.question.lastIndexOf(",", boundary),
+      value.question.lastIndexOf("；", boundary),
+      value.question.lastIndexOf(";", boundary),
+    );
+    if (separator >= 0) {
+      const question = value.question
+        .slice(0, separator)
+        .trim()
+        .replace(/[。！？!?]+$/u, "");
+      return { ...value, question: `${question}？` };
+    }
+    invalidModelOutput([`${operation}:question:custom`]);
+  }
+  return value;
+}
+
 type DiagnosticOperation = Extract<
   AgentOperationRequest,
   {
@@ -494,7 +539,7 @@ function diagnosticPrompt(
 4. 只有当前没有问题且用户要开始检验时使用 START_DIAGNOSTIC。
 不要靠关键词匹配意图。learningGoalUpdate 只在用户明确表达或改变学习目标时填写，否则为 null。
 
-当前评分对象是 currentQuestion；mainQuestion 只作为原题背景。先识别题目要求的唯一回答动作和最低证据，再判断用户本轮是否完成。只有用户本轮证据完整满足要求时才是 CORRECT，并令 isCorrect=true、progress=ADVANCING、correctEvidence 非空且 missingPoints 为空。部分完成、误解、偏题和无答案应如实分类；未完整满足时保留当前问题，并在 assistantMessage 中具体回应已说对的内容和当前缺口。明确无法作答也是诊断回应，应分类为 NO_ANSWER、progress=STALLED；可以按需要解释、举例或提供支架。
+当前评分对象是 currentQuestion；mainQuestion 只作为原题背景。先识别题目要求的唯一回答动作和最低证据，再判断用户本轮是否完成。missingPoints 只能来自 currentQuestion 明确要求的内容；材料、主题理解或其他层目标中存在但 currentQuestion 没有要求的事实，只能用于核对回答是否真实，不能成为通过条件或缺失点。只有用户本轮证据完整满足要求时才是 CORRECT，并令 isCorrect=true、progress=ADVANCING、correctEvidence 非空且 missingPoints 为空。部分完成、误解、偏题和无答案应如实分类；未完整满足时保留当前问题，并在 assistantMessage 中具体回应已说对的内容和当前缺口。明确无法作答也是诊断回应，应分类为 NO_ANSWER、progress=STALLED；可以按需要解释、举例或提供支架。
 
 CORRECT 的 assistantMessage 只评价本轮并自然收束，不生成下一道题；下一层正式问题由 CREATE_STAGE_QUESTION 单独生成。CONVERSATION 不改变诊断状态，先完成用户当前请求。
 
@@ -504,10 +549,28 @@ CORRECT 的 assistantMessage 只评价本轮并自然收束，不生成下一道
     CREATE_STAGE_ANSWER:
       '给出当前主问题的完整答案和简短解释，不提出新的诊断问题。只输出 {"assistantMessage":"..."}。',
   } as const;
+  const promptInput = upstreamDiagnosticInput(operation, input);
   return `${instructions[operation]}
 <UNTRUSTED_DIAGNOSTIC_CONTEXT>
-${JSON.stringify(input)}
+${JSON.stringify(promptInput)}
 </UNTRUSTED_DIAGNOSTIC_CONTEXT>`;
+}
+
+function upstreamDiagnosticInput(
+  operation: DiagnosticOperation["operation"],
+  input: DiagnosticOperation["input"],
+) {
+  if (operation !== "RESPOND_TO_USER") return input;
+  const responseInput = input as Extract<
+    DiagnosticOperation,
+    { operation: "RESPOND_TO_USER" }
+  >["input"];
+  const { bloomTargets, ...node } = responseInput.node;
+  void bloomTargets;
+  return {
+    ...responseInput,
+    node,
+  };
 }
 
 function validateUserTurnMode(
@@ -686,26 +749,36 @@ export async function runAgentOperation(
           timeoutMs: 30_000,
           signal,
         },
-        (output) => parseOutput(firstQuestionSchema, output, "CREATE_FIRST_QUESTION"),
+        (output) =>
+          keepSingleQuestionAction(
+            parseOutput(firstQuestionSchema, output, "CREATE_FIRST_QUESTION"),
+            "CREATE_FIRST_QUESTION",
+          ),
         dependencies,
       );
     case "CREATE_STAGE_QUESTION":
-    case "CREATE_STAGE_VERIFICATION":
+    case "CREATE_STAGE_VERIFICATION": {
+      const questionOperation = request.data.operation;
       return callValidated(
-        request.data.operation,
+        questionOperation,
         callModel,
         {
           apiKey,
           system: VITA_SYSTEM,
-          user: diagnosticPrompt(request.data.operation, request.data.input),
+          user: diagnosticPrompt(questionOperation, request.data.input),
           thinking: false,
           maxTokens: 1_000,
           timeoutMs: 30_000,
           signal,
         },
-        (output) => parseOutput(stageQuestionSchema, output, request.data.operation),
+        (output) =>
+          keepSingleQuestionAction(
+            parseOutput(stageQuestionSchema, output, questionOperation),
+            questionOperation,
+          ),
         dependencies,
       );
+    }
     case "RESPOND_TO_USER": {
       const turnInput = request.data.input;
       return callValidated(
@@ -716,6 +789,7 @@ export async function runAgentOperation(
           system: VITA_SYSTEM,
           user: diagnosticPrompt(request.data.operation, turnInput),
           thinking: false,
+          temperature: 0,
           maxTokens: 4_000,
           timeoutMs: 30_000,
           signal,

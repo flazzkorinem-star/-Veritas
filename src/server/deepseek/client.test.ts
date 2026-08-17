@@ -81,6 +81,16 @@ describe("DeepSeek 服务端客户端", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("按调用方要求发送确定性采样温度", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response('{"ok":true}'));
+
+    await callDeepSeekJson({ ...request(), temperature: 0 }, { fetchImpl });
+
+    expect(JSON.parse(fetchImpl.mock.calls[0]![1].body)).toMatchObject({
+      temperature: 0,
+    });
+  });
+
   it.each([
     ["截断", response('{"partial":', 200, "length"), "INVALID_RESPONSE"],
     ["空内容", response(null), "INVALID_RESPONSE"],

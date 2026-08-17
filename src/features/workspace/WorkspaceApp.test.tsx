@@ -295,6 +295,29 @@ describe("主工作区", () => {
     ]);
   });
 
+  it("文件类型不支持时显示准确的校验文案", async () => {
+    const { repository } = setup();
+    const processor: TextMaterialProcessor = async (_file, onProgress) => {
+      onProgress({ stage: "READING", loadedBytes: 0, totalBytes: 1 });
+      throw new MaterialFileError(
+        "UNSUPPORTED_TYPE",
+        "支持 PDF、Word（DOCX）、PPT（PPTX）、Markdown、TXT 和常见图片。",
+      );
+    };
+    render(<WorkspaceApp processor={processor} repository={repository} />);
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: { files: [new File(["x"], "notes.doc")] },
+    });
+
+    expect(
+      await screen.findByText(
+        "文件类型不支持：支持 PDF、Word（DOCX）、PPT（PPTX）、Markdown、TXT 和常见图片。",
+      ),
+    ).toBeVisible();
+  });
+
   it("刷新后把失去执行上下文的处理中任务转成可重试状态", async () => {
     const { repository } = setup();
     await repository.createProcessingTask(

@@ -152,6 +152,67 @@ describe("工作区诊断交互", () => {
     database.close();
   });
 
+  it("更新学习目标后只重排尚未开始的主题", async () => {
+    const name = `veritas-goal-order-ui-${crypto.randomUUID()}`;
+    names.push(name);
+    const database = createVeritasDatabase(name);
+    const repository = createTaskRepository(database);
+    const processing = result();
+    processing.knowledgeMap.nodes.push({
+      ...processing.knowledgeMap.nodes[1]!,
+      id: "node-3",
+      title: "城市下渗",
+      objective: "解释城市地表怎样改变下渗。",
+      order: 3,
+    });
+    const agent = vi.fn(async (request: { operation: string }) =>
+      request.operation === "PRIORITIZE_PENDING_NODES"
+        ? { nodeIds: ["node-3", "node-2"] }
+        : {
+            responseMode: "CONVERSATION" as const,
+            learningGoalUpdate: "优先理解城市地表对水循环的影响",
+            assistantMessage: "好，接下来优先看城市下渗。",
+          },
+    );
+    render(
+      <WorkspaceApp
+        diagnosticAgent={agent as DiagnosticAgentCall}
+        processor={async () => processing}
+        repository={repository}
+      />,
+    );
+    await screen.findByRole("heading", { name: "从一份材料开始" });
+    fireEvent.change(document.querySelector<HTMLInputElement>("#workspace-upload")!, {
+      target: {
+        files: [new File(["材料"], "water-cycle.md", { type: "text/markdown" })],
+      },
+    });
+    const input = await screen.findByLabelText("消息输入");
+    await waitFor(() => expect(input).toBeEnabled());
+
+    fireEvent.change(input, {
+      target: { value: "我的目标改成优先理解城市地表对水循环的影响。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+
+    await screen.findByText("好，接下来优先看城市下渗。");
+    await waitFor(async () => {
+      const task = (await repository.listTasks())[0]!;
+      const learning = await repository.getTaskLearningData(task.id);
+      expect(learning.task.learningGoal).toBe("优先理解城市地表对水循环的影响");
+      expect(
+        learning.material?.nodes
+          .toSorted((left, right) => left.order - right.order)
+          .map(({ id }) => id),
+      ).toEqual(["node-1", "node-3", "node-2"]);
+    });
+    expect(agent).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "PRIORITIZE_PENDING_NODES" }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    database.close();
+  });
+
   it("连续三轮无法作答后停留同层验证，答对小题才进入下一层", async () => {
     const name = `veritas-no-answer-ui-${crypto.randomUUID()}`;
     names.push(name);
@@ -716,10 +777,12 @@ describe("工作区诊断交互", () => {
     names.push(name);
     const database = createVeritasDatabase(name);
     const repository = createTaskRepository(database);
-    const agent = vi.fn().mockResolvedValue({
-      opening: "这个主题真正值得抓的是降水回流。",
-      question: "降水主要通过什么作用回到地表？",
-    });
+    let finishQuestion!: (value: { opening: string; question: string }) => void;
+    const agent = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        finishQuestion = resolve;
+      }),
+    );
     render(
       <WorkspaceApp
         diagnosticAgent={agent as DiagnosticAgentCall}
@@ -739,6 +802,12 @@ describe("工作区诊断交互", () => {
     await waitFor(() => expect(input).toHaveValue("第一个主题的草稿"));
 
     fireEvent.click(screen.getByRole("button", { name: /降水回流/ }));
+    expect(await screen.findByText("正在准备…")).toBeVisible();
+    expect(screen.getByRole("button", { name: /降水回流/ })).toBeDisabled();
+    finishQuestion({
+      opening: "这个主题真正值得抓的是降水回流。",
+      question: "降水主要通过什么作用回到地表？",
+    });
     await expectLatestVitaMessage(
       "这个主题真正值得抓的是降水回流。",
       "降水主要通过什么作用回到地表？",

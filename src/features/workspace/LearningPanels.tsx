@@ -47,6 +47,7 @@ interface LearningPanelsProps {
   onRevealAnswer: () => void;
   onSelectNode: (nodeId: string) => void;
   isResponding: boolean;
+  preparingNodeId: string | null;
   isGeneratingReport: boolean;
   pendingUserMessage: string | null;
   onOpenPanel: (panel: Exclude<MobilePanel, null>) => void;
@@ -152,6 +153,7 @@ export function LearningPanels({
   onRevealAnswer,
   onSelectNode,
   isResponding,
+  preparingNodeId,
   isGeneratingReport,
   pendingUserMessage,
   onOpenPanel,
@@ -248,7 +250,7 @@ export function LearningPanels({
                           className="topic-item"
                           data-active={node.id === activeTask?.currentNodeId}
                           data-status={topicStatus}
-                          disabled={isResponding}
+                          disabled={isResponding || preparingNodeId !== null}
                           key={node.id}
                           onClick={() => onSelectNode(node.id)}
                           type="button"
@@ -256,11 +258,13 @@ export function LearningPanels({
                           <span>{node.order}</span>
                           <strong>{node.title}</strong>
                           <small>
-                            {topicStatus === "completed"
-                              ? "已完成"
-                              : topicStatus === "continue"
-                                ? "继续"
-                                : "未开始"}
+                            {preparingNodeId === node.id
+                              ? "正在准备…"
+                              : topicStatus === "completed"
+                                ? "已完成"
+                                : topicStatus === "continue"
+                                  ? "继续"
+                                  : "未开始"}
                           </small>
                         </button>
                       );

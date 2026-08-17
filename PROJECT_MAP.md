@@ -81,16 +81,16 @@
 - `src/features/materials/process-text-material.ts`：在 3 分钟材料总预算和 170 秒模型预算内编排解析、紧凑提取、分层归并、最多四路局部编译、完整地图组合和首问，按实际完成数报告进度、聚合处理轨迹并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示、答案、三轮停滞后的自动讲解与同层小验证，以及学习目标驱动的待开始主题排序；状态变化只交给唯一 reducer。
 - `src/app/api/agents/route.ts`：实施同源、JSON、请求大小、频率与并发边界，成功时返回模型验证元数据，失败时返回脱敏错误。
-- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
-- `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，连续无效时返回受控失败，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
+- `src/server/deepseek/client.ts`：固定 DeepSeek 地址、模型与 JSON Output，允许业务操作显式设置采样温度；一次调用只发送一次物理请求，并把上游状态、无效响应和取消转换为不含正文的稳定错误。
+- `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；诊断判定只发送当前问题所需上下文并排除四层目标，首问、阶段题与小验证由代码收敛为单一可作答动作；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，连续无效时返回受控失败，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源，调用 Agent 3 并保存覆盖整份材料范围的任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
 - `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。
 - `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、两区主界面、按需主题/进度浮层、报告页面、移动抽屉、返回行为与任务对话框。
-- `src/features/workspace/use-workspace.ts`：协调仓储读取、通用对话、按需诊断与报告重试，以及学习目标、待开始主题重排、草稿和报告写入队列；异步处理结束前核对当前任务，避免覆盖用户已切换到的学习数据。
+- `src/features/workspace/use-workspace.ts`：协调仓储读取、通用对话、按需诊断与报告重试，以及学习目标、待开始主题重排、草稿和报告写入队列；切换未开始主题时暴露准备状态并阻止重复请求，异步处理结束前核对当前任务，避免覆盖用户已切换到的学习数据。
 - `src/features/workspace/WorkspaceSidebar.tsx`：显示上传入口、搜索和任务列表；单任务菜单通过视口级浮层避开滚动裁剪，并处理外部点击、Esc 与焦点归还。
-- `src/features/workspace/LearningPanels.tsx`：显示精简页头、白色核心对话、按需主题/进度、节点历史、通用文字与语音消息、Enter/Shift+Enter 键盘行为，以及只在诊断题激活时出现的提示与答案操作。
+- `src/features/workspace/LearningPanels.tsx`：显示精简页头、白色核心对话、按需主题/进度、节点历史、主题准备反馈、通用文字与语音消息、Enter/Shift+Enter 键盘行为，以及只在诊断题激活时出现的提示与答案操作。
 - `src/features/workspace/TaskDialogs.tsx`：提供带焦点约束、Esc 关闭和焦点归还的重命名与单任务删除确认模态框。
 - `src/features/workspace/UploadButton.tsx`：提供统一的本地文件选择入口。
 - `src/ui/tokens.css`：锁定品牌字体、颜色、间距、圆角、阴影、焦点与动效令牌。
@@ -122,8 +122,8 @@
 - `e2e/phase6-formats.spec.ts`：用真实 DOCX、PPTX、文本/扫描 PDF、MD、TXT、PNG、JPEG 与 WebP 字节在生产 Edge 中验收解析、OCR、来源和双端布局。
 - `src/features/diagnostic/diagnostic-turn.test.ts`：验证通用对话绕行、同题追问、答对推进、三轮停滞后同层小验证、按钮与文字语义触发的提示/答案编排。
 - `src/storage/diagnostic-repository.test.ts`：验证节点独立会话、消息、草稿、主动支架、只重排未开始主题和诊断完成等待报告的事务性持久化。
-- `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证默认首问、通用对话绕行、提示、答案、分数、节点切换和草稿恢复的组件闭环。
-- `e2e/phase7-diagnostic.spec.ts`：在双端生产 Edge 中走完一个节点四层和报告查看、下载、分享，并在桌面验证发送失败、草稿保留和原地重试。
+- `src/features/workspace/WorkspaceDiagnostic.test.tsx`：验证默认首问、通用对话绕行、提示、答案、分数、节点切换准备反馈、重复操作隔离、学习目标重排和草稿恢复的组件闭环。
+- `e2e/phase7-diagnostic.spec.ts`：在双端生产 Edge 中走完一个节点四层和报告查看、下载、打印、真实剪贴板分享，并独立验证未开始主题的准备反馈；桌面同时验证发送失败、草稿保留和原地重试。
 - `e2e/phase7-real.spec.ts`：显式启用时以真实 `deepseek-v4-flash` 验证 Agent 2 的通用绕行、语义提示/答案、问题、评价和越权字段隔离。
 - `src/domain/report/*.test.ts`：验证报告证据引用、确定性回填和安全 Markdown 生成。
 - `src/storage/report-repository.test.ts`：验证报告与完成主题、分数、状态、原话、来源和 Markdown 严格匹配，并只在最终报告保存后完成任务。

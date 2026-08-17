@@ -28,12 +28,39 @@ const node = {
   },
   order: 1,
 };
+const secondNode = {
+  ...node,
+  id: "node-2",
+  title: "降水回流",
+  objective: "解释降水怎样回到地表。",
+  canonicalUnderstanding: "降水在重力作用下回到地表。",
+  order: 2,
+};
 
 function fulfill(route: Route, result: unknown) {
   return route.fulfill({
     contentType: "application/json",
     body: JSON.stringify({ result }),
   });
+}
+
+function compiledKnowledgeMap(nodes = [node]) {
+  return {
+    modules: [{ id: "s1-m1", title: "水循环", sourceRange: "第 1 段" }],
+    knowledgeItems: [{ ...item, id: "s1-i1", moduleId: "s1-m1" }],
+    nodes: nodes.map((candidate) => ({
+      ...candidate,
+      moduleId: "s1-m1",
+      knowledgeItemIds: ["s1-i1"],
+    })),
+    coverageAssignments: [
+      {
+        knowledgeItemId: "s1-i1",
+        disposition: "DIAGNOSED_IN_NODE",
+        nodeId: node.id,
+      },
+    ],
+  };
 }
 
 function mockAgent(route: Route) {
@@ -48,6 +75,7 @@ function mockAgent(route: Route) {
         nodeId: string;
         messages: Array<{ id: string; role: "USER" | "ASSISTANT"; content: string }>;
       }>;
+      node?: { id: string };
     };
   };
   switch (request.operation) {
@@ -78,24 +106,7 @@ function mockAgent(route: Route) {
       });
     }
     case "COMPILE_KNOWLEDGE_MAP":
-      return fulfill(route, {
-        modules: [{ id: "s1-m1", title: "水循环", sourceRange: "第 1 段" }],
-        knowledgeItems: [{ ...item, id: "s1-i1", moduleId: "s1-m1" }],
-        nodes: [
-          {
-            ...node,
-            moduleId: "s1-m1",
-            knowledgeItemIds: ["s1-i1"],
-          },
-        ],
-        coverageAssignments: [
-          {
-            knowledgeItemId: "s1-i1",
-            disposition: "DIAGNOSED_IN_NODE",
-            nodeId: node.id,
-          },
-        ],
-      });
+      return fulfill(route, compiledKnowledgeMap());
     case "CREATE_FIRST_QUESTION":
       return fulfill(route, {
         opening: "这份材料真正值得抓的是循环动力。",
@@ -188,7 +199,7 @@ function mockAgent(route: Route) {
   }
 }
 
-test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo) => {
+test("桌面与移动端完成提示和回答回合", async ({ page, context }, testInfo) => {
   const problems: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(message.text());
@@ -198,19 +209,11 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
     problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
   );
   await page.route("**/api/agents", mockAgent);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "share", {
       configurable: true,
       value: undefined,
-    });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText(value: string) {
-          sessionStorage.setItem("copied-report", value);
-          return Promise.resolve();
-        },
-      },
     });
   });
   await page.goto("/");
@@ -283,9 +286,7 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
   expect(await download.failure()).toBeNull();
   await report.getByRole("button", { name: "分享报告" }).click();
   await expect(page.getByRole("status")).toHaveText("报告摘要已复制");
-  expect(await page.evaluate(() => sessionStorage.getItem("copied-report"))).toContain(
-    "太阳能",
-  );
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("太阳能");
   if (testInfo.project.name === "desktop-edge") {
     await page.emulateMedia({ media: "print" });
     const pdf = await page.pdf({
@@ -302,6 +303,57 @@ test("桌面与移动端完成提示和回答回合", async ({ page }, testInfo)
     fullPage: false,
   });
   expect(problems).toEqual([]);
+});
+
+test("未开始主题生成首问时立即显示准备状态", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-edge", "桌面精细交互只执行一次。");
+  let releaseQuestion!: () => void;
+  const questionGate = new Promise<void>((resolve) => {
+    releaseQuestion = resolve;
+  });
+  await page.route("**/api/agents", async (route) => {
+    const request = route.request().postDataJSON() as {
+      operation: string;
+      input?: { node?: { id?: string } };
+    };
+    if (request.operation === "COMPILE_KNOWLEDGE_MAP") {
+      return fulfill(route, compiledKnowledgeMap([node, secondNode]));
+    }
+    if (
+      request.operation === "CREATE_FIRST_QUESTION" &&
+      request.input?.node?.id === secondNode.id
+    ) {
+      await questionGate;
+      return fulfill(route, {
+        opening: "这个主题真正值得抓的是降水回流。",
+        question: "降水主要通过什么作用回到地表？",
+      });
+    }
+    return mockAgent(route);
+  });
+  await page.goto("/");
+  await page.locator("#workspace-upload").setInputFiles({
+    name: "water-cycle.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发，降水在重力作用下回到地表。"),
+  });
+  await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
+
+  await page.getByRole("button", { name: "主题", exact: true }).click();
+  const topic = page.getByRole("button", { name: /降水回流/ });
+  await topic.click();
+  try {
+    await expect(topic.getByText("正在准备…")).toBeVisible();
+    await expect(topic).toBeDisabled();
+    await page.screenshot({
+      path: testInfo.outputPath("topic-switch-preparing.png"),
+      fullPage: false,
+    });
+  } finally {
+    releaseQuestion();
+  }
+  await expect(page.getByText("降水主要通过什么作用回到地表？")).toBeVisible();
+  await expect(topic).toHaveAttribute("data-active", "true");
 });
 
 test("桌面端网络失败后保留输入并可重试当前回合", async ({ page }, testInfo) => {

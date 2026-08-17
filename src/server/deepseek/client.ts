@@ -47,6 +47,7 @@ export interface DeepSeekJsonRequest {
   system: string;
   user: string;
   thinking: boolean;
+  temperature?: number;
   reasoningEffort?: "low";
   maxTokens: number;
   timeoutMs?: number;
@@ -66,6 +67,7 @@ function bodyFor(request: DeepSeekJsonRequest) {
     ],
     response_format: { type: "json_object" },
     thinking: { type: request.thinking ? "enabled" : "disabled" },
+    ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
     ...(request.thinking && request.reasoningEffort
       ? { reasoning_effort: request.reasoningEffort }
       : {}),

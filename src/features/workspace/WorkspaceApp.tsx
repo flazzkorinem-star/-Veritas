@@ -178,6 +178,7 @@ export function WorkspaceApp({
         onUpload={(file) => void workspace.importMaterial(file)}
         processingProgress={workspace.processingProgress}
         isResponding={workspace.isResponding}
+        preparingNodeId={workspace.preparingNodeId}
         isGeneratingReport={workspace.isGeneratingReport}
         pendingUserMessage={workspace.pendingUserMessage}
         uploadDisabled={uploadDisabled}

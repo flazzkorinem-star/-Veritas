@@ -162,6 +162,33 @@ describe("Agent 服务", () => {
     expect(request.user).toContain("有学习价值");
   });
 
+  it("首问包含两个独立问点时只保留第一个完整动作", async () => {
+    const callModel = vi.fn().mockResolvedValue({
+      opening: "先抓住水循环的起点。",
+      question: "水从地表进入大气的主要环节是什么，这个环节由什么能源驱动？",
+    });
+
+    await expect(
+      runAgentOperation(
+        {
+          operation: "CREATE_FIRST_QUESTION",
+          input: {
+            stage: "MEMORY",
+            materialContext: { ...compactMaterialContext, title: "城市水循环" },
+            node: knowledgeMap.nodes[0],
+            knowledgeItems: knowledgeMap.knowledgeItems,
+            learningGoal: null,
+          },
+        },
+        "server-key",
+        callModel,
+      ),
+    ).resolves.toMatchObject({
+      question: "水从地表进入大气的主要环节是什么？",
+    });
+    expect(callModel).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ["UNDERSTANDING", knowledgeMap.nodes[0]!.bloomTargets.understanding],
     ["APPLICATION", knowledgeMap.nodes[0]!.bloomTargets.application],
