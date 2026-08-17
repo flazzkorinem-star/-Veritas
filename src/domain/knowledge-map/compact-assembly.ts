@@ -8,6 +8,7 @@ import {
   type MaterialSourceUnit,
 } from "./compact-contracts";
 import { knowledgeMapSchema, type KnowledgeMap } from "./contracts";
+import { analyzeExactCoverage } from "./exact-coverage";
 
 interface CompactShard {
   shardId: string;
@@ -40,12 +41,10 @@ function validateSourceCoverage(
 ) {
   const expectedIds = sourceUnits.map(({ id }) => id);
   const coverageIds = shards.flatMap(({ extraction }) => extraction.sourceCoverage);
-  const counts = new Map<string, number>();
-  for (const id of coverageIds) counts.set(id, (counts.get(id) ?? 0) + 1);
-  const missing = expectedIds.filter((id) => !counts.has(id));
-  const duplicate = [...counts].filter(([, count]) => count > 1).map(([id]) => id);
-  const expected = new Set(expectedIds);
-  const unknown = [...counts.keys()].filter((id) => !expected.has(id));
+  const { missing, duplicate, unknown } = analyzeExactCoverage(
+    expectedIds,
+    coverageIds,
+  );
   if (missing.length || duplicate.length || unknown.length) {
     throw new CompactAssemblyError("分片没有恰好覆盖全部来源单元。", [
       ...missing.map((id) => `COMPILE_KNOWLEDGE_MAP:source.missing.${id}:custom`),
@@ -59,15 +58,11 @@ function validateLineage(
   sourceItems: CompactExtraction["knowledgeItems"],
   audit: KnowledgeAudit,
 ) {
-  const itemIds = new Set(sourceItems.map(({ id }) => id));
+  const itemIds = sourceItems.map(({ id }) => id);
   const lineage = audit.mergeGroups.flatMap(
     ({ sourceKnowledgeItemIds }) => sourceKnowledgeItemIds,
   );
-  const counts = new Map<string, number>();
-  for (const id of lineage) counts.set(id, (counts.get(id) ?? 0) + 1);
-  const missing = sourceItems.map(({ id }) => id).filter((id) => !counts.has(id));
-  const duplicate = [...counts].filter(([, count]) => count > 1).map(([id]) => id);
-  const unknown = [...counts.keys()].filter((id) => !itemIds.has(id));
+  const { missing, duplicate, unknown } = analyzeExactCoverage(itemIds, lineage);
   if (missing.length || duplicate.length || unknown.length) {
     throw new CompactAssemblyError("归并谱系没有完整覆盖候选知识条目。", [
       ...missing.map((id) => `COMPILE_KNOWLEDGE_MAP:lineage.missing.${id}:custom`),

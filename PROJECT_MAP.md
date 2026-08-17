@@ -52,6 +52,7 @@
 - `src/domain/knowledge-map/stable-compact-ids.ts`：按分片和原始顺序为紧凑结果分配稳定命名空间 ID，并同步全部内部引用。
 - `src/domain/knowledge-map/knowledge-audit-contracts.ts`：定义最终编译的合并谱系、诊断主题和条目归属契约。
 - `src/domain/knowledge-map/compact-merge.ts`：校验局部归并谱系并确定性恢复规范候选。
+- `src/domain/knowledge-map/exact-coverage.ts`：分析期望 ID 与实际 ID 的缺失、重复和未知项，供来源与谱系边界复用。
 - `src/domain/knowledge-map/compact-assembly.ts`：展开最终谱系并确定性恢复模块、来源、条目类型、主题顺序和完整覆盖。
 - `src/domain/knowledge-map/combine-knowledge-maps.ts`：把多个已验证局部知识地图稳定重编号并组合，保持模型生成的诊断语义不变。
 - `src/domain/agents/contracts.ts`：限制浏览器只能提交固定的材料处理、Vita 对话、诊断辅助、待开始主题排序与报告操作；Agent 2 的线上材料上下文只接受精简目录。

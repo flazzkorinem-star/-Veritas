@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { compactKnowledgeItemSchema, type CompactExtraction } from "./compact-contracts";
+import { analyzeExactCoverage } from "./exact-coverage";
 
 const idSchema = z
   .string()
@@ -64,11 +65,10 @@ export function assembleCompactMerge(
   const lineage = merge.mergeGroups.flatMap(
     ({ sourceKnowledgeItemIds }) => sourceKnowledgeItemIds,
   );
-  const counts = new Map<string, number>();
-  for (const id of lineage) counts.set(id, (counts.get(id) ?? 0) + 1);
-  const missing = items.map(({ id }) => id).filter((id) => !counts.has(id));
-  const duplicate = [...counts].filter(([, count]) => count > 1).map(([id]) => id);
-  const unknown = [...counts.keys()].filter((id) => !itemById.has(id));
+  const { missing, duplicate, unknown } = analyzeExactCoverage(
+    items.map(({ id }) => id),
+    lineage,
+  );
   if (missing.length || duplicate.length || unknown.length) {
     throw new CompactMergeError([
       ...missing.map((id) => `MERGE_COMPACT_CANDIDATES:lineage.missing.${id}:custom`),
