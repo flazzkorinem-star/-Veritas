@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   MAX_DIAGNOSTIC_NODES,
   MAX_KNOWLEDGE_ITEMS,
+  MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE,
   MAX_MATERIAL_MODULES,
 } from "@/config/knowledge-map-limits";
 
@@ -43,7 +44,10 @@ export const diagnosticNodeSchema = z
     moduleId: idSchema,
     title: shortTextSchema,
     objective: z.string().trim().min(1).max(800),
-    knowledgeItemIds: z.array(idSchema).min(1).max(20),
+    knowledgeItemIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE),
     sourceReferences: z.array(sourceReferenceSchema).min(1).max(20),
     canonicalUnderstanding: z.string().trim().min(1).max(2_000),
     commonMisconceptions: z.array(shortTextSchema).max(20),

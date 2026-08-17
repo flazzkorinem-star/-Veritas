@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE } from "@/config/knowledge-map-limits";
 import {
   diagnosticNodeSchema,
   knowledgeItemSchema,
@@ -19,7 +20,10 @@ const learningGoalSchema = z.string().trim().min(1).max(500).nullable();
 const materialShardIdSchema = z.string().regex(MATERIAL_SHARD_ID_PATTERN);
 const agentTwoContext = {
   node: diagnosticNodeSchema,
-  knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),
+  knowledgeItems: z
+    .array(knowledgeItemSchema)
+    .min(1)
+    .max(MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE),
   learningGoal: learningGoalSchema,
 };
 const materialContext = {
@@ -125,7 +129,10 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
           stage: z.literal("MEMORY"),
           ...materialContext,
           node: diagnosticNodeSchema,
-          knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),
+          knowledgeItems: z
+            .array(knowledgeItemSchema)
+            .min(1)
+            .max(MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE),
           learningGoal: learningGoalSchema,
         })
         .strict(),

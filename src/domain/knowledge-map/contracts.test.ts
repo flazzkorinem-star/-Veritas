@@ -98,6 +98,23 @@ describe("完整知识地图契约", () => {
 
     expect(knowledgeMapSchema.safeParse(map).success).toBe(false);
   });
+
+  it("拒绝让一个诊断主题承载超过五个知识条目", () => {
+    const map = validMap();
+    map.knowledgeItems = Array.from({ length: 6 }, (_, index) => ({
+      ...map.knowledgeItems[0]!,
+      id: `item-${index + 1}`,
+      title: `知识条目 ${index + 1}`,
+    }));
+    map.nodes[0]!.knowledgeItemIds = map.knowledgeItems.map(({ id }) => id);
+    map.coverageAssignments = map.knowledgeItems.map(({ id }) => ({
+      knowledgeItemId: id,
+      disposition: "DIAGNOSED_IN_NODE" as const,
+      nodeId: "node-1",
+    }));
+
+    expect(knowledgeMapSchema.safeParse(map).success).toBe(false);
+  });
 });
 
 describe("首个问题契约", () => {

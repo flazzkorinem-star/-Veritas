@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE } from "@/config/knowledge-map-limits";
+
 const idSchema = z
   .string()
   .trim()
@@ -43,7 +45,10 @@ export const compactTopicDraftSchema = z
     moduleId: idSchema,
     title: shortTextSchema,
     objective: z.string().trim().min(1).max(500),
-    knowledgeItemIds: z.array(idSchema).min(1).max(20),
+    knowledgeItemIds: z
+      .array(idSchema)
+      .min(1)
+      .max(MAX_KNOWLEDGE_ITEMS_PER_DIAGNOSTIC_NODE),
   })
   .strict();
 
