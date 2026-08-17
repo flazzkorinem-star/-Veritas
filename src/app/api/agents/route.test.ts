@@ -41,6 +41,7 @@ describe("同源 Agent API", () => {
           requestBytes: 100,
           durationMs: 20,
           attempts: 2,
+          repaired: true,
           endReason: "SUCCESS",
           status: 200,
           failureType: null,

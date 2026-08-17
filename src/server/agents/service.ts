@@ -63,6 +63,7 @@ export interface AgentOperationLogEntry {
   requestBytes: number;
   durationMs: number;
   attempts: number;
+  repaired: boolean;
   endReason:
     | "SUCCESS"
     | "ATTEMPTS_EXHAUSTED"
@@ -272,6 +273,7 @@ async function callValidated<T>(
   const baseRequest = { ...request, signal: controller.signal };
   let finalRequest = baseRequest;
   let attempts = 0;
+  let repaired = false;
   let failure: unknown;
   let paths: string[] = [];
 
@@ -300,6 +302,7 @@ async function callValidated<T>(
           error instanceof AgentServiceError ||
           (error instanceof DeepSeekError && error.code === "INVALID_RESPONSE")
         ) {
+          repaired = true;
           finalRequest = {
             ...repairRequest(operation, baseRequest, error),
             signal: controller.signal,
@@ -343,6 +346,7 @@ async function callValidated<T>(
         requestBytes: deepSeekRequestBodyBytes(finalRequest),
         durationMs: Math.max(0, now() - startedAt),
         attempts,
+        repaired,
         endReason,
         status:
           failure instanceof DeepSeekError

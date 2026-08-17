@@ -311,15 +311,17 @@ describe("Agent 服务", () => {
       .fn()
       .mockResolvedValueOnce({ ...compactExtraction, extra: true })
       .mockResolvedValueOnce(compactExtraction);
+    const log = vi.fn();
 
     await expect(
-      runAgentOperation(compactOperation, "server-key", callModel),
+      runAgentOperation(compactOperation, "server-key", callModel, undefined, { log }),
     ).resolves.toEqual(compactExtraction);
     expect(callModel).toHaveBeenCalledTimes(2);
     expect(callModel.mock.calls[1]![0].system).toContain(
       "EXTRACT_COMPACT_KNOWLEDGE:root:unrecognized_keys",
     );
     expect(callModel.mock.calls[1]![0].system).not.toContain('"extra":true');
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ attempts: 2, repaired: true }));
   });
 
   it("可恢复的上游错误由 Agent Service 在操作预算内重试", async () => {
@@ -328,13 +330,18 @@ describe("Agent 服务", () => {
       .mockRejectedValueOnce(new DeepSeekError("UPSTREAM_UNAVAILABLE"))
       .mockResolvedValueOnce(compactExtraction);
     const sleep = vi.fn().mockResolvedValue(undefined);
+    const log = vi.fn();
 
     await expect(
-      runAgentOperation(compactOperation, "server-key", callModel, undefined, { sleep }),
+      runAgentOperation(compactOperation, "server-key", callModel, undefined, {
+        sleep,
+        log,
+      }),
     ).resolves.toEqual(compactExtraction);
 
     expect(callModel).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ attempts: 2, repaired: false }));
   });
 
   it("结构修复请求沿用同一预算，网络错误后受控结束", async () => {

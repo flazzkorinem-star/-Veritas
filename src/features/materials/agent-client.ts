@@ -212,13 +212,13 @@ export async function callAgent(
   const result = z
     .object({
       result: RESULT_SCHEMA_BY_OPERATION[request.data.operation],
-      meta: agentOperationMetaSchema.optional(),
+      meta: agentOperationMetaSchema,
     })
     .strict()
     .safeParse(body);
   if (!result.success) {
     throw new AgentClientError("INVALID_RESPONSE", "模型结果暂时无法使用，请重试。");
   }
-  if (result.data.meta) dependencies.onMeta?.(result.data.meta);
+  dependencies.onMeta?.(result.data.meta);
   return result.data.result;
 }

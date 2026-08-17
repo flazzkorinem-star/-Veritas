@@ -34,15 +34,33 @@ const compactOperation = {
   },
 };
 
+const operationMeta = {
+  attempts: 1,
+  repaired: false,
+  validationSource: "MODEL_VALIDATED",
+} as const;
+
 describe("浏览器 Agent 客户端", () => {
   it("校验紧凑提取响应，而不是把未知模型字段带入编排层", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
+      .mockResolvedValue(
+        Response.json({ result: compactExtraction, meta: operationMeta }, { status: 200 }),
+      );
 
     await expect(callAgent(compactOperation, { fetchImpl })).resolves.toEqual(
       compactExtraction,
     );
+  });
+
+  it("拒绝缺少操作元数据的成功响应", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
+
+    await expect(callAgent(compactOperation, { fetchImpl })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+    });
   });
 
   it("把服务端的模型验证元数据交给编排层观测", async () => {
@@ -65,7 +83,9 @@ describe("浏览器 Agent 客户端", () => {
   it("只向同源路由发送固定业务操作，并校验结果", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
+      .mockResolvedValue(
+        Response.json({ result: compactExtraction, meta: operationMeta }, { status: 200 }),
+      );
     const operation = compactOperation;
 
     await expect(callAgent(operation, { fetchImpl })).resolves.toEqual(compactExtraction);
@@ -81,7 +101,7 @@ describe("浏览器 Agent 客户端", () => {
       .fn()
       .mockResolvedValue(
         Response.json(
-          { result: { ...compactExtraction, secret: "不应出现" } },
+          { result: { ...compactExtraction, secret: "不应出现" }, meta: operationMeta },
           { status: 200 },
         ),
       );
@@ -114,7 +134,9 @@ describe("浏览器 Agent 客户端", () => {
   it("请求体超过同源 API 上限时不发送网络请求", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(Response.json({ result: compactExtraction }, { status: 200 }));
+      .mockResolvedValue(
+        Response.json({ result: compactExtraction, meta: operationMeta }, { status: 200 }),
+      );
 
     await expect(
       callAgent(compactOperation, { fetchImpl, maxRequestBytes: 10 }),
@@ -129,7 +151,7 @@ describe("浏览器 Agent 客户端", () => {
     const result = { nodeIds: ["node-3", "node-2"] };
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(Response.json({ result }, { status: 200 }));
+      .mockResolvedValue(Response.json({ result, meta: operationMeta }, { status: 200 }));
 
     await expect(
       callAgent(

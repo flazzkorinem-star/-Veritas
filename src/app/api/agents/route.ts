@@ -100,13 +100,12 @@ export async function POST(request: Request) {
         if (process.env.NODE_ENV !== "test") console.info("agent_operation", entry);
       },
     });
-    const attempts = operationLog?.attempts ?? 1;
     return json(
       {
         result,
         meta: {
-          attempts,
-          repaired: attempts > 1,
+          attempts: operationLog?.attempts ?? 1,
+          repaired: operationLog?.repaired ?? false,
           validationSource: "MODEL_VALIDATED",
         },
       },
