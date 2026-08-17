@@ -124,10 +124,6 @@ function delay(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function defaultLog(entry: AgentOperationLogEntry) {
-  if (process.env.NODE_ENV !== "test") console.info("agent_operation", entry);
-}
-
 const REQUEST_POLICY_BY_OPERATION = {
   EXTRACT_COMPACT_KNOWLEDGE: { maxAttempts: 2, usesAgentTwoBudget: false },
   MERGE_COMPACT_CANDIDATES: { maxAttempts: 2, usesAgentTwoBudget: false },
@@ -252,7 +248,7 @@ async function callValidated<T>(
 ) {
   const now = dependencies.now ?? Date.now;
   const sleep = dependencies.sleep ?? delay;
-  const log = dependencies.log ?? defaultLog;
+  const log = dependencies.log ?? (() => undefined);
   const createErrorId = dependencies.createErrorId ?? (() => crypto.randomUUID());
   const startedAt = now();
   const policy = REQUEST_POLICY_BY_OPERATION[operation];
