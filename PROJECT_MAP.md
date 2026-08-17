@@ -50,6 +50,7 @@
 - `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；单个分块内的模块与条目 ID 必须唯一。
 - `src/domain/knowledge-map/compact-contracts.ts`：定义来源单元、紧凑模块、知识候选和主题草案的严格 Zod 契约。
 - `src/domain/knowledge-map/stable-compact-ids.ts`：按分片和原始顺序为紧凑结果分配稳定命名空间 ID，并同步全部内部引用。
+- `src/domain/knowledge-map/shard-id.ts`：定义基础分片及二分子片共享的唯一 ID 语法。
 - `src/domain/knowledge-map/knowledge-audit-contracts.ts`：定义最终编译的合并谱系、诊断主题和条目归属契约。
 - `src/domain/knowledge-map/compact-merge.ts`：校验局部归并谱系并确定性恢复规范候选。
 - `src/domain/knowledge-map/exact-coverage.ts`：分析期望 ID 与实际 ID 的缺失、重复和未知项，供来源与谱系边界复用。

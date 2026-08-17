@@ -10,12 +10,13 @@ import {
   compactKnowledgeItemSchema,
   materialSourceUnitSchema,
 } from "@/domain/knowledge-map/compact-contracts";
+import { MATERIAL_SHARD_ID_PATTERN } from "@/domain/knowledge-map/shard-id";
 import { reportAgentInputSchema } from "@/domain/report/contracts";
 import { STAGE_ORDER, STAGE_STATUSES } from "@/domain/types";
 
 const stageSchema = z.enum(STAGE_ORDER);
 const learningGoalSchema = z.string().trim().min(1).max(500).nullable();
-const materialShardIdSchema = z.string().regex(/^shard-[1-9][0-9]*(?:-[12])*$/);
+const materialShardIdSchema = z.string().regex(MATERIAL_SHARD_ID_PATTERN);
 const agentTwoContext = {
   node: diagnosticNodeSchema,
   knowledgeItems: z.array(knowledgeItemSchema).min(1).max(20),

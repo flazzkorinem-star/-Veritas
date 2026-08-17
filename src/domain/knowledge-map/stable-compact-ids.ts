@@ -1,10 +1,11 @@
 import { compactExtractionSchema, type CompactExtraction } from "./compact-contracts";
+import { getMaterialShardPath } from "./shard-id";
 
 export function namespaceCompactExtraction(
   shardId: string,
   value: CompactExtraction,
 ): CompactExtraction {
-  const shardPath = /^shard-([1-9][0-9]*(?:-[12])*)$/.exec(shardId)?.[1];
+  const shardPath = getMaterialShardPath(shardId);
   if (!shardPath) throw new Error("分片 ID 无效。");
   const namespace = shardPath.replaceAll("-", "_");
   const extraction = compactExtractionSchema.parse(value);
