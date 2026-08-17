@@ -25,7 +25,6 @@ import type { VeritasDatabase } from "@/storage/database";
 import type {
   DeletedTaskSnapshot,
   StoredTask,
-  StoredUiState,
   StoredWorkspaceState,
 } from "@/storage/types";
 
@@ -50,13 +49,6 @@ const storedTaskSchema = z.object({
   learningGoal: z.string().trim().min(1).max(500).optional(),
   failureReason: z.string().trim().min(1).max(200).optional(),
   createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-});
-
-const uiStateSchema = z.object({
-  taskId: z.uuid(),
-  selectedNodeId: z.string().min(1).nullable(),
-  mobilePanel: z.enum(["TASKS", "TOPICS", "DIAGNOSTIC"]).nullable(),
   updatedAt: z.string().datetime(),
 });
 
@@ -293,7 +285,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             database.materials,
             database.sessions,
             database.messages,
-            database.uiStates,
             database.workspaceStates,
           ],
           async () => {
@@ -317,12 +308,6 @@ export function createTaskRepository(database: VeritasDatabase) {
               role: "ASSISTANT",
               content: `${firstQuestion.data.opening}\n\n${firstQuestion.data.question}`,
               createdAt: now,
-            });
-            await database.uiStates.put({
-              taskId,
-              selectedNodeId: firstNode.id,
-              mobilePanel: null,
-              updatedAt: now,
             });
             const workspaceState = await database.workspaceStates.get("workspace");
             await database.workspaceStates.put({
@@ -730,7 +715,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             database.materials,
             database.sessions,
             database.messages,
-            database.uiStates,
           ],
           async () => {
             const task = await getExistingTask(taskId);
@@ -770,12 +754,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.tasks.put(
               parseTask({ ...task, currentNodeId: nodeId, updatedAt: now }),
             );
-            await database.uiStates.put({
-              taskId,
-              selectedNodeId: nodeId,
-              mobilePanel: null,
-              updatedAt: now,
-            });
             return session;
           },
         ),
@@ -836,24 +814,6 @@ export function createTaskRepository(database: VeritasDatabase) {
       });
     },
 
-    saveUiState(uiState: StoredUiState) {
-      return run(() =>
-        database.transaction("rw", database.tasks, database.uiStates, async () => {
-          const result = uiStateSchema.safeParse(uiState);
-          if (!result.success) {
-            throw new LocalStoreError("CORRUPT_RECORD", "本地界面状态无效，已无法保存。");
-          }
-          if (!(await database.tasks.get(uiState.taskId))) {
-            throw new LocalStoreError(
-              "RELATION_MISMATCH",
-              "界面状态与任务不匹配，已拒绝保存。",
-            );
-          }
-          await database.uiStates.put(result.data);
-        }),
-      );
-    },
-
     getWorkspaceState() {
       return run(async () => {
         const stored = await database.workspaceStates.get("workspace");
@@ -904,7 +864,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             database.messages,
             database.drafts,
             database.reports,
-            database.uiStates,
             database.workspaceStates,
           ],
           async () => {
@@ -916,7 +875,6 @@ export function createTaskRepository(database: VeritasDatabase) {
               messages: await database.messages.where("taskId").equals(taskId).toArray(),
               drafts: await database.drafts.where("taskId").equals(taskId).toArray(),
               report: await database.reports.get(taskId),
-              uiState: await database.uiStates.get(taskId),
               workspaceState:
                 workspaceState?.activeTaskId === taskId ? workspaceState : undefined,
             };
@@ -927,7 +885,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.messages.where("taskId").equals(taskId).delete();
             await database.drafts.where("taskId").equals(taskId).delete();
             await database.reports.delete(taskId);
-            await database.uiStates.delete(taskId);
             if (snapshot.workspaceState) {
               await database.workspaceStates.put({
                 ...snapshot.workspaceState,
@@ -952,7 +909,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             database.messages,
             database.drafts,
             database.reports,
-            database.uiStates,
             database.workspaceStates,
           ],
           async () => {
@@ -969,7 +925,6 @@ export function createTaskRepository(database: VeritasDatabase) {
             await database.messages.bulkPut(snapshot.messages);
             await database.drafts.bulkPut(snapshot.drafts);
             if (snapshot.report) await database.reports.put(snapshot.report);
-            if (snapshot.uiState) await database.uiStates.put(snapshot.uiState);
             if (snapshot.workspaceState) {
               await database.workspaceStates.put(snapshot.workspaceState);
             }

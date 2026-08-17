@@ -7,7 +7,6 @@ import type {
   StoredReport,
   StoredSession,
   StoredTask,
-  StoredUiState,
   StoredWorkspaceState,
 } from "@/storage/types";
 import type { StageState } from "@/domain/diagnostic/contracts";
@@ -19,7 +18,6 @@ export class VeritasDatabase extends Dexie {
   messages!: Table<StoredMessage, string>;
   drafts!: Table<StoredDraft, [string, string]>;
   reports!: Table<StoredReport, string>;
-  uiStates!: Table<StoredUiState, string>;
   workspaceStates!: Table<StoredWorkspaceState, string>;
 
   constructor(name = "veritas") {
@@ -137,6 +135,17 @@ export class VeritasDatabase extends Dexie {
             }
           }),
       );
+
+    this.version(7).stores({
+      tasks: "&id, title, fileName, updatedAt",
+      materials: "&taskId",
+      sessions: "[taskId+nodeId], taskId, nodeId",
+      messages: "&id, taskId, nodeId, createdAt",
+      drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+      reports: "&taskId",
+      uiStates: null,
+      workspaceStates: "&id, updatedAt",
+    });
   }
 }
 

@@ -7,7 +7,6 @@ import {
   type SpeechRecognitionFactory,
 } from "@/features/speech/use-speech-input";
 import type {
-  MobilePanel,
   StoredMaterial,
   StoredMessage,
   StoredDraft,
@@ -23,6 +22,8 @@ import { StatusBadge } from "@/ui/StatusBadge";
 import { Vita } from "@/ui/Vita";
 
 import { UploadButton } from "./UploadButton";
+
+export type MobilePanel = "TASKS" | "TOPICS" | "DIAGNOSTIC" | null;
 
 interface LearningPanelsProps {
   activeTask: StoredTask | null;

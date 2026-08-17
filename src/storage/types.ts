@@ -59,15 +59,6 @@ export interface StoredDraft {
   updatedAt: string;
 }
 
-export type MobilePanel = "TASKS" | "TOPICS" | "DIAGNOSTIC" | null;
-
-export interface StoredUiState {
-  taskId: string;
-  selectedNodeId: string | null;
-  mobilePanel: MobilePanel;
-  updatedAt: string;
-}
-
 export interface StoredWorkspaceState {
   id: "workspace";
   activeTaskId: string | null;
@@ -84,6 +75,5 @@ export interface DeletedTaskSnapshot {
   messages: StoredMessage[];
   drafts: StoredDraft[];
   report: StoredReport | undefined;
-  uiState: StoredUiState | undefined;
   workspaceState: StoredWorkspaceState | undefined;
 }

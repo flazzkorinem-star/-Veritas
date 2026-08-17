@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getVeritasDatabase } from "@/storage/database";
 import { createTaskRepository } from "@/storage/task-repository";
-import type { MobilePanel, StoredTask } from "@/storage/types";
+import type { StoredTask } from "@/storage/types";
 import { Button } from "@/ui/Button";
 import type { DiagnosticAgentCall } from "@/features/diagnostic/diagnostic-turn";
 import type { ReportAgentCall } from "@/features/report/generate-report";
@@ -12,7 +12,7 @@ import { ReportView } from "@/features/report/ReportView";
 import { downloadReport, shareReport } from "@/features/report/report-actions";
 import type { SpeechRecognitionFactory } from "@/features/speech/use-speech-input";
 
-import { LearningPanels } from "./LearningPanels";
+import { LearningPanels, type MobilePanel } from "./LearningPanels";
 import { DeleteDialog, RenameDialog } from "./TaskDialogs";
 import {
   useWorkspace,

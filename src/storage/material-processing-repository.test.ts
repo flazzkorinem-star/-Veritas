@@ -133,9 +133,6 @@ describe("材料处理仓储", () => {
       role: "ASSISTANT",
       content: "这份材料真正值得抓的是循环动力。\n\n水循环最基本的动力来源是什么？",
     });
-    await expect(database.uiStates.get(task.id)).resolves.toMatchObject({
-      selectedNodeId: "node-1",
-    });
     database.close();
   });
 

@@ -185,6 +185,36 @@ describe("本地任务仓储", () => {
     database.close();
   });
 
+  it("从 v6 升级时删除没有读取者的界面状态表", async () => {
+    const name = databaseName();
+    const legacy = new Dexie(name);
+    legacy.version(6).stores({
+      tasks: "&id, title, fileName, updatedAt",
+      materials: "&taskId",
+      sessions: "[taskId+nodeId], taskId, nodeId",
+      messages: "&id, taskId, nodeId, createdAt",
+      drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+      reports: "&taskId",
+      uiStates: "&taskId, updatedAt",
+      workspaceStates: "&id, updatedAt",
+    });
+    await legacy.table("uiStates").put({
+      taskId: crypto.randomUUID(),
+      selectedNodeId: "node-1",
+      mobilePanel: "TOPICS",
+      updatedAt: "2026-08-01T08:00:00.000Z",
+    });
+    legacy.close();
+
+    const database = createVeritasDatabase(name);
+    await database.open();
+
+    expect(database.tables.map(({ name: tableName }) => tableName)).not.toContain(
+      "uiStates",
+    );
+    database.close();
+  });
+
   it("把置顶任务排在最近任务前", async () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);
@@ -326,13 +356,6 @@ describe("本地任务仓储", () => {
       createdAt: storedTask.createdAt,
       updatedAt: storedTask.updatedAt,
     });
-    await database.uiStates.put({
-      taskId: storedTask.id,
-      selectedNodeId: "node-1",
-      mobilePanel: null,
-      updatedAt: storedTask.updatedAt,
-    });
-
     const snapshot = await repository.deleteTask(storedTask.id);
 
     await expect(repository.listTasks()).resolves.toEqual([]);
@@ -341,7 +364,6 @@ describe("本地任务仓储", () => {
     await expect(database.messages.count()).resolves.toBe(0);
     await expect(database.drafts.count()).resolves.toBe(0);
     await expect(database.reports.count()).resolves.toBe(0);
-    await expect(database.uiStates.count()).resolves.toBe(0);
 
     await repository.restoreDeletedTask(snapshot);
     await expect(repository.listTasks()).resolves.toEqual([storedTask]);
@@ -350,22 +372,6 @@ describe("本地任务仓储", () => {
     await expect(database.messages.count()).resolves.toBe(1);
     await expect(database.drafts.count()).resolves.toBe(1);
     await expect(database.reports.count()).resolves.toBe(1);
-    await expect(database.uiStates.count()).resolves.toBe(1);
-    database.close();
-  });
-
-  it("拒绝为不存在的任务保存 UI 状态", async () => {
-    const database = createVeritasDatabase(databaseName());
-    const repository = createTaskRepository(database);
-
-    await expect(
-      repository.saveUiState({
-        taskId: crypto.randomUUID(),
-        selectedNodeId: null,
-        mobilePanel: "TASKS",
-        updatedAt: new Date().toISOString(),
-      }),
-    ).rejects.toMatchObject({ code: "RELATION_MISMATCH" });
     database.close();
   });
 

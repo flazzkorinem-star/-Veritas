@@ -65,9 +65,9 @@
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
 - `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话、每层问题与答案来源；报告结论只能落入独立通过、提示或引导后通过、自动讲解后验证通过、主动看答案未验证四类，并拒绝伪造原话、支架和来源。
 - `src/domain/report/build-report.ts`：由本地确定性证据回填整份材料的任务级报告，使用自然中文呈现四类学习结果、误解和覆盖范围，并生成转义后的 Markdown 下载文本。
-- `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例；版本 5 为历史材料补齐空处理轨迹，版本 6 清理报告中从未被读取的派生证据副本，同时保留旧报告展示仍需的兼容字段。
-- `src/storage/types.ts`：定义带显式 `taskId`、材料处理轨迹的本地记录与短时删除快照。
-- `src/storage/task-repository.ts`：负责任务、材料、处理轨迹、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、界面状态和事务性删除/撤销；保存处理成功和报告时分别校验模型路径与学习证据。
+- `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例；版本 5 为历史材料补齐空处理轨迹，版本 6 清理报告中从未被读取的派生证据副本，版本 7 删除没有读取者的界面状态表。
+- `src/storage/types.ts`：定义带显式 `taskId`、材料处理轨迹的本地记录与短时删除快照；只保存业务恢复所需状态，不保存临时抽屉状态或主题选择镜像。
+- `src/storage/task-repository.ts`：负责任务、材料、处理轨迹、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、工作区状态和事务性删除/撤销；主题选择只由任务的 `currentNodeId` 持有，保存处理成功和报告时分别校验模型路径与学习证据。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
