@@ -1,5 +1,6 @@
 import type { CompactExtraction } from "@/domain/knowledge-map/compact-contracts";
 import { namespaceCompactExtraction } from "@/domain/knowledge-map/stable-compact-ids";
+import { MATERIAL_MODEL_CONCURRENCY } from "@/config/agent-limits";
 
 import { AgentClientError, callAgent } from "./agent-client";
 import type { MaterialShard } from "./build-material-shards";
@@ -36,7 +37,9 @@ export async function extractMaterialShards(
   dependencies: ExtractionDependencies = {},
 ): Promise<ExtractionResult[]> {
   const invokeAgent = dependencies.callAgent ?? callAgent;
-  const acquire = createSemaphore(dependencies.maxConcurrency ?? 4);
+  const acquire = createSemaphore(
+    dependencies.maxConcurrency ?? MATERIAL_MODEL_CONCURRENCY,
+  );
   let completed = 0;
   let total = shards.length;
 

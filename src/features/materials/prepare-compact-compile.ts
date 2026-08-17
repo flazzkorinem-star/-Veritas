@@ -2,6 +2,7 @@ import {
   compactExtractionSchema,
   type CompactExtraction,
 } from "@/domain/knowledge-map/compact-contracts";
+import { MATERIAL_MODEL_CONCURRENCY } from "@/config/agent-limits";
 
 import { AgentClientError, callAgent } from "./agent-client";
 import { createSemaphore } from "./concurrency";
@@ -83,7 +84,9 @@ export async function prepareCompactCompile(
   if (itemCount(shards) <= maxFinalItems) return shards;
 
   const invokeAgent = dependencies.callAgent ?? callAgent;
-  const acquire = createSemaphore(dependencies.maxConcurrency ?? 4);
+  const acquire = createSemaphore(
+    dependencies.maxConcurrency ?? MATERIAL_MODEL_CONCURRENCY,
+  );
   let usedBypass = false;
   async function mergeGroup(
     group: CompactCompileShard[],

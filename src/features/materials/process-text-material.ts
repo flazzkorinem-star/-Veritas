@@ -3,7 +3,7 @@ import { buildBudgetedMaterialRequest } from "@/domain/agents/context-budget";
 import { combineKnowledgeMaps } from "@/domain/knowledge-map/combine-knowledge-maps";
 import type { MaterialProcessingTrace } from "@/domain/materials/processing-trace";
 import {
-  EXTRACTION_CONCURRENCY,
+  MATERIAL_MODEL_CONCURRENCY,
   MATERIAL_PROCESSING_MAX_MS,
   MODEL_PROCESSING_MAX_MS,
 } from "@/config/agent-limits";
@@ -140,7 +140,7 @@ export async function processTextMaterial(
       }
       const extractedShards = await extractMaterialShards(shards, {
         callAgent: tracedAgent,
-        maxConcurrency: EXTRACTION_CONCURRENCY,
+        maxConcurrency: MATERIAL_MODEL_CONCURRENCY,
         onSplit: () => {
           trace.splitCount += 1;
         },
@@ -162,7 +162,7 @@ export async function processTextMaterial(
         },
         signal: modelSignal,
       });
-      const acquireCompile = createSemaphore(EXTRACTION_CONCURRENCY);
+      const acquireCompile = createSemaphore(MATERIAL_MODEL_CONCURRENCY);
       const compilePartition = async (
         shard: (typeof compileShards)[number],
         splitDepth = 0,
