@@ -136,4 +136,23 @@ describe("报告全屏页面", () => {
     expect(document.querySelector("script")).toBeNull();
     expect(document.querySelector("img[src='x']")).toBeNull();
   });
+
+  it("仍能显示旧报告的派生证据字段", () => {
+    const legacy = structuredClone(report);
+    legacy.document.nodes[0]!.learningEvidence = [];
+    legacy.document.nodes[0]!.misconceptions = [];
+
+    render(
+      <ReportView
+        onClose={vi.fn()}
+        onDownload={vi.fn()}
+        onPrint={vi.fn()}
+        onShare={vi.fn()}
+        report={legacy}
+      />,
+    );
+
+    expect(screen.getByText("能指出太阳能。")).toBeVisible();
+    expect(screen.getByText("应用时依赖了完整答案。")).toBeVisible();
+  });
 });

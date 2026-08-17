@@ -131,6 +131,8 @@ describe("任务级报告构建", () => {
     });
     expect(document.nodes[0]).not.toHaveProperty("evidenceQuotes");
     expect(document.nodes[0]).not.toHaveProperty("learnedOrCorrected");
+    expect(document.nodes[0]).not.toHaveProperty("understood");
+    expect(document.nodes[0]).not.toHaveProperty("blindSpots");
     expect(document.coverage.undiagnosed).toEqual(["降水回流"]);
   });
 

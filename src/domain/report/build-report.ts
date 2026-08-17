@@ -35,8 +35,8 @@ export interface ReportDocumentNode {
     evidenceQuote: string | null;
   }[];
   misconceptions: { description: string; evidenceQuote: string }[];
-  understood: { statement: string; evidenceQuote: string }[];
-  blindSpots: string[];
+  understood?: { statement: string; evidenceQuote: string }[];
+  blindSpots?: string[];
   scaffoldNotes: { type: string; reason: string; learningEffect: string }[];
   nextSteps: string[];
   sourceReferences: { label: string; excerpt: string }[];
@@ -119,8 +119,9 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
               .array(
                 z.object({ statement: storedText, evidenceQuote: storedText }).strict(),
               )
-              .max(12),
-            blindSpots: z.array(storedText).max(12),
+              .max(12)
+              .optional(),
+            blindSpots: z.array(storedText).max(12).optional(),
             scaffoldNotes: z
               .array(
                 z
@@ -193,22 +194,6 @@ export function buildReportDocument(options: {
           description: item.description,
           evidenceQuote: messages.get(item.userMessageId)!.content,
         })),
-        understood: insight.learningEvidence.flatMap((item) =>
-          item.userMessageId === null
-            ? []
-            : [
-                {
-                  statement: item.statement,
-                  evidenceQuote: messages.get(item.userMessageId)!.content,
-                },
-              ],
-        ),
-        blindSpots: [
-          ...insight.misconceptions.map((item) => item.description),
-          ...insight.learningEvidence
-            .filter((item) => item.category === "EXPLAINED_NOT_VERIFIED")
-            .map((item) => item.statement),
-        ],
         scaffoldNotes: insight.scaffoldNotes.map((note) => {
           const event = scaffolds.get(note.scaffoldEventId)!;
           return {

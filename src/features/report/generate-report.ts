@@ -9,6 +9,7 @@ import {
 } from "@/domain/report/build-report";
 import type { ReportAgentOutput } from "@/domain/report/contracts";
 import type { AgentOperationRequest } from "@/domain/agents/contracts";
+import { STAGE_ORDER } from "@/domain/types";
 import { callAgent } from "@/features/materials/agent-client";
 import type {
   StoredMaterial,
@@ -118,7 +119,10 @@ export async function generateTaskReport(
     previous.materialTitle === data.task.fileName &&
     previous.progress.completed === previous.nodes.length &&
     new Set(previousIds).size === previousIds.length &&
-    previousIds.every((nodeId) => completedIds.has(nodeId));
+    previousIds.every((nodeId) => completedIds.has(nodeId)) &&
+    previous.nodes.every(
+      (node) => node.learningEvidence.length === STAGE_ORDER.length,
+    );
   const nodeById = new Map(
     canReusePrevious ? previous.nodes.map((node) => [node.nodeId, node]) : [],
   );

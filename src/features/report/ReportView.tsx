@@ -155,7 +155,9 @@ export function ReportView(props: ReportViewProps) {
               {node.learningEvidence.length === 0 ? (
                 <section>
                   <h3>已验证的内容</h3>
-                  <TextList values={node.understood.map((item) => item.statement)} />
+                  <TextList
+                    values={(node.understood ?? []).map((item) => item.statement)}
+                  />
                 </section>
               ) : null}
               <section>
@@ -164,7 +166,7 @@ export function ReportView(props: ReportViewProps) {
                   values={
                     node.misconceptions.length
                       ? node.misconceptions.map((item) => item.description)
-                      : node.blindSpots
+                      : (node.blindSpots ?? [])
                   }
                 />
               </section>

@@ -334,5 +334,27 @@ describe("报告生成编排", () => {
       summary: "批次 1 总结。\n\n批次 2 总结。\n\n批次 3 总结。",
     });
     expect(updated?.nodes).toHaveLength(42);
+
+    const legacyDocument = structuredClone(document!);
+    for (const legacyNode of legacyDocument.nodes) legacyNode.learningEvidence = [];
+    getReportGenerationData.mockResolvedValue({
+      ...generationData,
+      report: { document: legacyDocument },
+    });
+
+    const regenerated = await generateTaskReport(
+      taskId,
+      { getReportGenerationData, saveReport },
+      callAgent,
+      () => now,
+    );
+
+    expect(callAgent).toHaveBeenCalledTimes(5);
+    expect(
+      callAgent.mock.calls.slice(-2).map(([request]) => request.input.completedNodes.length),
+    ).toEqual([40, 1]);
+    expect(regenerated?.nodes.every((node) => node.learningEvidence.length === 4)).toBe(
+      true,
+    );
   });
 });

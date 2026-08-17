@@ -66,7 +66,7 @@
 - `src/domain/agents/context-budget.ts`：按整包 JSON 字节预算确定性组装 Agent 2 请求，优先保留当前主题、最新消息和模块/条目目录，剩余空间再加入摘要。
 - `src/domain/diagnostic/agent-contracts.ts`：用独立 Zod 契约校验通用回复、语义提示/答案意图、学习目标更新、回答分类、证据、误解、教学动作、问题、提示与答案。
 - `src/domain/report/contracts.ts`：校验 Agent 3 的有序完整对话、每层问题与答案来源；报告结论只能落入独立通过、提示或引导后通过、自动讲解后验证通过、主动看答案未验证四类，并拒绝伪造原话、支架和来源。
-- `src/domain/report/build-report.ts`：由本地确定性证据回填整份材料的任务级报告，使用自然中文呈现四类学习结果、误解和覆盖范围，并生成转义后的 Markdown 下载文本。
+- `src/domain/report/build-report.ts`：由本地确定性证据回填整份材料的任务级报告，以 `learningEvidence` 作为新报告唯一学习证据结构，使用自然中文呈现四类学习结果、误解和覆盖范围，并生成转义后的 Markdown 下载文本。
 - `src/storage/database.ts`：声明 IndexedDB 表、版本迁移与浏览器数据库单例；版本 5 为历史材料补齐空处理轨迹，版本 6 清理报告中从未被读取的派生证据副本，版本 7 删除没有读取者的界面状态表。
 - `src/storage/types.ts`：定义带显式 `taskId`、材料处理轨迹的本地记录与短时删除快照；只保存业务恢复所需状态，不保存临时抽屉状态或主题选择镜像。
 - `src/storage/task-repository.ts`：负责任务、材料、处理轨迹、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、工作区状态和事务性删除/撤销；主题选择只由任务的 `currentNodeId` 持有，保存处理成功和报告时分别校验模型路径与学习证据。
@@ -91,7 +91,7 @@
 - `src/server/agents/service.ts`：组装紧凑提取、分层归并、最终编译、通用 Vita 对话、诊断辅助与报告的隔离提示；诊断判定只发送当前问题所需上下文并排除四层目标，首问、阶段题与小验证由代码收敛为单一可作答动作；作为唯一模型请求重试所有者限制尝试次数和绝对截止时间，区分网络重试与结构修复，连续无效时返回受控失败，限制 Agent 2 上游整包字节数，并记录不含材料与模型正文的操作元数据。
 - `src/features/report/generate-report.ts`：在主题完成后汇集本任务的学习目标、有序完整对话、每层问题、提示和答案来源；复用仍有效的旧主题结果，只把新增主题按每批 40 个串行交给 Agent 3，并保存覆盖整份材料范围的任务级报告。
 - `src/features/report/report-actions.ts`：提供安全文件名、Markdown 下载、Web Share API 与复制摘要回退。
-- `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围，不解析模型 HTML。
+- `src/features/report/ReportView.tsx`：以 React 转义文本渲染独立全屏报告，明确区分四类学习证据、仍有误解和尚未诊断范围；只在读取旧 IndexedDB 报告时兼容展示历史派生字段，不解析模型 HTML。
 - `src/features/speech/use-speech-input.ts`：封装浏览器 SpeechRecognition 的中文转写、开始/停止、释放和稳定错误文案。
 - `src/features/workspace/WorkspaceApp.tsx`：组合主工作区状态、两区主界面、按需主题/进度浮层、报告页面、移动抽屉、返回行为与任务对话框。
 - `src/features/workspace/use-workspace.ts`：协调仓储读取、通用对话、按需诊断与报告重试，以及学习目标、待开始主题重排、草稿和报告写入队列；切换未开始主题时暴露准备状态并阻止重复请求，异步处理结束前核对当前任务，避免覆盖用户已切换到的学习数据。
