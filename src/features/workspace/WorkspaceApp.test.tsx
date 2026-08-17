@@ -184,15 +184,14 @@ describe("主工作区", () => {
   });
 
   it("搜索标题和文件名，并在切换后恢复当前任务", async () => {
-    const { repository } = setup();
+    const { database, repository } = setup();
     const water = task();
     const rain = task({
       title: "城市降雨",
       fileName: "urban-rain.txt",
       updatedAt: "2026-08-02T08:00:00.000Z",
     });
-    await repository.saveTask(water);
-    await repository.saveTask(rain);
+    await database.tasks.bulkPut([water, rain]);
     const view = render(<WorkspaceApp repository={repository} />);
     await screen.findByRole("heading", { name: "城市降雨" });
 
@@ -211,8 +210,8 @@ describe("主工作区", () => {
   });
 
   it("支持重命名、置顶、删除确认和短时撤销", async () => {
-    const { repository } = setup();
-    await repository.saveTask(task());
+    const { database, repository } = setup();
+    await database.tasks.put(task());
     render(<WorkspaceApp repository={repository} />);
     await screen.findByRole("heading", { name: "水循环诊断" });
 

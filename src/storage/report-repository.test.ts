@@ -51,7 +51,7 @@ describe("报告仓储", () => {
       },
       order: 1,
     };
-    await repository.saveTask({
+    await database.tasks.put({
       id: taskId,
       materialId,
       title: "水循环",

@@ -183,13 +183,6 @@ export function createTaskRepository(database: VeritasDatabase) {
       });
     },
 
-    saveTask(task: StoredTask) {
-      return run(async () => {
-        const validTask = parseTask(task);
-        await database.tasks.put(validTask);
-      });
-    },
-
     createProcessingTask(file: File) {
       return run(async () => {
         const now = new Date().toISOString();

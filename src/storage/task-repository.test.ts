@@ -147,8 +147,7 @@ describe("本地任务仓储", () => {
       isPinned: true,
       updatedAt: "2026-08-01T08:00:00.000Z",
     });
-    await repository.saveTask(recent);
-    await repository.saveTask(pinned);
+    await database.tasks.bulkPut([recent, pinned]);
 
     await expect(repository.listTasks()).resolves.toEqual([pinned, recent]);
     database.close();
@@ -159,7 +158,7 @@ describe("本地任务仓储", () => {
     const database = createVeritasDatabase(name);
     const repository = createTaskRepository(database);
     const original = task();
-    await repository.saveTask(original);
+    await database.tasks.put(original);
     await repository.renameTask(original.id, "水循环复习");
     await repository.setTaskPinned(original.id, true);
     database.close();
@@ -181,7 +180,7 @@ describe("本地任务仓储", () => {
     const database = createVeritasDatabase(name);
     const repository = createTaskRepository(database);
     const storedTask = task();
-    await repository.saveTask(storedTask);
+    await database.tasks.put(storedTask);
     await repository.saveWorkspaceState({
       id: "workspace",
       activeTaskId: storedTask.id,
@@ -219,7 +218,7 @@ describe("本地任务仓储", () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);
     const storedTask = task();
-    await repository.saveTask(storedTask);
+    await database.tasks.put(storedTask);
     await database.materials.put({
       taskId: storedTask.id,
       materialId: storedTask.materialId,
@@ -335,11 +334,13 @@ describe("本地任务仓储", () => {
   it("把存储配额耗尽转换为可恢复的稳定错误", async () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);
+    const storedTask = task();
+    await database.tasks.put(storedTask);
     vi.spyOn(database.tasks, "put").mockRejectedValueOnce(
       new DOMException("内部配额细节", "QuotaExceededError"),
     );
 
-    await expect(repository.saveTask(task())).rejects.toEqual(
+    await expect(repository.renameTask(storedTask.id, "新标题")).rejects.toEqual(
       expect.objectContaining<Partial<LocalStoreError>>({
         code: "QUOTA_EXCEEDED",
         message: "浏览器存储空间不足，请清理空间后重试。",
