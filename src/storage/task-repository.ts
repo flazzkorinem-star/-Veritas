@@ -175,18 +175,10 @@ export function createTaskRepository(database: VeritasDatabase) {
   }
 
   return {
-    listTasks(query = "") {
+    listTasks() {
       return run(async () => {
         const tasks = (await database.tasks.toArray()).map(parseTask);
-        const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
-        const matches = normalizedQuery
-          ? tasks.filter((task) =>
-              `${task.title}\n${task.fileName}`
-                .toLocaleLowerCase("zh-CN")
-                .includes(normalizedQuery),
-            )
-          : tasks;
-        return sortTasks(matches);
+        return sortTasks(tasks);
       });
     },
 

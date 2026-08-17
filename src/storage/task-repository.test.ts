@@ -133,7 +133,7 @@ describe("本地任务仓储", () => {
     database.close();
   });
 
-  it("按标题或文件名搜索，并把置顶任务排在最近任务前", async () => {
+  it("把置顶任务排在最近任务前", async () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);
     const recent = task({
@@ -151,8 +151,6 @@ describe("本地任务仓储", () => {
     await repository.saveTask(pinned);
 
     await expect(repository.listTasks()).resolves.toEqual([pinned, recent]);
-    await expect(repository.listTasks("rain")).resolves.toEqual([recent]);
-    await expect(repository.listTasks("水循环")).resolves.toEqual([pinned]);
     database.close();
   });
 
