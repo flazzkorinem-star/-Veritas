@@ -431,22 +431,13 @@ export function useWorkspace(
       const context = currentDiagnosticContext(controller);
       const result =
         action.kind === "MESSAGE"
-          ? diagnosticAgent
-            ? await respondToUser(
-                { ...context, userMessage: action.userMessage },
-                diagnosticAgent,
-              )
-            : await respondToUser({
-                ...context,
-                userMessage: action.userMessage,
-              })
+          ? await respondToUser(
+              { ...context, userMessage: action.userMessage },
+              diagnosticAgent,
+            )
           : action.kind === "HINT"
-            ? diagnosticAgent
-              ? await runHintTurn(context, diagnosticAgent)
-              : await runHintTurn(context)
-            : diagnosticAgent
-              ? await revealStageAnswer(context, diagnosticAgent)
-              : await revealStageAnswer(context);
+            ? await runHintTurn(context, diagnosticAgent)
+            : await revealStageAnswer(context, diagnosticAgent);
       await repository.saveConversationTurn({
         taskId: context.task.id,
         nodeId: context.node.id,
@@ -473,9 +464,10 @@ export function useWorkspace(
               pendingNodes,
               signal: controller.signal,
             };
-            const priority = diagnosticAgent
-              ? await prioritizePendingNodes(priorityInput, diagnosticAgent)
-              : await prioritizePendingNodes(priorityInput);
+            const priority = await prioritizePendingNodes(
+              priorityInput,
+              diagnosticAgent,
+            );
             await repository.reorderUnstartedNodes(context.task.id, priority.nodeIds);
           } catch {
             // 学习目标已经保存；排序失败时保留原顺序，不能让用户重复本轮对话。
@@ -556,9 +548,7 @@ export function useWorkspace(
           },
           learningGoal: learningData.task.learningGoal ?? null,
         };
-        const output = diagnosticAgent
-          ? await createFirstQuestion(input, diagnosticAgent)
-          : await createFirstQuestion(input);
+        const output = await createFirstQuestion(input, diagnosticAgent);
         question = output;
       }
       await repository.openNode(learningData.task.id, nodeId, question);
