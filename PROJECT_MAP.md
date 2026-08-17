@@ -97,7 +97,7 @@
 - `src/ui/components.css`：实现按钮、表面、消息气泡、进度条与状态标签的公共外观。
 - `src/ui/Icon.tsx`：提供当前流程需要的原创线性 SVG 图标。
 - `src/ui/BrandSymbol.tsx`：提供与 Vita 胸前一致的“打开的书 + 小芽”品牌符号。
-- `src/ui/Button.tsx`、`Card.tsx`：提供保留原生语义的基础交互与表面组件。
+- `src/ui/Button.tsx`：提供保留原生语义的基础按钮组件。
 - `src/ui/MessageBubble.tsx`、`ProgressBar.tsx`、`StatusBadge.tsx`：提供诊断对话与反馈基础组件。
 - `src/ui/Vita.tsx`：将七种角色状态映射到最终全身图、聊天近景头像与替代文本。
 

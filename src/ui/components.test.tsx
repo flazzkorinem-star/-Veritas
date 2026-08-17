@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { Button } from "@/ui/Button";
 import { BrandSymbol } from "@/ui/BrandSymbol";
-import { Card } from "@/ui/Card";
 import { Icon } from "@/ui/Icon";
 import { MessageBubble } from "@/ui/MessageBubble";
 import { ProgressBar } from "@/ui/ProgressBar";
@@ -40,14 +39,11 @@ describe("品牌基础组件", () => {
     expect(screen.getByRole("button")).toHaveClass("ui-button-primary");
   });
 
-  it("卡片和聊天气泡保留语义与角色区别", () => {
+  it("聊天气泡保留语义与角色区别", () => {
     const { rerender } = render(
-      <Card aria-label="提示卡">
-        <MessageBubble role="ASSISTANT">先说说你记得什么。</MessageBubble>
-      </Card>,
+      <MessageBubble role="ASSISTANT">先说说你记得什么。</MessageBubble>,
     );
 
-    expect(screen.getByLabelText("提示卡")).toHaveClass("ui-card");
     expect(screen.getByRole("article", { name: "维塔的消息" })).toHaveClass(
       "message-bubble-assistant",
     );
