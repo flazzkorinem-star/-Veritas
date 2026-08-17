@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-本地正式版已采用紧凑分层材料编译器；用户提供的六份真实材料已在生产 Edge 中走通上传、对话、主题完成与报告，约 5 MB / 28 万中文字符的容量样本在 72.5 秒完成知识地图和首问。
+本地正式版已采用紧凑分层材料编译器；用户提供的六份真实材料已在生产 Edge 中走通上传、对话、主题完成与报告，约 5 MB / 28 万中文字符的容量样本已在 180 秒上界内多次完成知识地图和首问。
 
 ## 根目录
 
@@ -19,8 +19,10 @@
 - `playwright.config.ts`：桌面 Edge 与移动端 Edge 的真实浏览器项目配置。
 - `scripts/run-e2e.mjs`：启动本地生产服务器、等待就绪、运行 Playwright 并回收进程。
 - `scripts/prepare-parser-assets.mjs`：从锁定依赖复制 PDF Worker、OCR Worker、WASM 与中英文语言数据到同源生成目录。
+- `scripts/analyze-version-comparison.mjs`：只读取固定版本的 120-session 原始评测证据和人工评分，校验版本、轮次与执行器后生成可复核指标与审阅包。
 - `DESIGN_GUIDE.md`：唯一产品事实来源。
 - `SECURITY.md`：安全实现与测试底线。
+- `BENCHMARK.md`：说明 Agent 人工评测目标、维度、评分锚点和 bad case 治理方法；具体版本结论以对应版本化证据目录为准。
 - `归档文件/`：只保存历史探索、首版实施过程和早期参考；日常开发不得读取、搜索或引用。
 - `docs/acceptance/first-e2e.md`：首条纵向验收材料的预期行为。
 - `docs/acceptance/六份材料真实链路验收.md`：六份用户材料的真实上传耗时、完整验收对话和最终学习报告。
@@ -49,8 +51,8 @@
 - `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约；每层保留原主问题、小验证题和答案来源事实。
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、自动答案后的同层验证、完成与计分；主动索要答案可直接推进，自动答案必须验证答对后推进。
 - `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分。
-- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；单个分块内的模块与条目 ID 必须唯一。
-- `src/domain/knowledge-map/compact-contracts.ts`：定义来源单元、紧凑模块、知识候选和主题草案的严格 Zod 契约。
+- `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、最终诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；最终主题最多承载五个知识条目。
+- `src/domain/knowledge-map/compact-contracts.ts`：定义来源单元、紧凑模块、知识候选和叶级临时主题草案的严格 Zod 契约；临时草案可先归拢最多二十个候选，交给后续归并和编译收敛。
 - `src/domain/knowledge-map/stable-compact-ids.ts`：按分片和原始顺序为紧凑结果分配稳定命名空间 ID，并同步全部内部引用。
 - `src/domain/knowledge-map/shard-id.ts`：定义基础分片及二分子片共享的唯一 ID 语法。
 - `src/domain/knowledge-map/knowledge-audit-contracts.ts`：定义最终编译的合并谱系、诊断主题和条目归属契约。
@@ -111,7 +113,7 @@
 - `src/domain/diagnostic/reducer.test.ts`：固定四层顺序、计分、提示、答案、停滞与非法转移测试。
 - `src/storage/task-repository.test.ts`：验证 schema 迁移、任务操作、跨表删除/撤销和隔离错误。
 - `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复、处理中断恢复、取消和任务菜单交互。
-- `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
+- `src/ui/components.test.tsx`：验证品牌符号、图标、按钮、气泡、进度、状态标签和维塔七态契约。
 - `src/features/materials/*.test.ts`：验证全部格式入口、ZIP/XML 资源边界、来源分块、PDF/OCR 限制、同源客户端与处理编排。
 - `src/server/deepseek/client.test.ts`：验证固定上游、思考开关、错误脱敏、单次物理请求与调用方取消传播。
 - `src/domain/agents/context-budget.test.ts`：验证 Agent 2 整包 JSON 字节上限、确定性裁剪、当前主题完整保留、最新消息优先和目录先于摘要。
@@ -142,8 +144,11 @@
 - `e2e/material-compiler-capacity-real.spec.ts`：显式启用时生成约 5 MB、28 万中文字符 DOCX，在生产 Edge 中验证 180 秒内完成、首问可用和来源覆盖。
 - `e2e/six-material-real-journey.spec.ts`：显式启用时逐份上传 `测试文件/` 中六份真实材料，完成主题对话并生成最终报告，结果汇总写入 `docs/acceptance/六份材料真实链路验收.md`。
 - `e2e/evaluation-a0691c1.spec.ts`：显式启用时在本地生产 Edge 中串行执行 20 个真实用户评测 session，并把逐轮输入输出、确定性状态、Agent 操作、报告和截图保存到版本化评测目录。
+- `e2e/evaluation-bc2aac5-regression.spec.ts`：显式启用时复用固定 20-case 口径执行指定版本与轮次的真实回归，并把原始证据写入调用方明确指定的版本化目录。
 - `e2e/agent2-answer-coverage-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S15、S20 的目标问题，保存用户输入、Vita 输出、结构化判断和前后状态，并用完整答案验证正常推进。
 - `e2e/agent2-no-answer-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 区分六种无法作答表达、用户提问、暂停和带尝试的回答，并从真实首问连续验证三轮停滞、自动答案、同层小验证、答对后推进、分数与四层持久化状态。
 - `e2e/agent2-single-question-real.spec.ts`：显式启用时在生产 Edge 中用真实 DeepSeek 回归 S01、S02 的正确推进，保存全部 Agent 操作、前后会话、分数、页面消息和浏览器错误，并验证评价反馈后只有与新层 `mainQuestion` 一致的正式问题。
 - `e2e/first-question-memory-real.spec.ts`：显式启用时在生产 Edge 中把 ETF、城市内涝、光合作用和基金代码考试材料各上传两次，保存 `bloomTargets.memory`、真实首问、请求阶段与最终存储层级，供逐条人工核对首问层级。
 - `docs/evaluation/a0691c1/`：保存 a0691c1 的评测矩阵、评分规则、20 条原始 JSON、报告、截图、逐案评级、Badcase 归因、执行异常和总体结论；人工预设案例与线上真实案例明确区分。
+- `docs/evaluation/bc2aac5-worktree-e8de2da5/`：保存 bc2aac5 工作区 20-session 回归的固定代码指纹、原始证据、逐案评分、报告和前后对照，不属于运行时代码。
+- `docs/evaluation/version-comparison-120/`：保存固定前后版本各三轮共 120 个正式 session 的协议、原始证据、人工评分、计算指标、审阅包与最终报告；这些文件组成完整证据链，不能按源码 import 关系判断是否使用。

@@ -1,8 +1,8 @@
 # Veritas Agent 评测基准
 
-> 更新时间：2026-08-13
+> 更新时间：2026-08-18
 >
-> 状态：**a0691c1 已完成第一轮 20 条真实生产 Edge 人工评测。** 原始输入输出、状态、报告、逐案评分和 bad case 见 [`docs/evaluation/a0691c1/`](docs/evaluation/a0691c1/)。AI Judge 仍延后；后续从真实用户 bad case 扩充，不为凑数量预造提示词特例。
+> 状态：**a0691c1 已完成第一轮 20 条真实生产 Edge 人工评测，固定前后版本另完成三轮共 120 个正式 session 对比。** 第一轮证据见 [`docs/evaluation/a0691c1/`](docs/evaluation/a0691c1/)，120-session 协议、原始证据与结论见 [`docs/evaluation/version-comparison-120/`](docs/evaluation/version-comparison-120/)。两者都是对应固定版本的历史证据，不自动代表当前 HEAD；AI Judge 仍延后，后续从真实用户 bad case 扩充，不为凑数量预造提示词特例。
 >
 > 用途：量化判断 Agent 输出是否符合产品预期，积累 good case 与 bad case，并沉淀可用于作品集讲述的 AI 产品评测方法。
 
