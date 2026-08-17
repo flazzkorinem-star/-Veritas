@@ -134,7 +134,6 @@ export const stageAnswerSchema = z
   .object({ assistantMessage: assistantMessageSchema })
   .strict();
 
-export type TeachingMove = (typeof TEACHING_MOVES)[number];
 export type ScaffoldType = (typeof SCAFFOLD_TYPES)[number];
 export type UserTurnDecision = z.infer<typeof userTurnDecisionSchema>;
 export type StageQuestion = z.infer<typeof stageQuestionSchema>;

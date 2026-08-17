@@ -93,19 +93,6 @@ export type CoverageAssignment = { knowledgeItemId: string } & (
     }
 );
 
-export interface Material {
-  id: string;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  originalFile: Blob;
-  parsedText: string | null;
-  modules: MaterialModule[];
-  knowledgeItems: KnowledgeItem[];
-  nodes: DiagnosticNode[];
-  coverageAssignments: CoverageAssignment[];
-}
-
 export interface Task {
   id: string;
   title: string;
