@@ -27,7 +27,6 @@ function splitShard(shard: MaterialShard): [MaterialShard, MaterialShard] | null
     return {
       shardId: `${shard.shardId}-${part}`,
       sourceUnits,
-      requestBytes: new TextEncoder().encode(JSON.stringify({ sourceUnits })).byteLength,
     };
   }) as [MaterialShard, MaterialShard];
 }

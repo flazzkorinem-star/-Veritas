@@ -44,7 +44,12 @@ describe("材料自适应分片", () => {
     );
 
     expect(shards.length).toBeGreaterThan(1);
-    expect(shards.every(({ requestBytes }) => requestBytes <= 260)).toBe(true);
+    expect(
+      shards.every(
+        ({ sourceUnits }) =>
+          new TextEncoder().encode(JSON.stringify({ sourceUnits })).byteLength <= 260,
+      ),
+    ).toBe(true);
   });
 
   it("很多短段落也不会超过 Agent 单片来源数量契约", () => {

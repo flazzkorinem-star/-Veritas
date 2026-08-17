@@ -34,7 +34,6 @@ function extractionFor(sourceUnits: Array<{ id: string }>) {
 function shards(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     shardId: `shard-${index + 1}`,
-    requestBytes: 100,
     sourceUnits: [
       {
         id: `source-${index + 1}`,

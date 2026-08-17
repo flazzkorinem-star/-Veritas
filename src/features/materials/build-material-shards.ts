@@ -1,4 +1,5 @@
 import type { ParsedSourceBlock } from "./parsed-material";
+import { jsonBytes } from "@/domain/agents/context-budget";
 import type { MaterialSourceUnit } from "@/domain/knowledge-map/compact-contracts";
 
 export const DEFAULT_SOURCE_UNIT_BYTES = 16 * 1_024;
@@ -7,7 +8,6 @@ export const DEFAULT_MATERIAL_SHARD_BYTES = 64 * 1_024;
 export interface MaterialShard {
   shardId: string;
   sourceUnits: MaterialSourceUnit[];
-  requestBytes: number;
 }
 
 interface ShardOptions {
@@ -60,10 +60,6 @@ function splitByUtf8Bytes(text: string, maxBytes: number) {
   }
 
   return parts;
-}
-
-function requestBytes(sourceUnits: readonly MaterialSourceUnit[]) {
-  return utf8Bytes(JSON.stringify({ sourceUnits }));
 }
 
 function containsMarkdownHeading(text: string) {
@@ -134,9 +130,9 @@ export function buildMaterialShards(
     if (
       !current ||
       current.length >= maxSourceUnits ||
-      requestBytes([...current, sourceUnit]) > maxShardBytes
+      jsonBytes({ sourceUnits: [...current, sourceUnit] }) > maxShardBytes
     ) {
-      if (requestBytes([sourceUnit]) > maxShardBytes) {
+      if (jsonBytes({ sourceUnits: [sourceUnit] }) > maxShardBytes) {
         throw new Error("来源单元连同结构信息后超过分片字节预算。");
       }
       groups.push([sourceUnit]);
@@ -148,6 +144,5 @@ export function buildMaterialShards(
   return groups.map((sourceUnits, index) => ({
     shardId: `shard-${index + 1}`,
     sourceUnits,
-    requestBytes: requestBytes(sourceUnits),
   }));
 }
