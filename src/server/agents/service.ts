@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import {
+  type AgentOperation,
   type AgentOperationRequest,
   agentOperationRequestSchema,
   pendingNodeOrderSchema,
@@ -102,6 +103,11 @@ function invalidModelOutput(details: string[] = []): never {
   throw new AgentServiceError("INVALID_MODEL_OUTPUT", details);
 }
 
+function invalidOperation(_value: never): never {
+  void _value;
+  throw new AgentServiceError("INVALID_REQUEST");
+}
+
 function parseOutput<T>(schema: z.ZodType<T>, output: unknown, operation: string) {
   const result = schema.safeParse(output);
   if (!result.success) {
@@ -122,31 +128,22 @@ function defaultLog(entry: AgentOperationLogEntry) {
   if (process.env.NODE_ENV !== "test") console.info("agent_operation", entry);
 }
 
-function operationMaxAttempts(operation: AgentOperationRequest["operation"]) {
-  return operation === "EXTRACT_COMPACT_KNOWLEDGE" ||
-    operation === "MERGE_COMPACT_CANDIDATES" ||
-    operation === "COMPILE_KNOWLEDGE_MAP" ||
-    operation === "CREATE_STAGE_QUESTION" ||
-    operation === "CREATE_STAGE_VERIFICATION" ||
-    operation === "RESPOND_TO_USER" ||
-    operation === "CREATE_HINT" ||
-    operation === "CREATE_STAGE_ANSWER" ||
-    operation === "PRIORITIZE_PENDING_NODES"
-    ? 2
-    : 3;
-}
-
-function usesAgentTwoRequestBudget(operation: AgentOperationRequest["operation"]) {
-  return (
-    operation === "CREATE_FIRST_QUESTION" ||
-    operation === "CREATE_STAGE_QUESTION" ||
-    operation === "CREATE_STAGE_VERIFICATION" ||
-    operation === "RESPOND_TO_USER" ||
-    operation === "CREATE_HINT" ||
-    operation === "CREATE_STAGE_ANSWER" ||
-    operation === "PRIORITIZE_PENDING_NODES"
-  );
-}
+const REQUEST_POLICY_BY_OPERATION = {
+  EXTRACT_COMPACT_KNOWLEDGE: { maxAttempts: 2, usesAgentTwoBudget: false },
+  MERGE_COMPACT_CANDIDATES: { maxAttempts: 2, usesAgentTwoBudget: false },
+  COMPILE_KNOWLEDGE_MAP: { maxAttempts: 2, usesAgentTwoBudget: false },
+  CREATE_FIRST_QUESTION: { maxAttempts: 3, usesAgentTwoBudget: true },
+  CREATE_STAGE_QUESTION: { maxAttempts: 2, usesAgentTwoBudget: true },
+  CREATE_STAGE_VERIFICATION: { maxAttempts: 2, usesAgentTwoBudget: true },
+  RESPOND_TO_USER: { maxAttempts: 2, usesAgentTwoBudget: true },
+  CREATE_HINT: { maxAttempts: 2, usesAgentTwoBudget: true },
+  CREATE_STAGE_ANSWER: { maxAttempts: 2, usesAgentTwoBudget: true },
+  PRIORITIZE_PENDING_NODES: { maxAttempts: 2, usesAgentTwoBudget: true },
+  CREATE_REPORT: { maxAttempts: 3, usesAgentTwoBudget: false },
+} satisfies Record<
+  AgentOperation,
+  { maxAttempts: 2 | 3; usesAgentTwoBudget: boolean }
+>;
 
 function sanitizeDetails(details: string[]) {
   return [
@@ -258,7 +255,8 @@ async function callValidated<T>(
   const log = dependencies.log ?? defaultLog;
   const createErrorId = dependencies.createErrorId ?? (() => crypto.randomUUID());
   const startedAt = now();
-  const maxAttempts = operationMaxAttempts(operation);
+  const policy = REQUEST_POLICY_BY_OPERATION[operation];
+  const maxAttempts = policy.maxAttempts;
   const controller = new AbortController();
   const abortState: { reason: "DEADLINE_EXCEEDED" | "CANCELLED" } = {
     reason: "DEADLINE_EXCEEDED",
@@ -285,7 +283,7 @@ async function callValidated<T>(
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (controller.signal.aborted) throw abortError(abortState.reason);
       if (
-        usesAgentTwoRequestBudget(operation) &&
+        policy.usesAgentTwoBudget &&
         deepSeekRequestBodyBytes(finalRequest) > AGENT_TWO_UPSTREAM_REQUEST_MAX_BYTES
       ) {
         throw new AgentServiceError("INVALID_REQUEST");
@@ -905,4 +903,5 @@ export async function runAgentOperation(
       );
     }
   }
+  return invalidOperation(request.data);
 }

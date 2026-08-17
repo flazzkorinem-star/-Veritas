@@ -294,3 +294,4 @@ export const agentOperationRequestSchema = z.discriminatedUnion("operation", [
 ]);
 
 export type AgentOperationRequest = z.infer<typeof agentOperationRequestSchema>;
+export type AgentOperation = AgentOperationRequest["operation"];

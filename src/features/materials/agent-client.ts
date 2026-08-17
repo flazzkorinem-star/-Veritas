@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AGENT_REQUEST_MAX_BYTES } from "@/config/agent-limits";
 import {
+  type AgentOperation,
   type AgentOperationRequest,
   agentOperationRequestSchema,
   type PendingNodeOrder,
@@ -87,31 +88,19 @@ type PendingNodeOrderRequest = Extract<
   { operation: "PRIORITIZE_PENDING_NODES" }
 >;
 
-function resultSchema(operation: AgentOperationRequest["operation"]) {
-  switch (operation) {
-    case "EXTRACT_COMPACT_KNOWLEDGE":
-      return compactExtractionSchema;
-    case "COMPILE_KNOWLEDGE_MAP":
-      return knowledgeMapSchema;
-    case "MERGE_COMPACT_CANDIDATES":
-      return compactMergedItemsSchema;
-    case "CREATE_FIRST_QUESTION":
-      return firstQuestionSchema;
-    case "CREATE_STAGE_QUESTION":
-    case "CREATE_STAGE_VERIFICATION":
-      return stageQuestionSchema;
-    case "RESPOND_TO_USER":
-      return userTurnDecisionSchema;
-    case "CREATE_HINT":
-      return hintResponseSchema;
-    case "CREATE_STAGE_ANSWER":
-      return stageAnswerSchema;
-    case "PRIORITIZE_PENDING_NODES":
-      return pendingNodeOrderSchema;
-    case "CREATE_REPORT":
-      return reportAgentOutputSchema;
-  }
-}
+const RESULT_SCHEMA_BY_OPERATION = {
+  EXTRACT_COMPACT_KNOWLEDGE: compactExtractionSchema,
+  MERGE_COMPACT_CANDIDATES: compactMergedItemsSchema,
+  COMPILE_KNOWLEDGE_MAP: knowledgeMapSchema,
+  CREATE_FIRST_QUESTION: firstQuestionSchema,
+  CREATE_STAGE_QUESTION: stageQuestionSchema,
+  CREATE_STAGE_VERIFICATION: stageQuestionSchema,
+  RESPOND_TO_USER: userTurnDecisionSchema,
+  CREATE_HINT: hintResponseSchema,
+  CREATE_STAGE_ANSWER: stageAnswerSchema,
+  PRIORITIZE_PENDING_NODES: pendingNodeOrderSchema,
+  CREATE_REPORT: reportAgentOutputSchema,
+} satisfies Record<AgentOperation, z.ZodType>;
 
 export function callAgent(
   request: CompactExtractionRequest,
@@ -219,7 +208,7 @@ export async function callAgent(
 
   const result = z
     .object({
-      result: resultSchema(request.data.operation),
+      result: RESULT_SCHEMA_BY_OPERATION[request.data.operation],
       meta: agentOperationMetaSchema.optional(),
     })
     .strict()

@@ -3,6 +3,9 @@ import {
   AGENT_MAX_CONCURRENT_REQUESTS,
   AGENT_MAX_NON_REALTIME_REQUESTS,
 } from "@/config/agent-limits";
+import type { AgentOperation } from "@/domain/agents/contracts";
+
+export type AgentRequestCategory = "REALTIME" | "MATERIAL" | "BACKGROUND";
 
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW: Record<AgentRequestCategory, number> = {
@@ -10,28 +13,35 @@ const MAX_REQUESTS_PER_WINDOW: Record<AgentRequestCategory, number> = {
   MATERIAL: 120,
   BACKGROUND: 6,
 };
+const REQUEST_CATEGORY_BY_OPERATION = {
+  EXTRACT_COMPACT_KNOWLEDGE: "MATERIAL",
+  MERGE_COMPACT_CANDIDATES: "MATERIAL",
+  COMPILE_KNOWLEDGE_MAP: "MATERIAL",
+  CREATE_FIRST_QUESTION: "REALTIME",
+  CREATE_STAGE_QUESTION: "REALTIME",
+  CREATE_STAGE_VERIFICATION: "REALTIME",
+  RESPOND_TO_USER: "REALTIME",
+  CREATE_HINT: "REALTIME",
+  CREATE_STAGE_ANSWER: "REALTIME",
+  PRIORITIZE_PENDING_NODES: "REALTIME",
+  CREATE_REPORT: "BACKGROUND",
+} satisfies Record<AgentOperation, AgentRequestCategory>;
 
 const requestTimes = new Map<string, number[]>();
 let activeRequests = 0;
 let activeNonRealtimeRequests = 0;
 let activeBackgroundRequests = 0;
 
-export type AgentRequestCategory = "REALTIME" | "MATERIAL" | "BACKGROUND";
-
 export function agentRequestCategory(value: unknown): AgentRequestCategory {
   const operation =
     value && typeof value === "object" && "operation" in value
       ? (value as { operation?: unknown }).operation
       : null;
-  if (
-    operation === "EXTRACT_COMPACT_KNOWLEDGE" ||
-    operation === "MERGE_COMPACT_CANDIDATES" ||
-    operation === "COMPILE_KNOWLEDGE_MAP"
-  ) {
-    return "MATERIAL";
-  }
-  if (operation === "CREATE_REPORT") return "BACKGROUND";
-  return "REALTIME";
+  return typeof operation === "string"
+    ? ((REQUEST_CATEGORY_BY_OPERATION as Record<string, AgentRequestCategory>)[
+        operation
+      ] ?? "REALTIME")
+    : "REALTIME";
 }
 
 export class AgentRequestGuardError extends Error {
