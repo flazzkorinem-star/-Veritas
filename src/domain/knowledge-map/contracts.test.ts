@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  chunkExtractionSchema,
   firstQuestionSchema,
   knowledgeMapSchema,
   type KnowledgeMap,
@@ -98,50 +97,6 @@ describe("完整知识地图契约", () => {
     ];
 
     expect(knowledgeMapSchema.safeParse(map).success).toBe(false);
-  });
-});
-
-describe("分块提取契约", () => {
-  it.each([
-    [
-      "模块 ID",
-      {
-        modules: [
-          { id: "module-1", title: "模块一", sourceRange: "第 1 段" },
-          { id: "module-1", title: "模块二", sourceRange: "第 2 段" },
-        ],
-        knowledgeItems: [
-          {
-            id: "item-1",
-            moduleId: "module-1",
-            title: "条目",
-            summary: "摘要",
-            kind: "CORE",
-            diagnosticRationale: "理解基础",
-            sourceReferences: [{ label: "第 1 段", excerpt: "来源" }],
-            commonMisconceptions: [],
-          },
-        ],
-      },
-    ],
-    [
-      "知识条目 ID",
-      {
-        modules: [{ id: "module-1", title: "模块", sourceRange: "第 1 段" }],
-        knowledgeItems: [1, 2].map(() => ({
-          id: "item-1",
-          moduleId: "module-1",
-          title: "条目",
-          summary: "摘要",
-          kind: "CORE",
-          diagnosticRationale: "理解基础",
-          sourceReferences: [{ label: "第 1 段", excerpt: "来源" }],
-          commonMisconceptions: [],
-        })),
-      },
-    ],
-  ])("拒绝分块内重复的%s", (_name, extraction) => {
-    expect(chunkExtractionSchema.safeParse(extraction).success).toBe(false);
   });
 });
 

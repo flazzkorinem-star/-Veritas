@@ -70,28 +70,6 @@ export const coverageAssignmentSchema = z.discriminatedUnion("disposition", [
     .strict(),
 ]);
 
-export const chunkExtractionSchema = z
-  .object({
-    modules: z.array(materialModuleSchema).min(1).max(40),
-    knowledgeItems: z.array(knowledgeItemSchema).min(1).max(120),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    const moduleIds = new Set(value.modules.map((module) => module.id));
-    const itemIds = new Set(value.knowledgeItems.map((item) => item.id));
-    if (
-      moduleIds.size !== value.modules.length ||
-      itemIds.size !== value.knowledgeItems.length
-    ) {
-      context.addIssue({ code: "custom", message: "分块内模块或知识条目 ID 重复。" });
-    }
-    for (const item of value.knowledgeItems) {
-      if (!moduleIds.has(item.moduleId)) {
-        context.addIssue({ code: "custom", message: "知识条目引用了不存在的模块。" });
-      }
-    }
-  });
-
 export const knowledgeMapSchema = z
   .object({
     modules: z.array(materialModuleSchema).min(1).max(500),
@@ -170,5 +148,4 @@ export const firstQuestionSchema = z
   .strict();
 
 export type KnowledgeMap = z.infer<typeof knowledgeMapSchema>;
-export type ChunkExtraction = z.infer<typeof chunkExtractionSchema>;
 export type FirstQuestion = z.infer<typeof firstQuestionSchema>;
