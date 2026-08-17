@@ -66,7 +66,7 @@
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
 - `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
-- `src/features/materials/parsed-material.ts`、`chunk-source-blocks.ts`：定义多格式解析结果，并在保留页、幻灯片或段落来源的前提下分块。
+- `src/features/materials/parsed-material.ts`：定义带页、幻灯片或段落来源的多格式解析结果。
 - `src/features/materials/docx-parser.ts`：使用 Mammoth 浏览器构建只提取 DOCX 纯文本段落。
 - `src/features/materials/pptx-parser.ts`：使用 JSZip 和受控 DOMParser 按演示文稿关系顺序提取 PPTX 文字。
 - `src/features/materials/pdf-parser.ts`：使用 PDF.js 逐页提取文字，并将无文字页面渲染为受限像素交给 OCR。
