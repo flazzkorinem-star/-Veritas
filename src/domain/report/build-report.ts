@@ -275,20 +275,23 @@ function evidenceList(items: ReportDocumentNode["learningEvidence"]) {
     : "- 无";
 }
 
-const STAGE_LABELS: Record<StageKey, string> = {
+export const REPORT_STAGE_LABELS: Record<StageKey, string> = {
   MEMORY: "记忆",
   UNDERSTANDING: "理解",
   APPLICATION: "应用",
   ANALYSIS: "分析",
 };
 
-const STATUS_LABELS: Record<ReportDocumentNode["stages"][StageKey], string> = {
+export const REPORT_STATUS_LABELS: Record<
+  ReportDocumentNode["stages"][StageKey],
+  string
+> = {
   PASSED: "答对",
-  PASSED_WITH_HINT: "提示后答对",
+  PASSED_WITH_HINT: "提示后通过",
   PASSED_WITH_ANSWER: "使用过完整答案",
 };
 
-const EVIDENCE_HEADINGS: Record<LearningEvidenceCategory, string> = {
+export const LEARNING_EVIDENCE_LABELS: Record<LearningEvidenceCategory, string> = {
   INDEPENDENT: "原本就会",
   AFTER_HINT: "提示或引导后通过",
   AFTER_TEACHING_VERIFIED: "讲解后经过验证学会",
@@ -304,14 +307,15 @@ export function reportToMarkdown(report: ReportDocument) {
 
 ${Object.entries(node.stages)
   .map(
-    ([stage, status]) => `- ${STAGE_LABELS[stage as StageKey]}：${STATUS_LABELS[status]}`,
+    ([stage, status]) =>
+      `- ${REPORT_STAGE_LABELS[stage as StageKey]}：${REPORT_STATUS_LABELS[status]}`,
   )
   .join("\n")}
 
-${(Object.keys(EVIDENCE_HEADINGS) as LearningEvidenceCategory[])
+${(Object.keys(LEARNING_EVIDENCE_LABELS) as LearningEvidenceCategory[])
   .map((category) => {
     const items = node.learningEvidence.filter((item) => item.category === category);
-    return `### ${EVIDENCE_HEADINGS[category]}\n\n${evidenceList(items)}`;
+    return `### ${LEARNING_EVIDENCE_LABELS[category]}\n\n${evidenceList(items)}`;
   })
   .join("\n\n")}
 

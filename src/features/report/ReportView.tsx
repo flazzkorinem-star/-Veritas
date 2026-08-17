@@ -1,5 +1,10 @@
 import type { StoredReport } from "@/storage/types";
-import type { ReportDocumentNode } from "@/domain/report/build-report";
+import {
+  LEARNING_EVIDENCE_LABELS,
+  REPORT_STAGE_LABELS,
+  REPORT_STATUS_LABELS,
+  type ReportDocumentNode,
+} from "@/domain/report/build-report";
 import { Button } from "@/ui/Button";
 import { Icon } from "@/ui/Icon";
 
@@ -11,31 +16,14 @@ interface ReportViewProps {
   onShare: () => void;
 }
 
-const STAGE_LABELS = {
-  MEMORY: "记忆",
-  UNDERSTANDING: "理解",
-  APPLICATION: "应用",
-  ANALYSIS: "分析",
-} as const;
-
-const STATUS_LABELS = {
-  PASSED: "答对",
-  PASSED_WITH_HINT: "提示后通过",
-  PASSED_WITH_ANSWER: "使用过完整答案",
-} as const;
-
-const EVIDENCE_LABELS = {
-  INDEPENDENT: "原本就会",
-  AFTER_HINT: "提示或引导后通过",
-  AFTER_TEACHING_VERIFIED: "讲解后经过验证学会",
-  EXPLAINED_NOT_VERIFIED: "看过答案但未验证",
-} as const;
-
-function stageResultLabel(node: ReportDocumentNode, stage: keyof typeof STAGE_LABELS) {
+function stageResultLabel(
+  node: ReportDocumentNode,
+  stage: keyof typeof REPORT_STAGE_LABELS,
+) {
   const evidence = node.learningEvidence.find((item) => item.stage === stage);
   return evidence
-    ? EVIDENCE_LABELS[evidence.category]
-    : STATUS_LABELS[node.stages[stage]];
+    ? LEARNING_EVIDENCE_LABELS[evidence.category]
+    : REPORT_STATUS_LABELS[node.stages[stage]];
 }
 
 function TextList({ empty = "暂无", values }: { empty?: string; values: string[] }) {
@@ -129,15 +117,20 @@ export function ReportView(props: ReportViewProps) {
             <div className="report-stage-grid">
               {Object.entries(node.stages).map(([stage, status]) => (
                 <div key={stage} data-status={status}>
-                  <span>{STAGE_LABELS[stage as keyof typeof STAGE_LABELS]}</span>
+                  <span>
+                    {REPORT_STAGE_LABELS[stage as keyof typeof REPORT_STAGE_LABELS]}
+                  </span>
                   <strong>
-                    {stageResultLabel(node, stage as keyof typeof STAGE_LABELS)}
+                    {stageResultLabel(
+                      node,
+                      stage as keyof typeof REPORT_STAGE_LABELS,
+                    )}
                   </strong>
                 </div>
               ))}
             </div>
             <div className="report-detail-grid">
-              {Object.entries(EVIDENCE_LABELS).map(([category, label]) => {
+              {Object.entries(LEARNING_EVIDENCE_LABELS).map(([category, label]) => {
                 const evidence = node.learningEvidence.filter(
                   (item) => item.category === category,
                 );

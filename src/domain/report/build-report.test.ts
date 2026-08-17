@@ -150,6 +150,7 @@ describe("任务级报告构建", () => {
 
     const markdown = reportToMarkdown(document);
     expect(markdown).toContain("# 水循环.md · 学习诊断报告");
+    expect(markdown).toContain("- 理解：提示后通过");
     expect(markdown).toContain("> 太阳能让水蒸发。");
     expect(markdown).toContain("讲解后经过验证学会");
     expect(markdown).toContain("看过答案但未验证");
