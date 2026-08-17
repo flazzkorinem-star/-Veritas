@@ -37,10 +37,16 @@ const secondNode = {
   order: 2,
 };
 
+const successMeta = {
+  attempts: 1,
+  repaired: false,
+  validationSource: "MODEL_VALIDATED",
+};
+
 function fulfill(route: Route, result: unknown) {
   return route.fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ result }),
+    body: JSON.stringify({ result, meta: successMeta }),
   });
 }
 

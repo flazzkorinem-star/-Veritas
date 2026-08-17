@@ -1,6 +1,12 @@
 import { expect, test, type Browser, type Page, type Route } from "@playwright/test";
 import JSZip from "jszip";
 
+const successMeta = {
+  attempts: 1,
+  repaired: false,
+  validationSource: "MODEL_VALIDATED",
+};
+
 function mockAgentResult(route: Route) {
   const request = route.request().postDataJSON() as {
     operation: string;
@@ -38,6 +44,7 @@ function mockAgentResult(route: Route) {
           ],
           sourceCoverage: sourceUnitIds,
         },
+        meta: successMeta,
       }),
     });
   }
@@ -92,6 +99,7 @@ function mockAgentResult(route: Route) {
             },
           ],
         },
+        meta: successMeta,
       }),
     });
   }
@@ -102,6 +110,7 @@ function mockAgentResult(route: Route) {
         opening: "这份材料主要讲水循环中的关键过程。",
         question: "太阳能在水循环中起什么作用？",
       },
+      meta: successMeta,
     }),
   });
 }

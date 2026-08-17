@@ -49,10 +49,16 @@ const nodes = [
   },
 ];
 
+const successMeta = {
+  attempts: 1,
+  repaired: false,
+  validationSource: "MODEL_VALIDATED",
+};
+
 function reply(route: Route, result: unknown) {
   return route.fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ result }),
+    body: JSON.stringify({ result, meta: successMeta }),
   });
 }
 
