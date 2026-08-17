@@ -1,7 +1,9 @@
 import {
+  MAX_COMPACT_TOPIC_DRAFTS,
   compactExtractionSchema,
   type CompactExtraction,
 } from "@/domain/knowledge-map/compact-contracts";
+import type { CompactMergeResult } from "@/domain/knowledge-map/compact-merge";
 import { MATERIAL_MODEL_CONCURRENCY } from "@/config/agent-limits";
 
 import { AgentClientError, callAgent } from "./agent-client";
@@ -28,11 +30,22 @@ function itemCount(shards: CompactCompileShard[]) {
   );
 }
 
+function topicCount(shards: CompactCompileShard[]) {
+  return shards.reduce(
+    (total, { extraction }) => total + extraction.topicDrafts.length,
+    0,
+  );
+}
+
 function groupShards(shards: CompactCompileShard[], maxItems: number) {
   const groups: CompactCompileShard[][] = [];
   for (const shard of shards) {
     const current = groups.at(-1);
-    if (!current || itemCount(current) + itemCount([shard]) > maxItems) {
+    if (
+      !current ||
+      itemCount(current) + itemCount([shard]) > maxItems ||
+      topicCount(current) + topicCount([shard]) > MAX_COMPACT_TOPIC_DRAFTS
+    ) {
       groups.push([shard]);
     } else {
       current.push(shard);
@@ -43,16 +56,33 @@ function groupShards(shards: CompactCompileShard[], maxItems: number) {
 
 function rebuildPartition(
   group: CompactCompileShard[],
-  knowledgeItems: CompactExtraction["knowledgeItems"],
+  mergeResult: CompactMergeResult,
   index: number,
 ) {
+  const knowledgeItems = mergeResult.knowledgeItems;
   const allModules = group.flatMap(({ extraction }) => extraction.modules);
-  const moduleById = new Map(
-    allModules.map((materialModule) => [materialModule.id, materialModule]),
+  const mergedIdBySourceId = new Map(
+    mergeResult.itemLineage.flatMap(({ knowledgeItemId, sourceKnowledgeItemIds }) =>
+      sourceKnowledgeItemIds.map((sourceId) => [sourceId, knowledgeItemId] as const),
+    ),
   );
+  const topicDrafts = group.flatMap(({ extraction }) => extraction.topicDrafts).map(
+    (topic) => ({
+      ...topic,
+      knowledgeItemIds: [
+        ...new Set(topic.knowledgeItemIds.map((id) => mergedIdBySourceId.get(id)!)),
+      ],
+    }),
+  );
+  const retainedModuleIds = new Set([
+    ...knowledgeItems.map(({ moduleId }) => moduleId),
+    ...topicDrafts.map(({ moduleId }) => moduleId),
+  ]);
   const modules = [
     ...new Map(
-      knowledgeItems.map((item) => [item.moduleId, moduleById.get(item.moduleId)!]),
+      allModules
+        .filter(({ id }) => retainedModuleIds.has(id))
+        .map((module) => [module.id, module]),
     ).values(),
   ];
   const sourceCoverage = [
@@ -63,13 +93,7 @@ function rebuildPartition(
     extraction: compactExtractionSchema.parse({
       modules,
       knowledgeItems,
-      topicDrafts: knowledgeItems.map((item, itemIndex) => ({
-        id: `merge${index + 1}-t${itemIndex + 1}`,
-        moduleId: item.moduleId,
-        title: item.title,
-        objective: `掌握${item.title}`,
-        knowledgeItemIds: [item.id],
-      })),
+      topicDrafts,
       sourceCoverage,
     }),
   };
@@ -97,9 +121,9 @@ export async function prepareCompactCompile(
 
     try {
       const release = await acquire();
-      let canonicalItems: CompactExtraction["knowledgeItems"];
+      let mergeResult: CompactMergeResult;
       try {
-        canonicalItems = await invokeAgent(
+        mergeResult = await invokeAgent(
           {
             operation: "MERGE_COMPACT_CANDIDATES",
             input: { knowledgeItems },
@@ -109,7 +133,7 @@ export async function prepareCompactCompile(
       } finally {
         release();
       }
-      return [rebuildPartition(group, canonicalItems, index)];
+      return [rebuildPartition(group, mergeResult, index)];
     } catch (error) {
       if (error instanceof AgentClientError && error.code === "UPSTREAM_UNAVAILABLE") {
         usedBypass = true;

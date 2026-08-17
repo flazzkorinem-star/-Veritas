@@ -274,14 +274,22 @@ describe("Agent 1 紧凑归并", () => {
         "server-key",
         callModel,
       ),
-    ).resolves.toEqual([
-      {
-        ...knowledgeItems[0],
-        title: "蒸发能量",
-        summary: "太阳提供水蒸发所需能量。",
-        sourceUnitIds: ["source-1", "source-2"],
-      },
-    ]);
+    ).resolves.toEqual({
+      knowledgeItems: [
+        {
+          ...knowledgeItems[0],
+          title: "蒸发能量",
+          summary: "太阳提供水蒸发所需能量。",
+          sourceUnitIds: ["source-1", "source-2"],
+        },
+      ],
+      itemLineage: [
+        {
+          knowledgeItemId: "s1-i1",
+          sourceKnowledgeItemIds: ["s1-i1", "s2-i1"],
+        },
+      ],
+    });
     expect(callModel).toHaveBeenCalledWith(
       expect.objectContaining({ thinking: false, maxTokens: 8_000 }),
     );

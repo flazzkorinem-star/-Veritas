@@ -81,7 +81,7 @@
 - `src/features/materials/concurrency.ts`：提供材料提取、归并与编译共用的轻量信号量。
 - `src/features/materials/build-material-shards.ts`：将解析块转换为稳定来源单元，合并连续短段，并按实际 UTF-8 请求字节与单片 120 来源上限生成自适应分片。
 - `src/features/materials/extract-material-shards.ts`：以最多四路并发提取紧凑候选，保留成功结果，对结构失败只隔离二分一层；叶级或上游失败明确终止，禁止伪造候选覆盖。
-- `src/features/materials/prepare-compact-compile.ts`：按每批最多 60 条候选和全局四路并发执行分层归并；结构失败时隔离二分，可选归并上游失败时原样保留已验证候选并记录旁路。
+- `src/features/materials/prepare-compact-compile.ts`：按每批最多 60 条候选和全局四路并发执行分层归并；依据已校验谱系把原模型主题草案改指向合并候选而不改写语义字段，结构失败时隔离二分，可选归并上游失败时原样保留已验证候选并记录旁路。
 - `src/features/materials/split-compact-compile.ts`：按共享来源与模块连通组二分失败编译分区，确保子区来源不重复、不遗漏。
 - `src/features/materials/process-text-material.ts`：在 3 分钟材料总预算和 170 秒模型预算内编排解析、紧凑提取、分层归并、最多四路局部编译、完整地图组合和首问，按实际完成数报告进度、聚合处理轨迹并传播取消信号。
 - `src/features/diagnostic/diagnostic-turn.ts`：编排 Agent 2 通用消息、诊断回答、提示、答案、三轮停滞后的自动讲解与同层小验证，以及学习目标驱动的待开始主题排序；状态变化只交给唯一 reducer。

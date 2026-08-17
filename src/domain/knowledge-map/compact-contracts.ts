@@ -8,6 +8,7 @@ const idSchema = z
   .regex(/^[a-zA-Z0-9_-]+$/);
 export const sourceUnitIdSchema = z.string().regex(/^source-[1-9][0-9]*$/);
 const shortTextSchema = z.string().trim().min(1).max(300);
+export const MAX_COMPACT_TOPIC_DRAFTS = 120;
 
 export const materialSourceUnitSchema = z
   .object({
@@ -54,7 +55,10 @@ export const compactExtractionSchema = z
   .object({
     modules: z.array(compactModuleSchema).min(1).max(120),
     knowledgeItems: z.array(compactKnowledgeItemSchema).min(1).max(120),
-    topicDrafts: z.array(compactTopicDraftSchema).min(1).max(120),
+    topicDrafts: z
+      .array(compactTopicDraftSchema)
+      .min(1)
+      .max(MAX_COMPACT_TOPIC_DRAFTS),
     sourceCoverage: z.array(sourceUnitIdSchema).min(1).max(400),
   })
   .strict()

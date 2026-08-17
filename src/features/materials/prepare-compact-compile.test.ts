@@ -56,13 +56,21 @@ describe("最终编译前的分层紧凑归并", () => {
         };
       }) => {
         const items = request.input.knowledgeItems;
-        return [
-          {
-            ...items[0]!,
-            title: `合并 ${items.length} 条`,
-            sourceUnitIds: items.flatMap(({ sourceUnitIds }) => sourceUnitIds),
-          },
-        ];
+        return {
+          knowledgeItems: [
+            {
+              ...items[0]!,
+              title: `合并 ${items.length} 条`,
+              sourceUnitIds: items.flatMap(({ sourceUnitIds }) => sourceUnitIds),
+            },
+          ],
+          itemLineage: [
+            {
+              knowledgeItemId: items[0]!.id,
+              sourceKnowledgeItemIds: items.map(({ id }) => id),
+            },
+          ],
+        };
       },
     );
 
@@ -74,6 +82,11 @@ describe("最终编译前的分层紧凑归并", () => {
 
     expect(callAgent).toHaveBeenCalledTimes(2);
     expect(result.flatMap(({ extraction }) => extraction.knowledgeItems)).toHaveLength(2);
+    expect(
+      result.flatMap(({ extraction }) =>
+        extraction.topicDrafts.map(({ objective }) => objective),
+      ),
+    ).toEqual(Array.from({ length: 6 }, () => "理解候选。"));
     expect(result.flatMap(({ extraction }) => extraction.sourceCoverage)).toEqual([
       "source-1",
       "source-2",
@@ -103,14 +116,21 @@ describe("最终编译前的分层紧凑归并", () => {
         maxActive = Math.max(maxActive, active);
         await new Promise((resolve) => setTimeout(resolve, 10));
         active -= 1;
-        return [
-          {
-            ...request.input.knowledgeItems[0]!,
-            sourceUnitIds: request.input.knowledgeItems.flatMap(
-              ({ sourceUnitIds }) => sourceUnitIds,
-            ),
-          },
-        ];
+        const items = request.input.knowledgeItems;
+        return {
+          knowledgeItems: [
+            {
+              ...items[0]!,
+              sourceUnitIds: items.flatMap(({ sourceUnitIds }) => sourceUnitIds),
+            },
+          ],
+          itemLineage: [
+            {
+              knowledgeItemId: items[0]!.id,
+              sourceKnowledgeItemIds: items.map(({ id }) => id),
+            },
+          ],
+        };
       },
     );
 
@@ -138,12 +158,20 @@ describe("最终编译前的分层紧凑归并", () => {
         if (items.length > 2 || items[0]!.id.startsWith("s3-")) {
           throw new AgentClientError("MODEL_OUTPUT_INVALID", "模型结果暂时无法使用。");
         }
-        return [
-          {
-            ...items[0]!,
-            sourceUnitIds: items.flatMap(({ sourceUnitIds }) => sourceUnitIds),
-          },
-        ];
+        return {
+          knowledgeItems: [
+            {
+              ...items[0]!,
+              sourceUnitIds: items.flatMap(({ sourceUnitIds }) => sourceUnitIds),
+            },
+          ],
+          itemLineage: [
+            {
+              knowledgeItemId: items[0]!.id,
+              sourceKnowledgeItemIds: items.map(({ id }) => id),
+            },
+          ],
+        };
       },
     );
 

@@ -58,17 +58,26 @@ const merge = {
 
 describe("紧凑候选分层归并", () => {
   it("按完整谱系生成更小候选，并合并全部来源", () => {
-    expect(assembleCompactMerge(items, compactMergeSchema.parse(merge))).toEqual([
-      {
-        id: "s1-i1",
-        moduleId: "s1-m1",
-        title: "蒸发能量",
-        summary: "太阳提供水蒸发所需能量。",
-        sourceUnitIds: ["source-1", "source-2"],
-        commonMisconceptions: ["蒸发不需要能量。"],
-      },
-      items[2],
-    ]);
+    expect(assembleCompactMerge(items, compactMergeSchema.parse(merge))).toEqual({
+      knowledgeItems: [
+        {
+          id: "s1-i1",
+          moduleId: "s1-m1",
+          title: "蒸发能量",
+          summary: "太阳提供水蒸发所需能量。",
+          sourceUnitIds: ["source-1", "source-2"],
+          commonMisconceptions: ["蒸发不需要能量。"],
+        },
+        items[2],
+      ],
+      itemLineage: [
+        {
+          knowledgeItemId: "s1-i1",
+          sourceKnowledgeItemIds: ["s1-i1", "s2-i1"],
+        },
+        { knowledgeItemId: "s2-i2", sourceKnowledgeItemIds: ["s2-i2"] },
+      ],
+    });
   });
 
   it("拒绝遗漏、重复或未知候选 ID", () => {

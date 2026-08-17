@@ -22,7 +22,10 @@ import {
   type CompactExtraction,
   compactExtractionSchema,
 } from "@/domain/knowledge-map/compact-contracts";
-import { compactMergedItemsSchema } from "@/domain/knowledge-map/compact-merge";
+import {
+  type CompactMergeResult,
+  compactMergeResultSchema,
+} from "@/domain/knowledge-map/compact-merge";
 import {
   type HintResponse,
   hintResponseSchema,
@@ -90,7 +93,7 @@ type PendingNodeOrderRequest = Extract<
 
 const RESULT_SCHEMA_BY_OPERATION = {
   EXTRACT_COMPACT_KNOWLEDGE: compactExtractionSchema,
-  MERGE_COMPACT_CANDIDATES: compactMergedItemsSchema,
+  MERGE_COMPACT_CANDIDATES: compactMergeResultSchema,
   COMPILE_KNOWLEDGE_MAP: knowledgeMapSchema,
   CREATE_FIRST_QUESTION: firstQuestionSchema,
   CREATE_STAGE_QUESTION: stageQuestionSchema,
@@ -113,7 +116,7 @@ export function callAgent(
 export function callAgent(
   request: MergeCompactCandidatesRequest,
   dependencies?: AgentClientDependencies,
-): Promise<z.infer<typeof compactMergedItemsSchema>>;
+): Promise<CompactMergeResult>;
 export function callAgent(
   request: QuestionRequest,
   dependencies?: AgentClientDependencies,
@@ -147,7 +150,7 @@ export function callAgent(
   dependencies?: AgentClientDependencies,
 ): Promise<
   | CompactExtraction
-  | z.infer<typeof compactMergedItemsSchema>
+  | CompactMergeResult
   | KnowledgeMap
   | FirstQuestion
   | StageQuestion

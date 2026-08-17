@@ -42,10 +42,40 @@ export const compactMergeSchema = z
   });
 
 export type CompactMerge = z.infer<typeof compactMergeSchema>;
-export const compactMergedItemsSchema = z
-  .array(compactKnowledgeItemSchema)
-  .min(1)
-  .max(120);
+export const compactMergeResultSchema = z
+  .object({
+    knowledgeItems: z.array(compactKnowledgeItemSchema).min(1).max(120),
+    itemLineage: z
+      .array(
+        z
+          .object({
+            knowledgeItemId: idSchema,
+            sourceKnowledgeItemIds: z.array(idSchema).min(1).max(120),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(120),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const resultIds = value.knowledgeItems.map(({ id }) => id);
+    const lineageResultIds = value.itemLineage.map(({ knowledgeItemId }) => knowledgeItemId);
+    const sourceIds = value.itemLineage.flatMap(
+      ({ sourceKnowledgeItemIds }) => sourceKnowledgeItemIds,
+    );
+    const resultCoverage = analyzeExactCoverage(resultIds, lineageResultIds);
+    if (
+      resultCoverage.missing.length ||
+      resultCoverage.duplicate.length ||
+      resultCoverage.unknown.length ||
+      new Set(sourceIds).size !== sourceIds.length
+    ) {
+      context.addIssue({ code: "custom", message: "紧凑归并结果谱系无效。" });
+    }
+  });
+
+export type CompactMergeResult = z.infer<typeof compactMergeResultSchema>;
 
 export class CompactMergeError extends Error {
   constructor(readonly details: string[]) {
@@ -77,21 +107,27 @@ export function assembleCompactMerge(
     ]);
   }
 
-  return merge.mergeGroups
-    .toSorted(
-      (left, right) =>
-        Math.min(...left.sourceKnowledgeItemIds.map((id) => itemOrder.get(id)!)) -
-        Math.min(...right.sourceKnowledgeItemIds.map((id) => itemOrder.get(id)!)),
-    )
-    .map((group) => {
-      const merged = group.sourceKnowledgeItemIds.map((id) => itemById.get(id)!);
-      const first = merged[0]!;
-      return compactKnowledgeItemSchema.parse({
-        ...first,
-        title: group.canonical.title,
-        summary: group.canonical.summary,
-        sourceUnitIds: [...new Set(merged.flatMap(({ sourceUnitIds }) => sourceUnitIds))],
-        commonMisconceptions: group.canonical.commonMisconceptions,
-      });
+  const orderedGroups = merge.mergeGroups.toSorted(
+    (left, right) =>
+      Math.min(...left.sourceKnowledgeItemIds.map((id) => itemOrder.get(id)!)) -
+      Math.min(...right.sourceKnowledgeItemIds.map((id) => itemOrder.get(id)!)),
+  );
+  const knowledgeItems = orderedGroups.map((group) => {
+    const merged = group.sourceKnowledgeItemIds.map((id) => itemById.get(id)!);
+    const first = merged[0]!;
+    return compactKnowledgeItemSchema.parse({
+      ...first,
+      title: group.canonical.title,
+      summary: group.canonical.summary,
+      sourceUnitIds: [...new Set(merged.flatMap(({ sourceUnitIds }) => sourceUnitIds))],
+      commonMisconceptions: group.canonical.commonMisconceptions,
     });
+  });
+  return compactMergeResultSchema.parse({
+    knowledgeItems,
+    itemLineage: orderedGroups.map((group, index) => ({
+      knowledgeItemId: knowledgeItems[index]!.id,
+      sourceKnowledgeItemIds: group.sourceKnowledgeItemIds,
+    })),
+  });
 }
