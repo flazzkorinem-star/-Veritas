@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { inspectMaterialFile } from "./material-file";
 import { decodeTextMaterial } from "./text-reader";
 
 function textFile(content: string, name = "notes.md", type = "text/markdown") {
@@ -7,7 +8,9 @@ function textFile(content: string, name = "notes.md", type = "text/markdown") {
 }
 
 async function decodeFile(file: File) {
-  return decodeTextMaterial(file, new Uint8Array(await file.arrayBuffer()));
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const inspected = inspectMaterialFile(file, bytes);
+  return decodeTextMaterial(file, bytes, inspected.fileName);
 }
 
 describe("Markdown/TXT 文本读取", () => {
@@ -22,12 +25,10 @@ describe("Markdown/TXT 文本读取", () => {
     });
   });
 
-  it.each([
-    [textFile("内容", "notes.pdf", "application/pdf"), "UNSUPPORTED_TYPE"],
-    [textFile("内容", "notes.md", "application/pdf"), "MIME_MISMATCH"],
-    [textFile("   ", "notes.txt", "text/plain"), "EMPTY_TEXT"],
-  ] as const)("拒绝不安全或无内容的文本文件", async (file, code) => {
-    await expect(decodeFile(file)).rejects.toMatchObject({ code });
+  it("拒绝没有内容的文本文件", async () => {
+    await expect(decodeFile(textFile("   ", "notes.txt", "text/plain"))).rejects.toMatchObject(
+      { code: "EMPTY_TEXT" },
+    );
   });
 
   it("拒绝超过 30 万字符的最终文本", async () => {

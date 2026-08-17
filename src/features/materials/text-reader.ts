@@ -1,11 +1,6 @@
 const MAX_TEXT_CHARACTERS = 300_000;
 
-import { inspectMaterialFile } from "./material-file";
-
 export type MaterialReadErrorCode =
-  | "UNSUPPORTED_TYPE"
-  | "MIME_MISMATCH"
-  | "FILE_TOO_LARGE"
   | "TEXT_TOO_LONG"
   | "EMPTY_TEXT"
   | "INVALID_ENCODING";
@@ -20,17 +15,7 @@ export class MaterialReadError extends Error {
   }
 }
 
-export function decodeTextMaterial(file: File, bytes: Uint8Array) {
-  if (!/\.(?:md|txt)$/iu.test(file.name)) {
-    throw new MaterialReadError(
-      "UNSUPPORTED_TYPE",
-      "当前步骤只支持 Markdown（MD）和 TXT 文件。",
-    );
-  }
-  const inspected = inspectMaterialFile(file, bytes);
-  if (inspected.kind !== "TEXT") {
-    throw new MaterialReadError("UNSUPPORTED_TYPE", "当前文件不是文本材料。 ");
-  }
+export function decodeTextMaterial(file: File, bytes: Uint8Array, fileName: string) {
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true })
@@ -51,7 +36,7 @@ export function decodeTextMaterial(file: File, bytes: Uint8Array) {
     );
   }
   return {
-    fileName: inspected.fileName,
+    fileName,
     mimeType: file.type,
     sizeBytes: file.size,
     text,

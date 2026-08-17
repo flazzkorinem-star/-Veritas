@@ -8,7 +8,7 @@ import {
   MaterialParseError,
   type ParsingProgress,
 } from "./parsed-material";
-import { decodeTextMaterial } from "./text-reader";
+import { decodeTextMaterial, MaterialReadError } from "./text-reader";
 import { chunkText } from "./chunk-text";
 
 export type MaterialParserProgress =
@@ -29,7 +29,7 @@ export async function parseMaterial(
     const parsingProgress = (progress: ParsingProgress) => onProgress(progress);
     switch (inspected.kind) {
       case "TEXT": {
-        const material = decodeTextMaterial(file, bytes);
+        const material = decodeTextMaterial(file, bytes, inspected.fileName);
         const blocks = /\.md$/iu.test(material.fileName)
           ? chunkText(material.text).map(({ sourceLabel, text }) => ({
               sourceLabel:
@@ -61,7 +61,7 @@ export async function parseMaterial(
     if (
       error instanceof MaterialFileError ||
       error instanceof MaterialParseError ||
-      (error instanceof Error && error.name === "MaterialReadError")
+      error instanceof MaterialReadError
     ) {
       throw error;
     }
