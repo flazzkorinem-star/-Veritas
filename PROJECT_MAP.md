@@ -45,7 +45,7 @@
 - `src/domain/types.ts`：任务、材料、知识地图、主题、层级、消息与报告的稳定领域类型。
 - `src/domain/diagnostic/contracts.ts`：主题会话状态与 reducer 事件契约；每层保留原主问题、小验证题和答案来源事实。
 - `src/domain/diagnostic/reducer.ts`：唯一四层状态机，授权层级推进、提示、停滞、自动答案后的同层验证、完成与计分；主动索要答案可直接推进，自动答案必须验证答对后推进。
-- `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分、材料进度和任务诊断状态。
+- `src/domain/diagnostic/selectors.ts`：从唯一层级状态派生主题得分。
 - `src/domain/knowledge-map/contracts.ts`：用 Zod 校验材料模块、知识条目、诊断主题、覆盖归属，以及由材料判断和唯一主问题组成的首问；单个分块内的模块与条目 ID 必须唯一。
 - `src/domain/knowledge-map/compact-contracts.ts`：定义来源单元、紧凑模块、知识候选和主题草案的严格 Zod 契约。
 - `src/domain/knowledge-map/stable-compact-ids.ts`：按分片和原始顺序为紧凑结果分配稳定命名空间 ID，并同步全部内部引用。
@@ -105,7 +105,6 @@
 
 - `e2e/smoke.spec.ts`：在桌面与移动 Edge 验证区域宽度、抽屉、长任务列表底部菜单完整可见、重命名模态键盘操作、控制台、溢出和 IndexedDB 刷新恢复。
 - `src/domain/diagnostic/reducer.test.ts`：固定四层顺序、计分、提示、答案、停滞与非法转移测试。
-- `src/domain/diagnostic/selectors.test.ts`：任务完成与材料主题进度的确定性派生测试。
 - `src/storage/task-repository.test.ts`：验证 schema 迁移、任务操作、跨表删除/撤销和隔离错误。
 - `src/features/workspace/WorkspaceApp.test.tsx`：验证空状态、搜索、切换、刷新恢复、处理中断恢复、取消和任务菜单交互。
 - `src/ui/components.test.tsx`：验证图标、按钮、表面、气泡、进度、状态标签和维塔七态契约。
