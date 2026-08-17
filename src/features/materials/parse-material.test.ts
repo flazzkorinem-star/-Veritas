@@ -35,4 +35,47 @@ describe("材料统一解析", () => {
       expect.stringContaining("## 3. 海绵城市"),
     ]);
   });
+
+  it("Markdown 章节超过 40 个时仍保留全部标题边界", async () => {
+    const sections = Array.from(
+      { length: 41 },
+      (_, index) => `## 第 ${index + 1} 章\n\n正文 ${index + 1}。`,
+    );
+    const material = await parseMaterial(
+      new File([`# 总标题\n\n${sections.join("\n\n")}`], "large.md", {
+        type: "text/markdown",
+      }),
+      vi.fn(),
+    );
+
+    expect(material.sourceBlocks).toHaveLength(41);
+    expect(material.sourceBlocks.map(({ sourceLabel }) => sourceLabel)).toEqual(
+      sections.map((_, index) => `第 ${index + 1} 章`),
+    );
+  });
+
+  it("解析阶段不再按字符容量二次切分同一 Markdown 章节", async () => {
+    const material = await parseMaterial(
+      new File([`## 长章节\n\n${"水循环。".repeat(4_000)}`], "long.md", {
+        type: "text/markdown",
+      }),
+      vi.fn(),
+    );
+
+    expect(material.sourceBlocks).toHaveLength(1);
+    expect(material.sourceBlocks[0]?.sourceLabel).toBe("长章节");
+  });
+
+  it("保留原有的 H1 章节边界语义", async () => {
+    const material = await parseMaterial(
+      new File(["# 第一节\n\n甲。\n\n# 第二节\n\n乙。"], "chapters.md", {
+        type: "text/markdown",
+      }),
+      vi.fn(),
+    );
+
+    expect(material.sourceBlocks).toHaveLength(2);
+    expect(material.sourceBlocks[0]?.text).toContain("# 第一节");
+    expect(material.sourceBlocks[1]?.text).toContain("# 第二节");
+  });
 });

@@ -9,10 +9,37 @@ import {
   type ParsingProgress,
 } from "./parsed-material";
 import { decodeTextMaterial, MaterialReadError } from "./text-reader";
-import { chunkText } from "./chunk-text";
 
 export type MaterialParserProgress =
   { stage: "READING"; loadedBytes: number; totalBytes: number } | ParsingProgress;
+
+function markdownSourceBlocks(text: string) {
+  const normalized = text.replace(/\r\n?/gu, "\n").trim();
+  const headingStarts = [...normalized.matchAll(/^#{1,6}[ \t]+.+$/gmu)].map(
+    ({ index }) => index,
+  );
+  const sectionStarts = headingStarts.slice(1);
+  if (sectionStarts[0] !== undefined && headingStarts[0] !== undefined) {
+    const firstHeadingEnd = normalized.indexOf("\n", headingStarts[0]);
+    if (normalized.slice(firstHeadingEnd, sectionStarts[0]).trim() === "") {
+      sectionStarts.shift();
+    }
+  }
+
+  return [0, ...sectionStarts].flatMap((start, index, starts) => {
+    const end = starts[index + 1] ?? normalized.length;
+    const text = normalized.slice(start, end).trim();
+    if (!text) return [];
+    return [
+      {
+        sourceLabel:
+          /^#{2,6}[ \t]+(.+)$/mu.exec(text)?.[1]?.trim().slice(0, 300) ??
+          `字符 ${start + 1}–${end}`,
+        text,
+      },
+    ];
+  });
+}
 
 export async function parseMaterial(
   file: File,
@@ -31,12 +58,7 @@ export async function parseMaterial(
       case "TEXT": {
         const material = decodeTextMaterial(file, bytes, inspected.fileName);
         const blocks = /\.md$/iu.test(material.fileName)
-          ? chunkText(material.text).map(({ sourceLabel, text }) => ({
-              sourceLabel:
-                /^#{2,6}[ \t]+(.+)$/mu.exec(text)?.[1]?.trim().slice(0, 300) ??
-                sourceLabel,
-              text,
-            }))
+          ? markdownSourceBlocks(material.text)
           : [{ sourceLabel: "全文", text: material.text }];
         return finishParsedMaterial(material.fileName, file.type, blocks);
       }

@@ -70,16 +70,15 @@
 - `src/storage/task-repository.ts`：负责任务、材料、处理轨迹、节点会话、消息、草稿、主动支架、未开始主题重排、报告、完成状态、工作区状态和事务性删除/撤销；主题选择只由任务的 `currentNodeId` 持有，保存处理成功和报告时分别校验模型路径与学习证据。
 - `src/features/materials/material-file.ts`：统一读取文件，并组合校验扩展名、MIME、签名、ZIP 目录、解压规模、压缩比和安全路径。
 - `src/features/materials/text-reader.ts`：在统一文件入口后严格解码 UTF-8 Markdown/TXT。
-- `src/features/materials/chunk-text.ts`：按 Markdown 标题与字符上限建立最多 40 个可追溯来源块。
 - `src/features/materials/parsed-material.ts`：定义带页、幻灯片或段落来源的多格式解析结果。
 - `src/features/materials/docx-parser.ts`：使用 Mammoth 浏览器构建只提取 DOCX 纯文本段落。
 - `src/features/materials/pptx-parser.ts`：使用 JSZip 和受控 DOMParser 按演示文稿关系顺序提取 PPTX 文字。
 - `src/features/materials/pdf-parser.ts`：使用 PDF.js 逐页提取文字，并将无文字页面渲染为受限像素交给 OCR。
 - `src/features/materials/image-parser.ts`、`ocr-engine.ts`：校验图片像素并使用可取消、必释放的同源 Tesseract Worker 做中英文 OCR。
-- `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现，避免大型解析依赖进入首屏代码。
+- `src/features/materials/parse-material.ts`：在一次字节读取后按已验证格式动态加载并分派唯一解析实现；Markdown 在这里只识别标题来源边界，不承担容量切分。
 - `src/features/materials/agent-client.ts`：从浏览器调用同源 Agent 路由，校验稳定结果与不含正文的操作元数据。
 - `src/features/materials/concurrency.ts`：提供材料提取、归并与编译共用的轻量信号量。
-- `src/features/materials/build-material-shards.ts`：将解析块转换为稳定来源单元，合并连续短段，并按实际 UTF-8 请求字节与单片 120 来源上限生成自适应分片。
+- `src/features/materials/build-material-shards.ts`：材料容量切分的唯一实现；将解析块转换为稳定来源单元，合并连续短段，并按实际 UTF-8 请求字节与单片 120 来源上限生成自适应分片。
 - `src/features/materials/extract-material-shards.ts`：以最多四路并发提取紧凑候选，保留成功结果，对结构失败只隔离二分一层；叶级或上游失败明确终止，禁止伪造候选覆盖。
 - `src/features/materials/prepare-compact-compile.ts`：按每批最多 60 条候选和全局四路并发执行分层归并；依据已校验谱系把原模型主题草案改指向合并候选而不改写语义字段，结构失败时隔离二分，可选归并上游失败时原样保留已验证候选并记录旁路。
 - `src/features/materials/split-compact-compile.ts`：按共享来源与模块连通组二分失败编译分区，确保子区来源不重复、不遗漏。
