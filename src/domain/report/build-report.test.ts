@@ -112,7 +112,6 @@ describe("任务级报告构建", () => {
     expect(document.progress).toEqual({ completed: 1, total: 2 });
     expect(document.nodes[0]).toMatchObject({
       score: 75,
-      evidenceQuotes: ["太阳能让水蒸发。", "它为蒸发提供能量。", "换个场景仍然成立。"],
       stages: {
         MEMORY: "PASSED",
         UNDERSTANDING: "PASSED_WITH_HINT",
@@ -130,6 +129,8 @@ describe("任务级报告构建", () => {
         }),
       ]),
     });
+    expect(document.nodes[0]).not.toHaveProperty("evidenceQuotes");
+    expect(document.nodes[0]).not.toHaveProperty("learnedOrCorrected");
     expect(document.coverage.undiagnosed).toEqual(["降水回流"]);
   });
 

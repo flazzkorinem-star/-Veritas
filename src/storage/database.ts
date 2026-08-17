@@ -110,6 +110,33 @@ export class VeritasDatabase extends Dexie {
             material.processingTrace ??= null;
           }),
       );
+
+    this.version(6)
+      .stores({
+        tasks: "&id, title, fileName, updatedAt",
+        materials: "&taskId",
+        sessions: "[taskId+nodeId], taskId, nodeId",
+        messages: "&id, taskId, nodeId, createdAt",
+        drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+        reports: "&taskId",
+        uiStates: "&taskId, updatedAt",
+        workspaceStates: "&id, updatedAt",
+      })
+      .upgrade((transaction) =>
+        transaction
+          .table<StoredReport, string>("reports")
+          .toCollection()
+          .modify((report) => {
+            for (const node of report.document.nodes) {
+              const legacy = node as typeof node & {
+                evidenceQuotes?: unknown;
+                learnedOrCorrected?: unknown;
+              };
+              delete legacy.evidenceQuotes;
+              delete legacy.learnedOrCorrected;
+            }
+          }),
+      );
   }
 }
 

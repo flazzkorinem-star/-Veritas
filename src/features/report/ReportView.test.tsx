@@ -37,7 +37,6 @@ const report: StoredReport = {
         },
         understood: [{ statement: "能指出太阳能。", evidenceQuote: "太阳能驱动蒸发。" }],
         blindSpots: ["应用时依赖了完整答案。"],
-        evidenceQuotes: ["太阳能驱动蒸发。"],
         learningEvidence: [
           {
             stage: "MEMORY",
@@ -68,7 +67,6 @@ const report: StoredReport = {
           { description: "仍把风当作唯一动力。", evidenceQuote: "只有风才会让水循环。" },
         ],
         scaffoldNotes: [],
-        learnedOrCorrected: [],
         nextSteps: ["独立完成新情境应用。"],
         sourceReferences: [{ label: "第 1 段", excerpt: "太阳驱动蒸发。" }],
       },

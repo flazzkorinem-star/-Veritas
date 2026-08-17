@@ -133,6 +133,58 @@ describe("本地任务仓储", () => {
     database.close();
   });
 
+  it("从 v5 升级时只清理报告中没有消费者的派生副本", async () => {
+    const name = databaseName();
+    const legacy = new Dexie(name);
+    legacy.version(5).stores({
+      tasks: "&id, title, fileName, updatedAt",
+      materials: "&taskId",
+      sessions: "[taskId+nodeId], taskId, nodeId",
+      messages: "&id, taskId, nodeId, createdAt",
+      drafts: "[taskId+nodeId], taskId, nodeId, updatedAt",
+      reports: "&taskId",
+      uiStates: "&taskId, updatedAt",
+      workspaceStates: "&id, updatedAt",
+    });
+    const taskId = crypto.randomUUID();
+    await legacy.table("reports").put({
+      id: crypto.randomUUID(),
+      taskId,
+      markdown: "# 旧报告",
+      document: {
+        nodes: [
+          {
+            nodeId: "node-1",
+            understood: [{ statement: "旧版已验证内容", evidenceQuote: "用户原话" }],
+            blindSpots: ["旧版盲点"],
+            evidenceQuotes: ["用户原话"],
+            learnedOrCorrected: [
+              { description: "旧版修正", basis: "USER_RESPONSE", evidence: "用户原话" },
+            ],
+          },
+        ],
+      },
+      completedNodeIds: ["node-1"],
+      createdAt: "2026-08-01T08:00:00.000Z",
+      updatedAt: "2026-08-01T08:00:00.000Z",
+    });
+    legacy.close();
+
+    const database = createVeritasDatabase(name);
+    const stored = (await database.reports.get(taskId)) as unknown as {
+      document: { nodes: Record<string, unknown>[] };
+    };
+    const node = stored.document.nodes[0]!;
+
+    expect(node).not.toHaveProperty("evidenceQuotes");
+    expect(node).not.toHaveProperty("learnedOrCorrected");
+    expect(node).toMatchObject({
+      understood: [{ statement: "旧版已验证内容", evidenceQuote: "用户原话" }],
+      blindSpots: ["旧版盲点"],
+    });
+    database.close();
+  });
+
   it("把置顶任务排在最近任务前", async () => {
     const database = createVeritasDatabase(databaseName());
     const repository = createTaskRepository(database);

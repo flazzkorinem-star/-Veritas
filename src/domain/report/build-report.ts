@@ -37,9 +37,7 @@ export interface ReportDocumentNode {
   misconceptions: { description: string; evidenceQuote: string }[];
   understood: { statement: string; evidenceQuote: string }[];
   blindSpots: string[];
-  evidenceQuotes: string[];
   scaffoldNotes: { type: string; reason: string; learningEffect: string }[];
-  learnedOrCorrected: { description: string; basis: string; evidence: string }[];
   nextSteps: string[];
   sourceReferences: { label: string; excerpt: string }[];
 }
@@ -123,7 +121,6 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
               )
               .max(12),
             blindSpots: z.array(storedText).max(12),
-            evidenceQuotes: z.array(storedText).max(12),
             scaffoldNotes: z
               .array(
                 z
@@ -131,17 +128,6 @@ export const reportDocumentSchema: z.ZodType<ReportDocument> = z
                     type: storedText,
                     reason: storedText,
                     learningEffect: storedText,
-                  })
-                  .strict(),
-              )
-              .max(12),
-            learnedOrCorrected: z
-              .array(
-                z
-                  .object({
-                    description: storedText,
-                    basis: storedText,
-                    evidence: storedText,
                   })
                   .strict(),
               )
@@ -223,15 +209,6 @@ export function buildReportDocument(options: {
             .filter((item) => item.category === "EXPLAINED_NOT_VERIFIED")
             .map((item) => item.statement),
         ],
-        evidenceQuotes: [
-          ...new Set(
-            insight.learningEvidence.flatMap((item) =>
-              item.userMessageId === null
-                ? []
-                : [messages.get(item.userMessageId)!.content],
-            ),
-          ),
-        ],
         scaffoldNotes: insight.scaffoldNotes.map((note) => {
           const event = scaffolds.get(note.scaffoldEventId)!;
           return {
@@ -240,13 +217,6 @@ export function buildReportDocument(options: {
             learningEffect: note.learningEffect,
           };
         }),
-        learnedOrCorrected: insight.learningEvidence
-          .filter((item) => item.category === "AFTER_TEACHING_VERIFIED")
-          .map((item) => ({
-            description: item.statement,
-            basis: "USER_RESPONSE",
-            evidence: messages.get(item.userMessageId!)!.content,
-          })),
         nextSteps: insight.nextSteps,
         sourceReferences: insight.sourceReferenceIndexes.map(
           (index) => node.sourceReferences[index]!,
