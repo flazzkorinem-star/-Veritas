@@ -1,26 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { readTextMaterial } from "./text-reader";
+import { decodeTextMaterial } from "./text-reader";
 
 function textFile(content: string, name = "notes.md", type = "text/markdown") {
   return new File([content], name, { type });
 }
 
+async function decodeFile(file: File) {
+  return decodeTextMaterial(file, new Uint8Array(await file.arrayBuffer()));
+}
+
 describe("Markdown/TXT 文本读取", () => {
-  it("读取 UTF-8 文本并报告真实字节进度", async () => {
-    const progress = vi.fn();
+  it("解码 UTF-8 文本并清理首尾空白", async () => {
     const file = textFile("# 水循环\n太阳提供能量。\n");
 
-    await expect(readTextMaterial(file, progress)).resolves.toEqual({
+    await expect(decodeFile(file)).resolves.toEqual({
       fileName: "notes.md",
       mimeType: "text/markdown",
       text: "# 水循环\n太阳提供能量。",
       sizeBytes: file.size,
-    });
-    expect(progress).toHaveBeenCalledWith({ loadedBytes: 0, totalBytes: file.size });
-    expect(progress).toHaveBeenLastCalledWith({
-      loadedBytes: file.size,
-      totalBytes: file.size,
     });
   });
 
@@ -29,23 +27,13 @@ describe("Markdown/TXT 文本读取", () => {
     [textFile("内容", "notes.md", "application/pdf"), "MIME_MISMATCH"],
     [textFile("   ", "notes.txt", "text/plain"), "EMPTY_TEXT"],
   ] as const)("拒绝不安全或无内容的文本文件", async (file, code) => {
-    await expect(readTextMaterial(file)).rejects.toMatchObject({ code });
-  });
-
-  it("在解码前拒绝超过 30MB 的文件", async () => {
-    const file = new File([new Uint8Array(30 * 1024 * 1024 + 1)], "huge.txt", {
-      type: "text/plain",
-    });
-
-    await expect(readTextMaterial(file)).rejects.toMatchObject({
-      code: "FILE_TOO_LARGE",
-    });
+    await expect(decodeFile(file)).rejects.toMatchObject({ code });
   });
 
   it("拒绝超过 30 万字符的最终文本", async () => {
     const file = textFile("水".repeat(300_001), "long.txt", "text/plain");
 
-    await expect(readTextMaterial(file)).rejects.toMatchObject({
+    await expect(decodeFile(file)).rejects.toMatchObject({
       code: "TEXT_TOO_LONG",
     });
   });
@@ -55,7 +43,7 @@ describe("Markdown/TXT 文本读取", () => {
       type: "text/plain",
     });
 
-    await expect(readTextMaterial(file)).rejects.toMatchObject({
+    await expect(decodeFile(file)).rejects.toMatchObject({
       code: "INVALID_ENCODING",
     });
   });

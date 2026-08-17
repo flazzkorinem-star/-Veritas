@@ -1,6 +1,6 @@
 const MAX_TEXT_CHARACTERS = 300_000;
 
-import { inspectMaterialFile, readMaterialBytes } from "./material-file";
+import { inspectMaterialFile } from "./material-file";
 
 export type MaterialReadErrorCode =
   | "UNSUPPORTED_TYPE"
@@ -18,11 +18,6 @@ export class MaterialReadError extends Error {
     super(message);
     this.name = "MaterialReadError";
   }
-}
-
-export interface ReadProgress {
-  loadedBytes: number;
-  totalBytes: number;
 }
 
 export function decodeTextMaterial(file: File, bytes: Uint8Array) {
@@ -61,11 +56,4 @@ export function decodeTextMaterial(file: File, bytes: Uint8Array) {
     sizeBytes: file.size,
     text,
   };
-}
-
-export async function readTextMaterial(
-  file: File,
-  onProgress?: (progress: ReadProgress) => void,
-) {
-  return decodeTextMaterial(file, await readMaterialBytes(file, onProgress));
 }
