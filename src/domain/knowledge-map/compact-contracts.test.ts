@@ -35,6 +35,20 @@ function validExtraction() {
 }
 
 describe("紧凑提取契约", () => {
+  it("允许叶级临时主题先归拢超过五个候选", () => {
+    const extraction = validExtraction();
+    extraction.knowledgeItems = Array.from({ length: 6 }, (_, index) => ({
+      ...extraction.knowledgeItems[0]!,
+      id: `item-${index + 1}`,
+      title: `候选 ${index + 1}`,
+    }));
+    extraction.topicDrafts[0]!.knowledgeItemIds = extraction.knowledgeItems.map(
+      ({ id }) => id,
+    );
+
+    expect(compactExtractionSchema.safeParse(extraction).success).toBe(true);
+  });
+
   it("只保留叶级提取负责的候选字段", () => {
     expect(compactExtractionSchema.parse(validExtraction())).toEqual(validExtraction());
   });
