@@ -1,4 +1,4 @@
-const MAX_TEXT_CHARACTERS = 300_000;
+import { MAX_PARSED_TEXT_CHARACTERS } from "@/config/material-limits";
 
 export type MaterialReadErrorCode =
   | "TEXT_TOO_LONG"
@@ -29,7 +29,7 @@ export function decodeTextMaterial(file: File, bytes: Uint8Array, fileName: stri
     );
   }
   if (!text) throw new MaterialReadError("EMPTY_TEXT", "材料中没有可读取的文字。 ");
-  if (text.length > MAX_TEXT_CHARACTERS) {
+  if (text.length > MAX_PARSED_TEXT_CHARACTERS) {
     throw new MaterialReadError(
       "TEXT_TOO_LONG",
       "解析后的文字超过 30 万字符，请拆分材料后再上传。",

@@ -1,0 +1,1 @@
+export const MAX_PARSED_TEXT_CHARACTERS = 300_000;

@@ -6,6 +6,7 @@ import {
 } from "@/domain/knowledge-map/contracts";
 import { createNodeSession, diagnosticReducer } from "@/domain/diagnostic/reducer";
 import { getNodeScore } from "@/domain/diagnostic/selectors";
+import { MAX_PARSED_TEXT_CHARACTERS } from "@/config/material-limits";
 import type { FirstQuestion } from "@/domain/knowledge-map/contracts";
 import type { NodeSession } from "@/domain/diagnostic/contracts";
 import type { ScaffoldType } from "@/domain/diagnostic/agent-contracts";
@@ -259,7 +260,7 @@ export function createTaskRepository(database: VeritasDatabase) {
           task.status !== "PROCESSING" ||
           !material ||
           !parsedText.trim() ||
-          parsedText.length > 300_000 ||
+          parsedText.length > MAX_PARSED_TEXT_CHARACTERS ||
           !knowledgeMap.success ||
           !firstQuestion.success ||
           !processingTrace.success

@@ -39,6 +39,7 @@
 - `src/app/globals.css`：全局令牌、两区工作区、固定视口内的消息滚动与输入区、按需主题/进度浮层、语音状态、报告与打印页面，以及含安全区、横竖屏和软键盘边界的移动端布局。
 - `src/app/icon.svg`：本地应用图标，避免页面请求外部或缺失图标。
 - `src/config/agent-limits.ts`：集中定义同源 Agent 请求体上限、Agent 2 浏览器与上游整包字节预算、最近消息预算、路由总并发与分类容量、3 分钟材料总预算、170 秒模型预算和 Agent 1 提取、归并与编译的四路并发。
+- `src/config/material-limits.ts`：定义解析文本的 30 万字符统一上限，供文本入口、统一解析收尾和入库防线共享。
 - `src/config/security-headers.ts`：同源 CSP、嵌入防护、内容嗅探与浏览器权限限制。
 - `src/lib/env/server.ts`：只在服务端调用边界校验 DeepSeek 环境配置。
 - `src/lib/errors/public-error.ts`：定义不含堆栈、原因和上游正文的公共错误契约。
