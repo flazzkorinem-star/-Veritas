@@ -18,6 +18,12 @@ describe("Markdown/TXT 文本读取", () => {
     await expect(decodeFile(file)).resolves.toBe("# 水循环\n太阳提供能量。");
   });
 
+  it("在换行规范化前拒绝超过 30 万字符的文本", async () => {
+    const file = textFile("a\r\n".repeat(100_001), "long.txt", "text/plain");
+
+    await expect(decodeFile(file)).rejects.toMatchObject({ code: "TEXT_TOO_LONG" });
+  });
+
   it("拒绝不是 UTF-8 的文本内容", async () => {
     const file = new File([new Uint8Array([0xff, 0xfe, 0xfd])], "broken.txt", {
       type: "text/plain",

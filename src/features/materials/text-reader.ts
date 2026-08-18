@@ -1,4 +1,9 @@
-export type MaterialReadErrorCode = "INVALID_ENCODING";
+import { MAX_PARSED_TEXT_CHARACTERS } from "@/config/material-limits";
+
+export type MaterialReadErrorCode =
+  | "TEXT_TOO_LONG"
+  | "EMPTY_TEXT"
+  | "INVALID_ENCODING";
 
 export class MaterialReadError extends Error {
   constructor(
@@ -11,8 +16,9 @@ export class MaterialReadError extends Error {
 }
 
 export function decodeTextMaterial(bytes: Uint8Array) {
+  let text: string;
   try {
-    return new TextDecoder("utf-8", { fatal: true })
+    text = new TextDecoder("utf-8", { fatal: true })
       .decode(bytes)
       .replace(/^\uFEFF/u, "")
       .trim();
@@ -22,4 +28,12 @@ export function decodeTextMaterial(bytes: Uint8Array) {
       "文本不是有效的 UTF-8 编码，请转换编码后重试。",
     );
   }
+  if (!text) throw new MaterialReadError("EMPTY_TEXT", "材料中没有可读取的文字。 ");
+  if (text.length > MAX_PARSED_TEXT_CHARACTERS) {
+    throw new MaterialReadError(
+      "TEXT_TOO_LONG",
+      "解析后的文字超过 30 万字符，请拆分材料后再上传。",
+    );
+  }
+  return text;
 }
