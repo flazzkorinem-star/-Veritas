@@ -50,7 +50,6 @@ function resolveSlideOrder(presentationXml: string, relationshipsXml: string) {
 export async function parsePptx(
   bytes: Uint8Array,
   fileName: string,
-  mimeType: string,
   onProgress?: (progress: ParsingProgress) => void,
 ) {
   const zip = await JSZip.loadAsync(bytes, { checkCRC32: true, createFolders: false });
@@ -84,5 +83,5 @@ export async function parsePptx(
       .join(" ");
     blocks.push({ sourceLabel: `第 ${index + 1} 张幻灯片`, text });
   }
-  return finishParsedMaterial(fileName, mimeType, blocks);
+  return finishParsedMaterial(fileName, blocks);
 }

@@ -32,10 +32,7 @@ export interface MaterialReadProgress {
 
 export interface InspectedMaterialFile {
   fileName: string;
-  extension: string;
   kind: MaterialKind;
-  mimeType: string;
-  zipEntries?: readonly string[];
 }
 
 interface FileRule {
@@ -225,12 +222,11 @@ export function inspectMaterialFile(
       "文件内容与扩展名不一致，请重新选择。 ",
     );
   }
-  let zipEntries: readonly string[] | undefined;
   if (rule.kind === "DOCX" || rule.kind === "PPTX") {
-    zipEntries = inspectZipContainer(bytes);
+    const zipEntries = inspectZipContainer(bytes);
     requireOfficeStructure(rule.kind, zipEntries);
   }
-  return { fileName, extension, kind: rule.kind, mimeType, zipEntries };
+  return { fileName, kind: rule.kind };
 }
 
 export async function readMaterialBytes(

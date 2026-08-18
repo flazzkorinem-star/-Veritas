@@ -48,7 +48,7 @@ export async function parseImage(
       throw new MaterialParseError("CANCELLED", "已取消处理这份材料。 ");
     }
     onProgress?.({ stage: "OCR", current: 1, total: 1, label: "图片文字已识别" });
-    return finishParsedMaterial(file.name, file.type, [
+    return finishParsedMaterial(file.name, [
       { sourceLabel: "图片文字识别结果", text },
     ]);
   } finally {

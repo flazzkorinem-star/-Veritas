@@ -95,7 +95,6 @@ describe("图片与 PDF 解析", () => {
     const result = await parsePdf(
       new Uint8Array([37, 80, 68, 70, 45]),
       "lesson.pdf",
-      "application/pdf",
       undefined,
       undefined,
       { loadPdf, createOcr: vi.fn().mockResolvedValue(worker) },
@@ -119,7 +118,6 @@ describe("图片与 PDF 解析", () => {
       parsePdf(
         new Uint8Array([37, 80, 68, 70, 45]),
         "huge.pdf",
-        "application/pdf",
         undefined,
         undefined,
         { loadPdf },
@@ -138,7 +136,6 @@ describe("图片与 PDF 解析", () => {
       parsePdf(
         new Uint8Array([37, 80, 68, 70, 45]),
         "scan.pdf",
-        "application/pdf",
         undefined,
         undefined,
         { loadPdf, createOcr: vi.fn().mockResolvedValue(worker) },

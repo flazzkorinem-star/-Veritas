@@ -16,11 +16,7 @@ for (const fileName of ["AI Agent笔记.docx", "AI PM求职逐字稿.docx"]) {
     const bytes = new Uint8Array(
       readFileSync(path.join(process.cwd(), "测试文件", fileName)),
     );
-    const parsed = await parseDocx(
-      bytes,
-      fileName,
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    );
+    const parsed = await parseDocx(bytes, fileName);
     const shards = buildMaterialShards(parsed.sourceBlocks);
     const failures = shards.flatMap((shard) => {
       const result = agentOperationRequestSchema.safeParse({

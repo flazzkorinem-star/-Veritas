@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import { parseMaterial } from "./parse-material";
 
 describe("材料统一解析", () => {
+  it("拒绝没有内容的文本文件", async () => {
+    await expect(
+      parseMaterial(new File(["   "], "notes.txt", { type: "text/plain" }), vi.fn()),
+    ).rejects.toMatchObject({ code: "EMPTY_TEXT" });
+  });
+
+  it("拒绝超过 30 万字符的最终文本", async () => {
+    await expect(
+      parseMaterial(
+        new File(["水".repeat(300_001)], "long.txt", { type: "text/plain" }),
+        vi.fn(),
+      ),
+    ).rejects.toMatchObject({ code: "TEXT_TOO_LONG" });
+  });
+
   it("Markdown 按二级标题保留来源结构，而不是退化为全文单块", async () => {
     const text = `# 城市里的水循环
 

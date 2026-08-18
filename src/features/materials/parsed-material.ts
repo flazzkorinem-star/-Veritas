@@ -7,7 +7,6 @@ export interface ParsedSourceBlock {
 
 export interface ParsedMaterial {
   fileName: string;
-  mimeType: string;
   text: string;
   sourceBlocks: ParsedSourceBlock[];
 }
@@ -41,7 +40,6 @@ export class MaterialParseError extends Error {
 
 export function finishParsedMaterial(
   fileName: string,
-  mimeType: string,
   blocks: readonly ParsedSourceBlock[],
 ): ParsedMaterial {
   const sourceBlocks = blocks
@@ -57,5 +55,5 @@ export function finishParsedMaterial(
       "解析后的文字超过 30 万字符，请拆分材料后再上传。",
     );
   }
-  return { fileName, mimeType, text, sourceBlocks };
+  return { fileName, text, sourceBlocks };
 }

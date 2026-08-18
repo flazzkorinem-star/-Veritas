@@ -56,23 +56,23 @@ export async function parseMaterial(
     const parsingProgress = (progress: ParsingProgress) => onProgress(progress);
     switch (inspected.kind) {
       case "TEXT": {
-        const material = decodeTextMaterial(file, bytes, inspected.fileName);
-        const blocks = /\.md$/iu.test(material.fileName)
-          ? markdownSourceBlocks(material.text)
-          : [{ sourceLabel: "全文", text: material.text }];
-        return finishParsedMaterial(material.fileName, file.type, blocks);
+        const text = decodeTextMaterial(bytes);
+        const blocks = /\.md$/iu.test(inspected.fileName)
+          ? markdownSourceBlocks(text)
+          : [{ sourceLabel: "全文", text }];
+        return finishParsedMaterial(inspected.fileName, blocks);
       }
       case "DOCX": {
         const { parseDocx } = await import("./docx-parser");
-        return parseDocx(bytes, inspected.fileName, file.type, parsingProgress);
+        return parseDocx(bytes, inspected.fileName, parsingProgress);
       }
       case "PPTX": {
         const { parsePptx } = await import("./pptx-parser");
-        return parsePptx(bytes, inspected.fileName, file.type, parsingProgress);
+        return parsePptx(bytes, inspected.fileName, parsingProgress);
       }
       case "PDF": {
         const { parsePdf } = await import("./pdf-parser");
-        return parsePdf(bytes, inspected.fileName, file.type, parsingProgress, signal);
+        return parsePdf(bytes, inspected.fileName, parsingProgress, signal);
       }
       case "IMAGE": {
         const { parseImage } = await import("./image-parser");

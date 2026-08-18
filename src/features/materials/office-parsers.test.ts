@@ -49,7 +49,6 @@ describe("Office 材料解析", () => {
     const result = await parseDocx(
       await docxBytes(),
       "lesson.docx",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       progress,
     );
 
@@ -67,7 +66,6 @@ describe("Office 材料解析", () => {
     const result = await parsePptx(
       await pptxBytes(),
       "lesson.pptx",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     );
 
     expect(result.sourceBlocks).toEqual([
@@ -83,7 +81,6 @@ describe("Office 材料解析", () => {
           '<!DOCTYPE p [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><p:presentation xmlns:p="p"/>',
         ),
         "unsafe.pptx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       ),
     ).rejects.toMatchObject({ code: "INVALID_CONTENT" });
   });
@@ -111,7 +108,6 @@ describe("Office 材料解析", () => {
       parsePptx(
         await zip.generateAsync({ type: "uint8array" }),
         "huge.pptx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       ),
     ).rejects.toMatchObject({ code: "SLIDE_LIMIT" });
   });

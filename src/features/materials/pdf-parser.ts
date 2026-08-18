@@ -82,7 +82,6 @@ async function renderPage(page: PdfPage) {
 export async function parsePdf(
   bytes: Uint8Array,
   fileName: string,
-  mimeType: string,
   onProgress?: (progress: ParsingProgress) => void,
   signal?: AbortSignal,
   dependencies: PdfParserDependencies = {},
@@ -142,7 +141,7 @@ export async function parsePdf(
         page.cleanup();
       }
     }
-    return finishParsedMaterial(fileName, mimeType, blocks);
+    return finishParsedMaterial(fileName, blocks);
   } finally {
     signal?.removeEventListener("abort", cancel);
     if (ocr) await ocr.terminate();
