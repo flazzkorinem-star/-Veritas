@@ -44,7 +44,6 @@ describe("同源 Agent API", () => {
           repaired: true,
           endReason: "SUCCESS",
           status: 200,
-          failureType: null,
           outcome: "SUCCESS",
           zodPaths: [],
           errorId: null,

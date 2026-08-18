@@ -71,7 +71,6 @@ export interface AgentOperationLogEntry {
     | "CANCELLED"
     | "NON_RETRYABLE";
   status: number | null;
-  failureType: string | null;
   outcome: string;
   zodPaths: string[];
   errorId: string | null;
@@ -325,12 +324,12 @@ async function callValidated<T>(
   } finally {
     clearTimeout(timeout);
     request.signal?.removeEventListener("abort", abortFromCaller);
-    const failureType =
+    const outcome =
       failure instanceof AgentServiceError || failure instanceof DeepSeekError
         ? failure.code
         : failure
           ? "UNEXPECTED_ERROR"
-          : null;
+          : "SUCCESS";
     const endReason = !failure
       ? "SUCCESS"
       : abortState.reason === "CANCELLED" && controller.signal.aborted
@@ -354,8 +353,7 @@ async function callValidated<T>(
             : attempts > 0
               ? 200
               : null,
-        failureType,
-        outcome: failureType ?? "SUCCESS",
+        outcome,
         zodPaths: paths,
         errorId:
           failure instanceof AgentServiceError || failure instanceof DeepSeekError
