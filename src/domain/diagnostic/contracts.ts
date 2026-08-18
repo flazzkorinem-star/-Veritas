@@ -10,7 +10,6 @@ export type HintLevel = 0 | 1 | 2 | 3;
 export type AnswerOrigin = "NONE" | "REQUESTED" | "AUTOMATIC";
 
 export interface StageState {
-  key: StageKey;
   status: StageStatus;
   mainQuestion: string | null;
   verificationQuestion: string | null;

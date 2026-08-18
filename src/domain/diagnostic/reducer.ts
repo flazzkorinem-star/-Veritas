@@ -11,9 +11,8 @@ export class InvalidTransitionError extends Error {
   override name = "InvalidTransitionError";
 }
 
-function createStage(key: StageKey): StageState {
+function createStage(): StageState {
   return {
-    key,
     status: "LOCKED",
     mainQuestion: null,
     verificationQuestion: null,
@@ -30,7 +29,7 @@ export function createNodeSession(nodeId: string): NodeSession {
     status: "NOT_STARTED",
     currentStage: "MEMORY",
     stages: Object.fromEntries(
-      STAGE_ORDER.map((key) => [key, createStage(key)]),
+      STAGE_ORDER.map((key) => [key, createStage()]),
     ) as Record<StageKey, StageState>,
   };
 }
@@ -44,7 +43,7 @@ function currentActiveStage(state: NodeSession): StageState {
 }
 
 function replaceStage(state: NodeSession, stage: StageState): NodeSession {
-  return { ...state, stages: { ...state.stages, [stage.key]: stage } };
+  return { ...state, stages: { ...state.stages, [state.currentStage]: stage } };
 }
 
 function completeCurrentStage(
@@ -54,9 +53,9 @@ function completeCurrentStage(
   const stage = currentActiveStage(state);
   const stages = {
     ...state.stages,
-    [stage.key]: { ...stage, status, stalledCount: 0 },
+    [state.currentStage]: { ...stage, status, stalledCount: 0 },
   };
-  const index = STAGE_ORDER.indexOf(stage.key);
+  const index = STAGE_ORDER.indexOf(state.currentStage);
 
   if (index === STAGE_ORDER.length - 1) {
     return { ...state, status: "COMPLETED", stages };
