@@ -86,6 +86,10 @@ describe("Agent 2 服务", () => {
     expect(prompt).toContain("分类为 NO_ANSWER、progress=STALLED");
     expect(prompt).toContain("根据完整语义理解");
     expect(prompt).toContain("不要靠关键词匹配意图");
+    expect(prompt).toContain("不得覆盖 currentQuestion 的全部最低回答要求");
+    expect(prompt).toContain("只有连续三轮停滞后单独调用 CREATE_STAGE_ANSWER");
+    expect(prompt).toContain("即使这是第三次停滞也不得提前给出答案");
+    expect(prompt).toContain("不得让用户只复述本次反馈");
   });
 
   it.each([
@@ -180,6 +184,11 @@ describe("Agent 2 服务", () => {
     expect(prompt).toContain("识别题目要求的唯一回答动作和最低证据");
     expect(prompt).toContain("只有用户本轮证据完整满足要求时才是 CORRECT");
     expect(prompt).toContain("未完整满足时保留当前问题");
+    expect(prompt).toContain("所有非 CORRECT 的诊断反馈");
+    expect(prompt).toContain("不得直接说出用户尚未提供的答案点");
+    expect(prompt).toContain(
+      "可以使用不包含最低回答证据的具体案例、类比、反例或分步支架",
+    );
     expect(prompt).toContain("用户正在回答当前问题");
     expect(prompt).toContain("missingPoints 只能来自 currentQuestion 明确要求的内容");
     expect(prompt).toContain("不能成为通过条件或缺失点");
@@ -187,6 +196,59 @@ describe("Agent 2 服务", () => {
     expect(prompt).not.toContain(node.bloomTargets.understanding);
     expect(prompt).not.toContain(node.bloomTargets.application);
     expect(prompt).not.toContain(node.bloomTargets.analysis);
+  });
+
+  it("不会把用户复述 Vita 先前泄露的答案当成独立掌握", async () => {
+    const output = {
+      responseMode: "EVALUATE_DIAGNOSTIC" as const,
+      learningGoalUpdate: null,
+      classification: "COPIED" as const,
+      isCorrect: false,
+      progress: "STALLED" as const,
+      correctEvidence: [],
+      missingPoints: ["尚未看到用户自己的理解证据"],
+      misconceptions: [],
+      teachingMove: "REQUEST_OWN_WORDS" as const,
+      scaffold: null,
+      assistantMessage: "请不要复述上一条回复，换一种思路说明两者的区别。",
+    };
+    const callModel = vi.fn().mockResolvedValue(output);
+
+    await runAgentOperation(
+      {
+        operation: "RESPOND_TO_USER",
+        input: {
+          node,
+          knowledgeItems,
+          materialContext,
+          learningGoal: null,
+          diagnostic: {
+            status: "ACTIVE",
+            stage: "MEMORY",
+            mainQuestion: "ETF 与联接基金在交易方式和定价上有什么区别？",
+          },
+          userMessage: "ETF 在交易所按市价成交，联接基金在基金平台按净值申赎。",
+          recentMessages: [
+            {
+              role: "ASSISTANT",
+              content: "ETF 在交易所按市价成交，联接基金在基金平台按净值申赎。",
+            },
+          ],
+        },
+      },
+      "server-key",
+      callModel,
+    );
+
+    const prompt = callModel.mock.calls[0]![0].user;
+    expect(prompt).toContain("不能作为用户独立掌握的证据");
+    expect(prompt).toContain("分类为 COPIED");
+    expect(prompt).toContain("由 Vita 首次引入");
+    expect(prompt).toContain("用户此前已经提供的证据不算复制");
+    expect(prompt).toContain("判断内容是否正确之前先判断证据来源");
+    expect(prompt).toContain("同义表达复述");
+    expect(prompt).toContain("progress=STALLED");
+    expect(prompt).toContain("不得因内容正确而判为 CORRECT");
   });
 
   it.each([

@@ -83,6 +83,28 @@ describe("Agent 2 结构化输出契约", () => {
     ).toBe(false);
   });
 
+  it("复述内容不能算作新进展", () => {
+    const copied = {
+      responseMode: "EVALUATE_DIAGNOSTIC",
+      learningGoalUpdate: null,
+      classification: "COPIED",
+      isCorrect: false,
+      correctEvidence: [],
+      missingPoints: ["尚未看到用户自己的理解证据"],
+      misconceptions: [],
+      teachingMove: "REQUEST_OWN_WORDS",
+      scaffold: null,
+      assistantMessage: "请换成自己的思路重新说明。",
+    } as const;
+
+    expect(
+      userTurnDecisionSchema.safeParse({ ...copied, progress: "STALLED" }).success,
+    ).toBe(true);
+    expect(
+      userTurnDecisionSchema.safeParse({ ...copied, progress: "ADVANCING" }).success,
+    ).toBe(false);
+  });
+
   it.each([
     { correctEvidence: [], missingPoints: [] },
     { correctEvidence: ["回答了一个相关点"], missingPoints: ["仍缺少主问题要求的因果"] },

@@ -73,7 +73,14 @@ const materialPath = path.join(
   "S11-城市内涝误解.md",
 );
 
-async function requestDecision(request: APIRequestContext, userMessage: string) {
+async function requestDecision(
+  request: APIRequestContext,
+  userMessage: string,
+  options: {
+    recentMessages?: { role: "USER" | "ASSISTANT"; content: string }[];
+    stalledCount?: number;
+  } = {},
+) {
   const response = await request.post("/api/agents", {
     data: {
       operation: "RESPOND_TO_USER",
@@ -86,8 +93,13 @@ async function requestDecision(request: APIRequestContext, userMessage: string) 
           modules: [{ id: "module-1", title: "基金产品" }],
           itemIndex: knowledgeItems.map(({ id, title, kind }) => ({ id, title, kind })),
         },
-        recentMessages: [],
-        diagnostic: { status: "ACTIVE", stage: "MEMORY", mainQuestion },
+        recentMessages: options.recentMessages ?? [],
+        diagnostic: {
+          status: "ACTIVE",
+          stage: "MEMORY",
+          mainQuestion,
+          stalledCount: options.stalledCount ?? 0,
+        },
         userMessage,
       },
     },
@@ -171,8 +183,7 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeEach(async ({}, testInfo) => {
   test.skip(
-    process.env.VERITAS_REAL_DEEPSEEK !== "1" ||
-      testInfo.project.name !== "desktop-edge",
+    process.env.VERITAS_REAL_DEEPSEEK !== "1" || testInfo.project.name !== "desktop-edge",
     "仅在显式启用时用真实 DeepSeek 回归无法作答语义。",
   );
   test.setTimeout(600_000);
@@ -227,6 +238,125 @@ test("六种无法作答表达与三个边界对照由真实 Agent 2 正确区�
     artificialActiveContext: true,
     results,
     controls: { question, pause, tentative, correct },
+  });
+});
+
+test("诊断反馈不会累计补齐答案，旧版泄露内容也不能换词后独立通过", async ({
+  request,
+}, testInfo) => {
+  const first = await requestDecision(request, "我完全不知道。", {
+    stalledCount: 0,
+  });
+  expect(first).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "NO_ANSWER",
+    isCorrect: false,
+    progress: "STALLED",
+  });
+  expect(first.scaffold).not.toBeNull();
+
+  const firstMessage = String(first.assistantMessage);
+  const secondHistory = [
+    { role: "USER" as const, content: "我完全不知道。" },
+    { role: "ASSISTANT" as const, content: firstMessage },
+  ];
+  const second = await requestDecision(request, "还是不知道。", {
+    recentMessages: secondHistory,
+    stalledCount: 1,
+  });
+  expect(second).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "NO_ANSWER",
+    isCorrect: false,
+    progress: "STALLED",
+  });
+
+  const secondMessage = String(second.assistantMessage);
+  const third = await requestDecision(request, "仍然答不上来。", {
+    recentMessages: [
+      ...secondHistory,
+      { role: "USER" as const, content: "还是不知道。" },
+      { role: "ASSISTANT" as const, content: secondMessage },
+    ],
+    stalledCount: 2,
+  });
+  expect(third).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "NO_ANSWER",
+    isCorrect: false,
+    progress: "STALLED",
+  });
+
+  const cumulativeFeedback = `${firstMessage}\n${secondMessage}\n${String(third.assistantMessage)}`;
+  const cumulativeEvaluation = await requestDecision(request, cumulativeFeedback);
+  expect(cumulativeEvaluation).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    isCorrect: false,
+  });
+
+  const partialUser = "联接基金在基金平台按净值申购赎回。";
+  const partial = await requestDecision(request, partialUser);
+  expect(partial).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "PARTIAL",
+    isCorrect: false,
+  });
+  const partialEvaluation = await requestDecision(
+    request,
+    `${partialUser}\n${String(partial.assistantMessage)}`,
+  );
+  expect(partialEvaluation).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    isCorrect: false,
+  });
+
+  const leakedAnswer =
+    "ETF 在交易所盘中按市价成交，ETF 联接基金在基金平台按净值申购赎回。";
+  const replay = await requestDecision(
+    request,
+    "前者需要证券账户，交易时按当时的市场价格成交；后者走普通基金销售渠道，以每日基金净值办理份额进出。",
+    {
+      recentMessages: [{ role: "ASSISTANT", content: leakedAnswer }],
+      stalledCount: 1,
+    },
+  );
+  expect(replay).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "COPIED",
+    isCorrect: false,
+    progress: "STALLED",
+  });
+
+  const userPartial = "联接基金在基金平台按净值申购赎回。";
+  const normalCompletion = await requestDecision(
+    request,
+    "ETF 在交易所盘中成交，联接基金在基金平台按净值申购赎回。",
+    {
+      recentMessages: [
+        { role: "USER", content: userPartial },
+        {
+          role: "ASSISTANT",
+          content: "联接基金这一侧是你已经说出的内容。请自行补充 ETF 一侧。",
+        },
+      ],
+    },
+  );
+  expect(normalCompletion).toMatchObject({
+    responseMode: "EVALUATE_DIAGNOSTIC",
+    classification: "CORRECT",
+    isCorrect: true,
+  });
+
+  await attachJson(testInfo, "诊断答案泄露回归", {
+    model: "deepseek-v4-flash",
+    first,
+    second,
+    third,
+    cumulativeEvaluation,
+    partial,
+    partialEvaluation,
+    replay,
+    normalCompletion,
   });
 });
 

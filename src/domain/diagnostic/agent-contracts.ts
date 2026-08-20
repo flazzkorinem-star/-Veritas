@@ -61,6 +61,9 @@ function validateEvaluation(
   if (value.classification === "NO_ANSWER" && value.progress !== "STALLED") {
     context.addIssue({ code: "custom", message: "无法作答必须记为停滞。" });
   }
+  if (value.classification === "COPIED" && value.progress !== "STALLED") {
+    context.addIssue({ code: "custom", message: "复述内容不能算作新进展。" });
+  }
   if (value.classification === "CORRECT" && value.correctEvidence.length === 0) {
     context.addIssue({
       code: "custom",

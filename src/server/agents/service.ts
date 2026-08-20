@@ -136,10 +136,7 @@ const REQUEST_POLICY_BY_OPERATION = {
   CREATE_STAGE_ANSWER: { maxAttempts: 2, usesAgentTwoBudget: true },
   PRIORITIZE_PENDING_NODES: { maxAttempts: 2, usesAgentTwoBudget: true },
   CREATE_REPORT: { maxAttempts: 3, usesAgentTwoBudget: false },
-} satisfies Record<
-  AgentOperation,
-  { maxAttempts: 2 | 3; usesAgentTwoBudget: boolean }
->;
+} satisfies Record<AgentOperation, { maxAttempts: 2 | 3; usesAgentTwoBudget: boolean }>;
 
 function sanitizeDetails(details: string[]) {
   return [
@@ -535,7 +532,11 @@ function diagnosticPrompt(
 4. 只有当前没有问题且用户要开始检验时使用 START_DIAGNOSTIC。
 不要靠关键词匹配意图。learningGoalUpdate 只在用户明确表达或改变学习目标时填写，否则为 null。
 
-当前评分对象是 currentQuestion；mainQuestion 只作为原题背景。先识别题目要求的唯一回答动作和最低证据，再判断用户本轮是否完成。missingPoints 只能来自 currentQuestion 明确要求的内容；材料、主题理解或其他层目标中存在但 currentQuestion 没有要求的事实，只能用于核对回答是否真实，不能成为通过条件或缺失点。只有用户本轮证据完整满足要求时才是 CORRECT，并令 isCorrect=true、progress=ADVANCING、correctEvidence 非空且 missingPoints 为空。部分完成、误解、偏题和无答案应如实分类；未完整满足时保留当前问题，并在 assistantMessage 中具体回应已说对的内容和当前缺口。明确无法作答也是诊断回应，应分类为 NO_ANSWER、progress=STALLED；可以按需要解释、举例或提供支架。
+当前评分对象是 currentQuestion；mainQuestion 只作为原题背景。先识别题目要求的唯一回答动作和最低证据，再判断用户本轮是否完成。missingPoints 只能来自 currentQuestion 明确要求的内容；材料、主题理解或其他层目标中存在但 currentQuestion 没有要求的事实，只能用于核对回答是否真实，不能成为通过条件或缺失点。只有用户本轮证据完整满足要求时才是 CORRECT，并令 isCorrect=true、progress=ADVANCING、correctEvidence 非空且 missingPoints 为空。部分完成、误解、偏题和无答案应如实分类；未完整满足时保留当前问题。明确无法作答也是诊断回应，应分类为 NO_ANSWER、progress=STALLED。
+
+所有非 CORRECT 的诊断反馈都不得直接说出用户尚未提供的答案点，也不得让用户只复述本次反馈就能补齐 currentQuestion 的剩余最低回答要求；反馈本身不得覆盖 currentQuestion 的全部最低回答要求。assistantMessage 和 scaffold 可以确认用户已有证据、指出缺口类型、提出一个更小的引导问题，也可以使用不包含最低回答证据的具体案例、类比、反例或分步支架，帮助用户自己完成关键连接；不要因为防止答案泄露而取消有用的教学支架。即使这是第三次停滞也不得提前给出答案；RESPOND_TO_USER 只负责评价和安全支架，只有连续三轮停滞后单独调用 CREATE_STAGE_ANSWER 才能给完整答案。
+
+当 answerOrigin=NONE 且 hasRequestedHint=false 时，判断内容是否正确之前先判断证据来源。逐项比较 recentMessages 的 USER 与 ASSISTANT 内容：只有由 Vita 首次引入、用户此前从未提供的关键答案内容，才可能构成反馈泄露；若某个最低回答证据先出现在 ASSISTANT 消息中，之后才由用户照抄、拼接、换词或同义表达复述，不能作为用户独立掌握的证据。尤其当历史中只有 ASSISTANT 给出完整答案、没有更早的 USER 证据时，用户的完整同义改写必须分类为 COPIED、isCorrect=false、progress=STALLED，不得因内容正确而判为 CORRECT。用户此前已经提供的证据不算复制，Vita 对该证据的确认不改变来源；安全的不完整支架帮助用户自行推导并补充新证据时，也按实际答案正常评价。代码已建立 verificationQuestion 或记录用户请求提示时，仍按对应验证题或提示后回答正常评价。
 
 CORRECT 的 assistantMessage 只评价本轮并自然收束，不生成下一道题；下一层正式问题由 CREATE_STAGE_QUESTION 单独生成。CONVERSATION 不改变诊断状态，先完成用户当前请求。
 
