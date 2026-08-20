@@ -10,9 +10,11 @@
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:e2e": "npm run build && node scripts/run-e2e.mjs",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "test:e2e": "npm run build && node scripts/run-e2e.mjs e2e/core",
+    "test:real": "npm run build && node scripts/run-e2e.mjs e2e/real"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",
@@ -39,11 +41,9 @@
     "@vitejs/plugin-react": "6.0.5",
     "eslint": "9.39.5",
     "eslint-config-next": "16.2.12",
-    "eslint-config-prettier": "10.1.8",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "30.0.1",
     "postcss": "8.5.25",
-    "prettier": "3.9.6",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vite": "8.2.0",

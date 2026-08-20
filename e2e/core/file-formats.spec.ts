@@ -1,4 +1,10 @@
-import { expect, test, type Browser, type Page, type Route } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+  type Route,
+} from "@playwright/test";
 import JSZip from "jszip";
 
 const successMeta = {
@@ -58,7 +64,11 @@ function mockAgentResult(route: Route) {
       body: JSON.stringify({
         result: {
           modules: [
-            { id: "s1-m1", title: "水循环", sourceRange: sourceReferences[0]!.label },
+            {
+              id: "s1-m1",
+              title: "水循环",
+              sourceRange: sourceReferences[0]!.label,
+            },
           ],
           knowledgeItems: [
             {
@@ -156,8 +166,12 @@ async function pptxBuffer() {
 }
 
 async function makeVisualBuffer(browser: Browser, mimeType: string) {
-  const producer = await browser.newPage({ viewport: { width: 1200, height: 700 } });
-  await producer.setContent('<canvas id="source" width="1200" height="700"></canvas>');
+  const producer = await browser.newPage({
+    viewport: { width: 1200, height: 700 },
+  });
+  await producer.setContent(
+    '<canvas id="source" width="1200" height="700"></canvas>',
+  );
   const dataUrl = await producer.evaluate((type) => {
     const canvas = document.querySelector("canvas")!;
     const context = canvas.getContext("2d")!;
@@ -175,9 +189,13 @@ async function makeVisualBuffer(browser: Browser, mimeType: string) {
 }
 
 async function makePdf(browser: Browser, scanned: boolean) {
-  const producer = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  const producer = await browser.newPage({
+    viewport: { width: 1000, height: 700 },
+  });
   if (scanned) {
-    await producer.setContent('<canvas id="source" width="1000" height="700"></canvas>');
+    await producer.setContent(
+      '<canvas id="source" width="1000" height="700"></canvas>',
+    );
     await producer.evaluate(() => {
       const canvas = document.querySelector("canvas")!;
       const context = canvas.getContext("2d")!;
@@ -202,27 +220,32 @@ async function makePdf(browser: Browser, scanned: boolean) {
 async function storedMaterial(page: Page, fileName: string) {
   return page.evaluate(
     (name) =>
-      new Promise<{ parsedText: string; sourceLabel: string }>((resolve, reject) => {
-        const request = indexedDB.open("veritas");
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-          const database = request.result;
-          const all = database
-            .transaction("materials", "readonly")
-            .objectStore("materials")
-            .getAll();
-          all.onerror = () => reject(all.error);
-          all.onsuccess = () => {
-            const material = all.result.find((value) => value.fileName === name);
-            resolve({
-              parsedText: material?.parsedText ?? "",
-              sourceLabel:
-                material?.knowledgeItems?.[0]?.sourceReferences?.[0]?.label ?? "",
-            });
-            database.close();
+      new Promise<{ parsedText: string; sourceLabel: string }>(
+        (resolve, reject) => {
+          const request = indexedDB.open("veritas");
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const database = request.result;
+            const all = database
+              .transaction("materials", "readonly")
+              .objectStore("materials")
+              .getAll();
+            all.onerror = () => reject(all.error);
+            all.onsuccess = () => {
+              const material = all.result.find(
+                (value) => value.fileName === name,
+              );
+              resolve({
+                parsedText: material?.parsedText ?? "",
+                sourceLabel:
+                  material?.knowledgeItems?.[0]?.sourceReferences?.[0]?.label ??
+                  "",
+              });
+              database.close();
+            };
           };
-        };
-      }),
+        },
+      ),
     fileName,
   );
 }
@@ -250,7 +273,10 @@ async function uploadAndWait(
   }
 }
 
-test("桌面端全部支持格式都能生成可追溯文字", async ({ page, browser }, testInfo) => {
+test("桌面端全部支持格式都能生成可追溯文字", async ({
+  page,
+  browser,
+}, testInfo) => {
   test.skip(
     testInfo.project.name !== "desktop-edge",
     "全格式矩阵仅在桌面 Edge 执行一次。 ",
@@ -262,7 +288,9 @@ test("桌面端全部支持格式都能生成可追溯文字", async ({ page, br
   });
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("requestfailed", (request) =>
-    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+    problems.push(
+      `请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`,
+    ),
   );
   await page.route("**/api/agents", mockAgentResult);
   await page.goto("/");
@@ -280,7 +308,8 @@ test("桌面端全部支持格式都能生成可追溯文字", async ({ page, br
     },
     {
       name: "format-docx.docx",
-      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       buffer: await docxBuffer(),
     },
     {
@@ -322,22 +351,34 @@ test("桌面端全部支持格式都能生成可追溯文字", async ({ page, br
     expect(stored.parsedText.length, file.name).toBeGreaterThan(8);
     expect(stored.sourceLabel.length, file.name).toBeGreaterThan(1);
   }
-  expect((await storedMaterial(page, "format-docx.docx")).sourceLabel).toContain("段");
-  expect((await storedMaterial(page, "format-pptx.pptx")).sourceLabel).toContain(
-    "幻灯片",
+  expect(
+    (await storedMaterial(page, "format-docx.docx")).sourceLabel,
+  ).toContain("段");
+  expect(
+    (await storedMaterial(page, "format-pptx.pptx")).sourceLabel,
+  ).toContain("幻灯片");
+  expect((await storedMaterial(page, "format-pdf.pdf")).sourceLabel).toContain(
+    "页",
   );
-  expect((await storedMaterial(page, "format-pdf.pdf")).sourceLabel).toContain("页");
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     ),
   ).toBe(false);
-  await page.screenshot({ path: testInfo.outputPath("phase6-all-formats.png") });
+  await page.screenshot({ path: testInfo.outputPath("all-formats.png") });
   expect(problems).toEqual([]);
 });
 
-test("移动端图片 OCR 后仍保持完整主流程布局", async ({ page, browser }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-edge", "移动布局只在移动 Edge 执行。 ");
+test("移动端图片 OCR 后仍保持完整主流程布局", async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "mobile-edge",
+    "移动布局只在移动 Edge 执行。 ",
+  );
   test.setTimeout(180_000);
   await page.route("**/api/agents", mockAgentResult);
   const problems: string[] = [];
@@ -346,7 +387,9 @@ test("移动端图片 OCR 后仍保持完整主流程布局", async ({ page, bro
   });
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("requestfailed", (request) =>
-    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+    problems.push(
+      `请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`,
+    ),
   );
   await page.goto("/");
   await uploadAndWait(
@@ -363,9 +406,11 @@ test("移动端图片 OCR 后仍保持完整主流程布局", async ({ page, bro
   );
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     ),
   ).toBe(false);
-  await page.screenshot({ path: testInfo.outputPath("phase6-mobile-ocr.png") });
+  await page.screenshot({ path: testInfo.outputPath("mobile-ocr.png") });
   expect(problems).toEqual([]);
 });

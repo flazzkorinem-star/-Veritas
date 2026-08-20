@@ -167,13 +167,16 @@ test("桌面与移动 Edge 通过语音转写完成一次回答", async ({ page 
   });
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("requestfailed", (request) =>
-    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+    problems.push(
+      `请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`,
+    ),
   );
   await page.route("**/api/agents", mockAgent);
   await page.goto("/");
   expect(
     await page.evaluate(
-      () => "SpeechRecognition" in window || "webkitSpeechRecognition" in window,
+      () =>
+        "SpeechRecognition" in window || "webkitSpeechRecognition" in window,
     ),
   ).toBe(true);
   await page.addInitScript(installSpeechStub);
@@ -183,29 +186,40 @@ test("桌面与移动 Edge 通过语音转写完成一次回答", async ({ page 
     mimeType: "text/markdown",
     buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发。"),
   });
-  await expect(page.getByRole("button", { name: "开始语音输入" })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "开始语音输入" }),
+  ).toBeEnabled();
 
   await page.getByRole("button", { name: "开始语音输入" }).click();
-  await expect(page.getByRole("button", { name: "停止语音输入" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "停止语音输入" }),
+  ).toBeVisible();
   await page.evaluate(() => {
-    (window as typeof window & { __emitSpeech(text: string): void }).__emitSpeech(
-      "太阳能驱动水蒸发",
-    );
+    (
+      window as typeof window & { __emitSpeech(text: string): void }
+    ).__emitSpeech("太阳能驱动水蒸发");
   });
   await expect(page.getByLabel("消息输入")).toHaveValue("太阳能驱动水蒸发");
   await page.getByRole("button", { name: "停止语音输入" }).click();
-  await expect(page.getByRole("button", { name: "开始语音输入" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "开始语音输入" }),
+  ).toBeVisible();
   await page.getByLabel("消息输入").fill("太阳能驱动水蒸发并进入大气");
   await page.getByRole("button", { name: "发送消息" }).click();
-  await expect(page.getByText("对，你已经把动力和蒸发联系起来了。")).toBeVisible();
+  await expect(
+    page.getByText("对，你已经把动力和蒸发联系起来了。"),
+  ).toBeVisible();
   await page.screenshot({
-    path: testInfo.outputPath(`phase10-speech-${testInfo.project.name}.png`),
+    path: testInfo.outputPath(`speech-${testInfo.project.name}.png`),
   });
   expect(problems).toEqual([]);
 });
 
 test("麦克风权限被拒绝时保留文字输入", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-edge", "异常路径只在桌面执行一次。");
+  test.skip(
+    testInfo.project.name !== "desktop-edge",
+    "异常路径只在桌面执行一次。",
+  );
   await page.route("**/api/agents", mockAgent);
   await page.addInitScript(installSpeechStub, true);
   await page.goto("/");
@@ -216,6 +230,8 @@ test("麦克风权限被拒绝时保留文字输入", async ({ page }, testInfo)
   });
   await page.getByLabel("消息输入").fill("已经写好的回答");
   await page.getByRole("button", { name: "开始语音输入" }).click();
-  await expect(page.locator(".speech-error")).toContainText("没有获得麦克风权限");
+  await expect(page.locator(".speech-error")).toContainText(
+    "没有获得麦克风权限",
+  );
   await expect(page.getByLabel("消息输入")).toHaveValue("已经写好的回答");
 });

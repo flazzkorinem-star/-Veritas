@@ -12,10 +12,8 @@ type OperationEvidence = {
 const stageOrder: StageKey[] = ["MEMORY", "UNDERSTANDING", "APPLICATION", "ANALYSIS"];
 const evidenceDirectory = path.join(
   process.cwd(),
-  "docs",
-  "evaluation",
-  "a0691c1",
-  "regression",
+  "output",
+  "real-e2e",
   "agent2-single-question",
 );
 
@@ -24,10 +22,9 @@ const cases = [
     id: "S01",
     materialPath: path.join(
       process.cwd(),
-      "docs",
-      "evaluation",
-      "a0691c1",
-      "materials",
+      "tests",
+      "fixtures",
+      "real-agent",
       "S01-ETF正常作答一.md",
     ),
     stage: "MEMORY" as const,
@@ -39,10 +36,9 @@ const cases = [
     id: "S02",
     materialPath: path.join(
       process.cwd(),
-      "docs",
-      "evaluation",
-      "a0691c1",
-      "materials",
+      "tests",
+      "fixtures",
+      "real-agent",
       "S02-ETF正常作答二.md",
     ),
     stage: "MEMORY" as const,
@@ -187,8 +183,7 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeEach(async ({}, testInfo) => {
   test.skip(
-    process.env.VERITAS_REAL_DEEPSEEK !== "1" ||
-      testInfo.project.name !== "desktop-edge",
+    process.env.VERITAS_REAL_DEEPSEEK !== "1" || testInfo.project.name !== "desktop-edge",
     "仅在显式启用时用真实 DeepSeek 回归同轮唯一主问题。",
   );
   test.setTimeout(600_000);

@@ -71,7 +71,11 @@ function mockAgent(route: Route) {
       sourceUnits?: Array<{ id: string; sourceLabel: string; text: string }>;
       completedNodes?: Array<{
         nodeId: string;
-        messages: Array<{ id: string; role: "USER" | "ASSISTANT"; content: string }>;
+        messages: Array<{
+          id: string;
+          role: "USER" | "ASSISTANT";
+          content: string;
+        }>;
       }>;
     };
   };
@@ -155,7 +159,8 @@ function mockAgent(route: Route) {
         summary: "已经完成第一个主题，能够说明太阳能与蒸发的关系。",
         nodeInsights: request.input.completedNodes!.map((completedNode) => {
           const evidence = completedNode.messages.filter(
-            (message) => message.role === "USER" && message.content.includes("太阳能"),
+            (message) =>
+              message.role === "USER" && message.content.includes("太阳能"),
           );
           const stages = ["MEMORY", "UNDERSTANDING", "APPLICATION", "ANALYSIS"];
           return {
@@ -181,34 +186,47 @@ function mockAgent(route: Route) {
 async function expectNoHorizontalOverflow(page: Page) {
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     ),
   ).toBe(false);
 }
 
-test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-edge", "移动完整验收只执行移动项目。");
+test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "mobile-edge",
+    "移动完整验收只执行移动项目。",
+  );
   const problems: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") problems.push(message.text());
   });
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("requestfailed", (request) =>
-    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+    problems.push(
+      `请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`,
+    ),
   );
   await page.route("**/api/agents", mockAgent);
   await page.goto("/");
   await expectNoHorizontalOverflow(page);
 
   await page.getByRole("button", { name: "打开任务", exact: true }).click();
-  await expect(page.locator('.workspace-sidebar[data-mobile-open="true"]')).toBeVisible();
+  await expect(
+    page.locator('.workspace-sidebar[data-mobile-open="true"]'),
+  ).toBeVisible();
   await page.goBack();
   await expect(page.locator(".workspace-sidebar")).toBeHidden();
 
   await page.locator("#empty-state-upload").setInputFiles({
     name: "一份名称很长但仍应在移动端正确截断的水循环学习材料.md",
     mimeType: "text/markdown",
-    buffer: Buffer.from("# 水循环\n\n太阳能驱动水蒸发，降水在重力作用下回到地表。"),
+    buffer: Buffer.from(
+      "# 水循环\n\n太阳能驱动水蒸发，降水在重力作用下回到地表。",
+    ),
   });
   await expect(
     page.getByText("这份材料的重点是水循环动力", { exact: false }),
@@ -216,8 +234,12 @@ test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", as
   await expect(page.getByText("水循环最基本的动力来源是什么？")).toBeVisible();
 
   await page.getByRole("button", { name: "打开主题" }).click();
-  await expect(page.locator('.topic-sidebar[data-mobile-open="true"]')).toBeVisible();
-  await expect(page.getByRole("button", { name: new RegExp(longTitle) })).toBeVisible();
+  await expect(
+    page.locator('.topic-sidebar[data-mobile-open="true"]'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: new RegExp(longTitle) }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "关闭当前浮层" })
     .click({ position: { x: 380, y: 422 } });
@@ -234,7 +256,9 @@ test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", as
   for (let index = 1; index <= 4; index += 1) {
     await page.getByLabel("消息输入").fill(`第 ${index} 层：太阳能驱动蒸发。`);
     await page.getByRole("button", { name: "发送消息" }).click();
-    await expect(page.locator(".score-line strong")).toHaveText(String(index * 25));
+    await expect(page.locator(".score-line strong")).toHaveText(
+      String(index * 25),
+    );
     await expectNoHorizontalOverflow(page);
   }
   await expect(
@@ -251,24 +275,35 @@ test("390×844 从上传走到报告并覆盖移动浮层、键盘与横屏", as
   await expect(report).toBeVisible();
   await expect(report.getByText("1 / 2 个主题")).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await page.screenshot({ path: testInfo.outputPath("phase11-mobile-portrait.png") });
+  await page.screenshot({ path: testInfo.outputPath("mobile-portrait.png") });
   await page.goBack();
   await expect(report).toBeHidden();
 
-  await page.getByRole("button", { name: "学习下一个主题：降水回流与地表汇流" }).click();
+  await page
+    .getByRole("button", { name: "学习下一个主题：降水回流与地表汇流" })
+    .click();
   await expect(
     page.getByText("这份材料的重点是水循环动力", { exact: false }),
   ).toBeVisible();
 
   await page.setViewportSize({ width: 844, height: 390 });
-  await expect(page.getByRole("navigation", { name: "移动端工作区导航" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "移动端工作区导航" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "打开进度", exact: true }).click();
-  const landscapeDiagnostic = page.locator('.diagnostic-panel[data-mobile-open="true"]');
+  const landscapeDiagnostic = page.locator(
+    '.diagnostic-panel[data-mobile-open="true"]',
+  );
   await expect(landscapeDiagnostic).toBeVisible();
-  await expect(landscapeDiagnostic).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
-  expect((await landscapeDiagnostic.boundingBox())?.width).toBeLessThanOrEqual(421);
+  await expect(landscapeDiagnostic).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 0, 0)",
+  );
+  expect((await landscapeDiagnostic.boundingBox())?.width).toBeLessThanOrEqual(
+    421,
+  );
   await expectNoHorizontalOverflow(page);
-  await page.screenshot({ path: testInfo.outputPath("phase11-mobile-landscape.png") });
+  await page.screenshot({ path: testInfo.outputPath("mobile-landscape.png") });
   await page.keyboard.press("Escape");
   await expect(page.locator(".diagnostic-panel")).toBeHidden();
   expect(problems).toEqual([]);

@@ -90,8 +90,8 @@ test("四类材料的首问稳定绑定 MEMORY 目标", async ({ browser }, test
   const results: Array<Record<string, unknown>> = [];
   const outputDirectory = path.join(
     process.cwd(),
-    "docs",
-    "evaluation",
+    "output",
+    "real-e2e",
     "first-question-memory",
   );
   const outputPath = path.join(outputDirectory, "real-regression-2026-08-13.json");
@@ -141,10 +141,9 @@ test("四类材料的首问稳定绑定 MEMORY 目标", async ({ browser }, test
           .setInputFiles(
             path.join(
               process.cwd(),
-              "docs",
-              "evaluation",
-              "a0691c1",
-              "materials",
+              "tests",
+              "fixtures",
+              "real-agent",
               material.fileName,
             ),
           );

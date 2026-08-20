@@ -79,7 +79,11 @@ function mockAgent(route: Route) {
       sourceUnits?: Array<{ id: string; sourceLabel: string; text: string }>;
       completedNodes?: Array<{
         nodeId: string;
-        messages: Array<{ id: string; role: "USER" | "ASSISTANT"; content: string }>;
+        messages: Array<{
+          id: string;
+          role: "USER" | "ASSISTANT";
+          content: string;
+        }>;
       }>;
       node?: { id: string };
     };
@@ -212,7 +216,9 @@ test("桌面与移动端完成提示和回答回合", async ({ page, context }, 
   });
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("requestfailed", (request) =>
-    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+    problems.push(
+      `请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`,
+    ),
   );
   await page.route("**/api/agents", mockAgent);
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -234,10 +240,14 @@ test("桌面与移动端完成提示和回答回合", async ({ page, context }, 
   ).toBeVisible();
   await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
   await page.getByRole("button", { name: "给我提示" }).click();
-  await expect(page.getByText("想想晒湿衣服时", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("想想晒湿衣服时", { exact: false }),
+  ).toBeVisible();
   await page.getByLabel("消息输入").fill("主要动力是太阳能。 ");
   await page.getByRole("button", { name: "发送消息" }).click();
-  await expect(page.getByText("对，太阳能正是推动蒸发的关键动力。")).toBeVisible();
+  await expect(
+    page.getByText("对，太阳能正是推动蒸发的关键动力。"),
+  ).toBeVisible();
   await expect(page.getByText("太阳能怎样让液态水进入大气？")).toBeVisible();
   await expect(page.locator(".score-line strong")).toHaveText("25");
   await expect(page.getByLabel("消息输入")).toHaveValue("");
@@ -249,27 +259,37 @@ test("桌面与移动端完成提示和回答回合", async ({ page, context }, 
   await expect(page.locator(".score-line strong")).toHaveText("50");
 
   await page.getByRole("button", { name: "看答案" }).click();
-  await expect(page.getByText("湿衣服里的液态水吸收能量后蒸发成水蒸气。")).toBeVisible();
-  await expect(page.getByText("如果没有阳光，蒸发环节会怎样变化？")).toBeVisible();
+  await expect(
+    page.getByText("湿衣服里的液态水吸收能量后蒸发成水蒸气。"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("如果没有阳光，蒸发环节会怎样变化？"),
+  ).toBeVisible();
   await expect(page.locator(".score-line strong")).toHaveText("50");
 
   await page.getByLabel("消息输入").fill("蒸发会明显变慢。 ");
   await page.getByRole("button", { name: "发送消息" }).click();
   await expect(page.locator(".score-line strong")).toHaveText("75");
   await expect(page.getByLabel("消息输入")).toBeEnabled();
-  await expect(page.locator(".chat-heading .status-badge")).toHaveText("已完成");
+  await expect(page.locator(".chat-heading .status-badge")).toHaveText(
+    "已完成",
+  );
   const composerBox = await page.locator(".composer-shell").boundingBox();
   const viewport = page.viewportSize();
   expect(composerBox).not.toBeNull();
   expect(viewport).not.toBeNull();
-  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+  expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(
+    viewport!.height + 1,
+  );
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     ),
   ).toBe(false);
   await page.screenshot({
-    path: testInfo.outputPath(`phase7-${testInfo.project.name}.png`),
+    path: testInfo.outputPath(`learning-flow-${testInfo.project.name}.png`),
     fullPage: false,
   });
 
@@ -292,12 +312,14 @@ test("桌面与移动端完成提示和回答回合", async ({ page, context }, 
   expect(await download.failure()).toBeNull();
   await report.getByRole("button", { name: "分享报告" }).click();
   await expect(page.getByRole("status")).toHaveText("报告摘要已复制");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("太阳能");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    "太阳能",
+  );
   if (testInfo.project.name === "desktop-edge") {
     await page.emulateMedia({ media: "print" });
     const pdf = await page.pdf({
       format: "A4",
-      path: testInfo.outputPath("phase9-report-print.pdf"),
+      path: testInfo.outputPath("report-print.pdf"),
       printBackground: true,
     });
     expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
@@ -305,14 +327,17 @@ test("桌面与移动端完成提示和回答回合", async ({ page, context }, 
     await page.emulateMedia({ media: "screen" });
   }
   await page.screenshot({
-    path: testInfo.outputPath(`phase9-report-${testInfo.project.name}.png`),
+    path: testInfo.outputPath(`report-${testInfo.project.name}.png`),
     fullPage: false,
   });
   expect(problems).toEqual([]);
 });
 
 test("未开始主题生成首问时立即显示准备状态", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-edge", "桌面精细交互只执行一次。");
+  test.skip(
+    testInfo.project.name !== "desktop-edge",
+    "桌面精细交互只执行一次。",
+  );
   let releaseQuestion!: () => void;
   const questionGate = new Promise<void>((resolve) => {
     releaseQuestion = resolve;
@@ -341,7 +366,9 @@ test("未开始主题生成首问时立即显示准备状态", async ({ page }, 
   await page.locator("#workspace-upload").setInputFiles({
     name: "water-cycle.md",
     mimeType: "text/markdown",
-    buffer: Buffer.from("# 水循环\n\n太阳能驱动蒸发，降水在重力作用下回到地表。"),
+    buffer: Buffer.from(
+      "# 水循环\n\n太阳能驱动蒸发，降水在重力作用下回到地表。",
+    ),
   });
   await expect(page.getByText("水循环的主要动力是什么？")).toBeVisible();
 
@@ -363,7 +390,10 @@ test("未开始主题生成首问时立即显示准备状态", async ({ page }, 
 });
 
 test("桌面端网络失败后保留输入并可重试当前回合", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-edge", "桌面精细交互只执行一次。");
+  test.skip(
+    testInfo.project.name !== "desktop-edge",
+    "桌面精细交互只执行一次。",
+  );
   const problems: string[] = [];
   let evaluationAttempts = 0;
   page.on("console", (message) => {
@@ -376,7 +406,9 @@ test("桌面端网络失败后保留输入并可重试当前回合", async ({ pa
   });
   page.on("pageerror", (error) => problems.push(error.message));
   page.on("requestfailed", (request) =>
-    problems.push(`请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`),
+    problems.push(
+      `请求失败 ${request.url()}：${request.failure()?.errorText ?? "未知"}`,
+    ),
   );
   await page.route("**/api/agents", (route) => {
     const request = route.request().postDataJSON() as {
@@ -416,12 +448,14 @@ test("桌面端网络失败后保留输入并可重试当前回合", async ({ pa
 
   await expect(page.getByRole("button", { name: "重试本轮" })).toBeVisible();
   await expect(page.getByLabel("消息输入")).toHaveValue("主要动力是太阳能。");
-  await page.screenshot({ path: testInfo.outputPath("phase8-retry-error.png") });
+  await page.screenshot({ path: testInfo.outputPath("retry-error.png") });
   await page.getByRole("button", { name: "重试本轮" }).click();
 
-  await expect(page.getByText("对，太阳能正是推动蒸发的关键动力。")).toBeVisible();
+  await expect(
+    page.getByText("对，太阳能正是推动蒸发的关键动力。"),
+  ).toBeVisible();
   await expect(page.getByLabel("消息输入")).toHaveValue("");
-  await page.screenshot({ path: testInfo.outputPath("phase8-retry-recovered.png") });
+  await page.screenshot({ path: testInfo.outputPath("retry-recovered.png") });
   expect(evaluationAttempts).toBe(2);
   expect(problems).toEqual([]);
 });

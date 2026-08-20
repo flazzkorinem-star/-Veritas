@@ -6,7 +6,9 @@ test.skip(
   "仅在显式真实模型验收时调用 DeepSeek。",
 );
 
-test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ page }, testInfo) => {
+test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(240_000);
   const browserProblems: string[] = [];
   const agentStatuses: number[] = [];
@@ -15,16 +17,25 @@ test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ 
       browserProblems.push(`${message.type()}: ${message.text()}`);
     }
   });
-  page.on("pageerror", (error) => browserProblems.push(`pageerror: ${error.message}`));
+  page.on("pageerror", (error) =>
+    browserProblems.push(`pageerror: ${error.message}`),
+  );
   page.on("response", (response) => {
-    if (response.url().endsWith("/api/agents")) agentStatuses.push(response.status());
+    if (response.url().endsWith("/api/agents"))
+      agentStatuses.push(response.status());
   });
 
   await page.goto("/");
   await page
     .locator("#workspace-upload")
     .setInputFiles(
-      path.join(process.cwd(), "tests", "fixtures", "end-to-end", "water-cycle.md"),
+      path.join(
+        process.cwd(),
+        "tests",
+        "fixtures",
+        "end-to-end",
+        "water-cycle.md",
+      ),
     );
 
   const firstMessageLocator = page.getByLabel("维塔的消息");
@@ -46,7 +57,9 @@ test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ 
   expect(agentStatuses.every((status) => status === 200)).toBe(true);
 
   const firstMessage = await page.getByLabel("维塔的消息").innerText();
-  expect(firstMessage).not.toMatch(/我已经分析了你的材料|我们将全面覆盖|现在让我们开始/);
+  expect(firstMessage).not.toMatch(
+    /我已经分析了你的材料|我们将全面覆盖|现在让我们开始/,
+  );
   expect(firstMessage.length).toBeGreaterThan(12);
   expect(firstMessage.match(/[?？]/g)?.length ?? 0).toBeLessThanOrEqual(1);
   const coverageChecks = await page.evaluate(
@@ -80,7 +93,10 @@ test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ 
               disposition: string;
             }>;
             const semanticText = knowledgeItems
-              .map((item) => `${item.title} ${item.summary} ${item.diagnosticRationale}`)
+              .map(
+                (item) =>
+                  `${item.title} ${item.summary} ${item.diagnosticRationale}`,
+              )
               .join(" ");
             const coreItemsAssignedOnce = knowledgeItems
               .filter((item) => item.kind === "CORE")
@@ -94,7 +110,8 @@ test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ 
               );
             resolve({
               naturalCycle:
-                /蒸发|蒸腾/.test(semanticText) && /太阳|重力/.test(semanticText),
+                /蒸发|蒸腾/.test(semanticText) &&
+                /太阳|重力/.test(semanticText),
               urbanImpact:
                 /不透水|硬化/.test(semanticText) &&
                 /径流/.test(semanticText) &&
@@ -121,10 +138,12 @@ test("真实 Markdown 经 DeepSeek 生成完整主题与自然开场", async ({ 
   });
   expect(
     await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     ),
   ).toBe(false);
-  await page.screenshot({ path: testInfo.outputPath("phase5-topic-opening.png") });
+  await page.screenshot({ path: testInfo.outputPath("topic-opening.png") });
 
   await page.reload();
   await expect(page.getByLabel("维塔的消息")).toContainText(firstMessage);

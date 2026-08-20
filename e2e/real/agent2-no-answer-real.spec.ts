@@ -66,10 +66,9 @@ const node = {
 const mainQuestion = "ETF 与 ETF 联接基金在交易渠道和申购赎回方式上有什么区别？";
 const materialPath = path.join(
   process.cwd(),
-  "docs",
-  "evaluation",
-  "a0691c1",
-  "materials",
+  "tests",
+  "fixtures",
+  "real-agent",
   "S11-城市内涝误解.md",
 );
 
