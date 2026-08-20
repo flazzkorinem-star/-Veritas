@@ -35,7 +35,7 @@ npm run test:e2e
 
 ```powershell
 $env:VERITAS_REAL_DEEPSEEK="1"
-npm run test:real -- full-journey-real --project=desktop-edge --workers=1
+npm run test:real -- --grep @full-journey --project=desktop-edge --workers=1
 ```
 
 材料性能测试还需要：
@@ -43,6 +43,8 @@ npm run test:real -- full-journey-real --project=desktop-edge --workers=1
 ```powershell
 $env:RUN_REAL_PERFORMANCE="1"
 ```
+
+`test:real` 的默认范围是全部真实回归。`--grep @full-journey` 会把范围收窄到一个完整链路，避免意外运行其他付费用例。
 
 真实回归使用 `tests/fixtures/real-agent/` 中的合成或公开测试材料。证据写到已忽略的 `output/real-e2e/`，不修改文档，也不读取个人材料。
 

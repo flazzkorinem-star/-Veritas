@@ -62,7 +62,7 @@ npm start
 
 ```powershell
 $env:VERITAS_REAL_DEEPSEEK="1"
-npm run test:real -- full-journey-real --project=desktop-edge --workers=1
+npm run test:real -- --grep @full-journey --project=desktop-edge --workers=1
 ```
 
 测试分层、真实模型开关和验收范围见 [docs/testing.md](docs/testing.md)。

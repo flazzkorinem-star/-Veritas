@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import path from "node:path";
 
-test("同一真实任务走完材料、家教诊断、未检验范围和报告", async ({ page }, testInfo) => {
+test("@full-journey 同一真实任务走完材料、家教诊断、未检验范围和报告", async ({ page }, testInfo) => {
   test.skip(
     process.env.VERITAS_REAL_DEEPSEEK !== "1" ||
       testInfo.project.name !== "desktop-edge",
